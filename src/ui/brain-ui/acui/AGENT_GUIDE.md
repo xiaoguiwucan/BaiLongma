@@ -7,7 +7,7 @@
 
 ## 〇、形态：卡片应该长什么样、出现在哪、能不能拖
 
-每次 ui_show / ui_show_inline 都可以传 `hint` 控制形态。**形态不是组件写死的——同一个组件，不同场景可以以不同形态出现。**
+每次 ui_show / ui_show 都可以传 `hint` 控制形态。**形态不是组件写死的——同一个组件，不同场景可以以不同形态出现。**
 
 ### placement（出现在哪）
 - **notification**（默认）：**右上角滑入、自动堆叠**。通知性的、看完即过的内容。天气卡、待办通知、状态提示。
@@ -38,18 +38,8 @@
 
 调用示例：
 ```
-ui_show("WeatherCard", { city: "北京", ... }, { placement: "floating", size: "lg" })
-ui_show_inline({
-  mode: "inline-template",
-  template: "...",
-  props: { ... }
-}, /* 第二个参数不存在，hint 跟 props 同级——见下面正确写法 */)
-```
-
-**正确的调用形态**（hint 是 props 同级字段，不是第二个参数）：
-```
 ui_show({ component: "WeatherCard", props: {...}, hint: { placement: "floating", size: "lg" } })
-ui_show_inline({ mode: "inline-template", template, styles, props, hint: { placement: "center" } })
+ui_show({ mode: "inline-template", template, styles, props, hint: { placement: "center" } })
 ```
 
 ---
@@ -76,17 +66,17 @@ ui_show_inline({ mode: "inline-template", template, styles, props, hint: { place
 ```
 需要可视化表达
   │
-  ├─ 已有合适的注册组件？──── 是 ──▶ 模式 A：ui_show("ComponentName", props)
+  ├─ 已有合适的注册组件？──── 是 ──▶ 模式 A：ui_show({ component: "ComponentName", props })
   │                                  （永远优先这个）
   │
   ├─ 否，那是不是只需要展示信息、没有交互？
   │   │
-  │   ├─ 是 ──▶ 模式 B：ui_show_inline({ mode:"inline-template", template, styles, props })
+  │   ├─ 是 ──▶ 模式 B：ui_show({ mode:"inline-template", template, styles, props })
   │   │        （写 HTML+CSS 字符串，最简单）
   │   │
   │   └─ 否（需要按钮/状态/动画/交互）
   │       │
-  │       └─▶ 模式 C：ui_show_inline({ mode:"inline-script", code, props })
+  │       └─▶ 模式 C：ui_show({ mode:"inline-script", code, props })
   │             （写完整的 Web Component class）
   │
   └─ 用过 ≥2 次、没被立刻关掉、有 dwell 信号？
@@ -197,7 +187,7 @@ action="save", payload={ fields: { note: "明天提醒", priority: "high" } }
 ## 四、模式 B · 内联模板的写法
 
 ```
-ui_show_inline({
+ui_show({
   mode: "inline-template",
   template: "<div class='card'><h3>${title}</h3><p>${body}</p></div>",
   styles: ".card { padding:16px; background:#11161c; color:#c9d1d9; border-radius:8px; box-shadow: 0 8px 24px rgba(0,0,0,.4); }",

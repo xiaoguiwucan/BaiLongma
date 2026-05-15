@@ -3,7 +3,7 @@
  * 运行：node --env-file=.env src/test-acui.js
  *
  * 不需要真起 ws 服务，直接 mock 一个 ws 客户端塞进 acuiClients：
- *   - 调 ui_show / ui_show_inline / ui_update / ui_hide / ui_register
+ *   - 调 ui_show / ui_show / ui_update / ui_hide / ui_register
  *   - 收集 mock ws 收到的消息，断言 op / id / 字段
  *   - ui_register 后还会触发 acui:reload 控制事件
  *
@@ -142,8 +142,8 @@ async function run() {
   const hideMsg = inbox.shift()
   assert(hideMsg?.op === 'unmount' && hideMsg.id === r1.id, 'unmount 命令字段正确')
 
-  // ── 模式 B：ui_show_inline inline-template ──
-  const r4 = JSON.parse(await executeTool('ui_show_inline', {
+  // ── 模式 B：ui_show inline-template ──
+  const r4 = JSON.parse(await executeTool('ui_show', {
     mode: 'inline-template',
     template: '<div class="card"><h3>${title}</h3><ul>${items}</ul></div>',
     styles: '.card { padding:16px; background:#11161c; color:#c9d1d9; border-radius:8px }',
@@ -158,7 +158,7 @@ async function run() {
   assert(mountB.hint?.placement === 'notification', '模式 B：默认 placement=notification')
 
   // ── 模式 B 显式 hint：center + modal ──
-  const r4b = JSON.parse(await executeTool('ui_show_inline', {
+  const r4b = JSON.parse(await executeTool('ui_show', {
     mode: 'inline-template',
     template: '<div>${msg}</div>',
     props: { msg: '请确认操作' },
@@ -177,8 +177,8 @@ async function run() {
   const mountN = inbox.shift()
   assert(mountN?.props?.temp === 18, '数字容错：mount 命令里 temp 已是 number')
 
-  // ── 容错：ui_show_inline 缺 props 兜底 ──
-  const r4o = JSON.parse(await executeTool('ui_show_inline', {
+  // ── 容错：ui_show 缺 props 兜底 ──
+  const r4o = JSON.parse(await executeTool('ui_show', {
     mode: 'inline-template',
     template: '<div>hello</div>',
     // 故意不传 props
@@ -187,7 +187,7 @@ async function run() {
   inbox.shift()
 
   // ── 模式 B 透传 data-acui-each 模板（前端解析，后端只透传） ──
-  const r4e = JSON.parse(await executeTool('ui_show_inline', {
+  const r4e = JSON.parse(await executeTool('ui_show', {
     mode: 'inline-template',
     template: '<ul>${title}<li data-acui-each="items">${item}</li></ul>',
     props: { title: '清单', items: ['一', '二', '三'] },
@@ -197,7 +197,7 @@ async function run() {
   assert(mountE.template.includes('data-acui-each="items"'), 'each 模板：data-acui-each 透传到前端')
 
   // ── 模式 C 语法预检负反馈 ──
-  const r5 = await executeTool('ui_show_inline', {
+  const r5 = await executeTool('ui_show', {
     mode: 'inline-script',
     code: 'export default class extends HTMLElement { foo( }',  // 故意语法错
     props: {},
@@ -205,7 +205,7 @@ async function run() {
   assert(typeof r5 === 'string' && r5.includes('语法预检失败'), '模式 C：bad code 被语法预检拦截')
 
   // ── 模式 C 形状错误 ──
-  const r6 = await executeTool('ui_show_inline', {
+  const r6 = await executeTool('ui_show', {
     mode: 'inline-script',
     code: 'export default class extends Object {}',
     props: {},
@@ -213,7 +213,7 @@ async function run() {
   assert(typeof r6 === 'string' && r6.includes('export default class extends HTMLElement'), '模式 C：非 HTMLElement 子类被拒')
 
   // ── 模式 C 合法代码（无 ws 客户端时也应通过校验，再被 mount） ──
-  const r7 = JSON.parse(await executeTool('ui_show_inline', {
+  const r7 = JSON.parse(await executeTool('ui_show', {
     mode: 'inline-script',
     code: `export default class extends HTMLElement {
   constructor() { super(); this.attachShadow({ mode: 'open' }) }

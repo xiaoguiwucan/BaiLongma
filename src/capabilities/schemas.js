@@ -662,12 +662,16 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
     type: 'function',
     function: {
       name: 'ui_show',
-      description: 'Push a visual card to the user interface. Use only when UI expression is clearer or more intuitive than plain text; do not open a card for something one sentence can explain. Available components are listed in skill.ui memories.',
+      description: 'Push a visual card to the user interface. Two usage modes: (1) Registered component — provide component + props; (2) Inline ad-hoc — provide mode="inline-template" (safe HTML+CSS) or mode="inline-script" (full Web Component with JS/state/animation). Use inline when no registered component fits; after it proves useful, call ui_register to promote it. Use only when UI expression is clearer than plain text.',
       parameters: {
         type: 'object',
         properties: {
-          component: { type: 'string', description: 'Component type name. Must exist in the registry, e.g. WeatherCard.' },
-          props:     { type: 'object', description: 'Component props, must follow the component propsSchema.' },
+          component: { type: 'string', description: 'Registered component type name, e.g. WeatherCard. Required when not using mode.' },
+          props:     { type: 'object', description: 'Component props. For registered components must follow propsSchema; for inline omit unused fields (falls back to {}).' },
+          mode:     { type: 'string', enum: ['inline-template', 'inline-script'], description: 'Inline mode. inline-template=pure HTML+CSS template; inline-script=complete Web Component.' },
+          template: { type: 'string', description: 'Required for mode=inline-template. HTML structure using ${propName} placeholders. Never put <style> tags here; CSS goes in styles.' },
+          styles:   { type: 'string', description: 'CSS rules for mode=inline-template, injected into Shadow DOM (no <style> tags).' },
+          code:     { type: 'string', description: 'Required for mode=inline-script. Must start with: export default class extends HTMLElement ... and include set props(v).' },
           hint: {
             type: 'object',
             description: 'Optional display hint controlling card presentation. All fields have reasonable defaults.',
@@ -681,7 +685,7 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
             }
           }
         },
-        required: ['component', 'props']
+        required: []
       }
     }
   },
@@ -717,37 +721,6 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
     }
   },
 
-  ui_show_inline: {
-    type: 'function',
-    function: {
-      name: 'ui_show_inline',
-      description: 'Create and display an ad-hoc component when existing components cannot express the need. Modes: inline-template for safe HTML+CSS only, and inline-script for a full Web Component with interaction/state/animation. Prefer inline-template; avoid JS when possible. After it proves useful and dwell is good, call ui_register to promote it to a permanent component.',
-      parameters: {
-        type: 'object',
-        properties: {
-          mode:     { type: 'string', enum: ['inline-template', 'inline-script'], description: 'inline-template=pure template; inline-script=complete Web Component.' },
-          template: { type: 'string', description: 'Required for mode=inline-template. Pure HTML structure string using ${propName} placeholders. Never include <style> tags in template; CSS must go in styles or it may render as text.' },
-          styles:   { type: 'string', description: 'Optional but strongly recommended for mode=inline-template. Put all CSS rules here without <style> tags; the system injects them into Shadow DOM. Do not put CSS in template.' },
-          code:     { type: 'string', description: 'Required for mode=inline-script. Must start with export default class extends HTMLElement and include set props(v).' },
-          props:    { type: 'object', description: 'Component props object. Omit unused fields; the system falls back to an empty object.' },
-          hint: {
-            type: 'object',
-            description: 'Optional display hint, same meaning as ui_show hint: placement / size / draggable / modal / enter / exit.',
-            properties: {
-              placement: { type: 'string', enum: ['notification', 'center', 'floating', 'stage'] },
-              size:      { description: 'sm | md | lg | xl, or { w, h }.', oneOf: [{ type: 'string', enum: ['sm', 'md', 'lg', 'xl'] }, { type: 'object' }] },
-              draggable: { type: 'boolean' },
-              modal:     { type: 'boolean' },
-              enter:     { type: 'string' },
-              exit:      { type: 'string' }
-            }
-          }
-        },
-        required: ['mode']
-      }
-    }
-  },
-
   manage_app: {
     type: 'function',
     function: {
@@ -771,7 +744,7 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
           },
           draft_id: {
             type: 'string',
-            description: 'Required for save: component instance id returned by ui_show_inline, e.g. scratch-xxx.'
+            description: 'Required for save: component instance id returned by ui_show(mode="inline-script"), e.g. scratch-xxx.'
           },
           state: {
             type: 'object',
@@ -795,7 +768,7 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
       parameters: {
         type: 'object',
         properties: {
-          id:   { type: 'string', description: 'Component instance id returned by ui_show_inline or ui_show.' },
+          id:   { type: 'string', description: 'Component instance id returned by ui_show.' },
           op:   { type: 'string', description: 'Operation name defined by the component, such as applyMove, setState, or nextRound.' },
           data: { type: 'object', description: 'Operation data interpreted by the component.' },
         },

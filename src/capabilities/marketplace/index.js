@@ -16,7 +16,7 @@ const BUILTIN_NAMES = new Set([
   'speak', 'generate_lyrics', 'generate_music', 'generate_image', 'set_tick_interval',
   'media_mode', 'hotspot_mode', 'open_doc_panel', 'person_card_mode', 'music',
   'manage_reminder', 'schedule_reminder', 'manage_prefetch_task', 'ui_show', 'ui_update',
-  'ui_hide', 'ui_show_inline', 'ui_patch', 'manage_app', 'ui_register', 'focus_banner',
+  'ui_hide', 'ui_patch', 'manage_app', 'ui_register', 'focus_banner',
   'set_location', 'delegate_to_agent', 'grant_agent_delegation', 'recall_memory',
   'complete_startup_self_check', 'set_task', 'complete_task', 'update_task_step',
   'install_tool', 'uninstall_tool', 'list_tools',

@@ -157,7 +157,6 @@ const TOOL_RISK = {
   ui_show: 'medium',
   ui_update: 'medium',
   ui_hide: 'medium',
-  ui_show_inline: 'medium',
   ui_patch: 'medium',
   manage_app: 'medium',
   set_tick_interval: 'medium',
@@ -388,8 +387,6 @@ async function executeToolUnchecked(name, args, context = {}) {
         return execUIUpdate(args)
       case 'ui_hide':
         return execUIHide(args)
-      case 'ui_show_inline':
-        return execUIShowInline(args)
       case 'ui_patch':
         return execUIPatch(args)
       case 'manage_app':
@@ -2462,9 +2459,64 @@ function mergeHint(hint, def) {
   }
 }
 
-function execUIShow({ component, props, hint }) {
+function execUIShow({ component, mode, template, styles, code, props, hint }) {
+  // ── inline 分支 ──
+  if (mode) {
+    if (mode !== 'inline-template' && mode !== 'inline-script') return `错误：mode 必须为 inline-template / inline-script，当前 "${mode}"`
+    if (props == null) props = {}
+    if (typeof props !== 'object' || Array.isArray(props)) return '错误：props 必须为对象（可省略，但传了就必须是对象）'
+
+    if (mode === 'inline-template') {
+      if (!template || typeof template !== 'string') return '错误：mode=inline-template 时 template 为必填字符串'
+      if (template.length > 8000) return '错误：template 过长（>8000 字符），请精简或转用 ui_register 注册组件'
+    } else {
+      if (!code || typeof code !== 'string') return '错误：mode=inline-script 时 code 为必填字符串'
+      if (code.length > 32000) return '错误：code 过长（>32000 字符），请精简或转用 ui_register'
+      if (!/export\s+default\s+class\s+\w*\s*extends\s+HTMLElement/.test(code)) {
+        return '错误：code 必须以 `export default class extends HTMLElement` 形式开头'
+      }
+      try {
+        new Function(code.replace(/^\s*export\s+default\s+/m, 'return '))
+      } catch (e) {
+        return `错误：代码语法预检失败 — ${e.message}`
+      }
+    }
+
+    if (!hasACUIClient()) return '错误：当前没有 UI 客户端连接，请改用文字回答'
+
+    const id = `scratch-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`
+    const payload = { op: 'mount', mode, id, props, hint: mergeHint(hint, null) }
+    if (mode === 'inline-template') {
+      payload.template = template
+      if (styles) payload.styles = styles
+    } else {
+      payload.code = code
+    }
+
+    if (mode === 'inline-script') {
+      addDraftCode(id, code)
+      try {
+        const draftDir = path.resolve(SANDBOX_ROOT, 'apps', '.drafts')
+        fs.mkdirSync(draftDir, { recursive: true })
+        fs.writeFileSync(path.resolve(draftDir, `${id}.js`), code, 'utf-8')
+      } catch (_) {}
+    }
+
+    addActiveUICard(id, { component: mode })
+    emitUICommand(payload)
+    emitEvent('action', {
+      tool: 'ui_show',
+      summary: `临场组件 (${mode})`,
+      detail: id,
+      code: mode === 'inline-script' ? code.slice(0, 800) : undefined,
+      template: mode === 'inline-template' ? template.slice(0, 800) : undefined,
+    })
+    return JSON.stringify({ ok: true, id, mode })
+  }
+
+  // ── 注册组件分支 ──
   console.log(`[ui_show] component=${component} props=${JSON.stringify(props)}`)
-  if (!component) return '错误：未提供 component'
+  if (!component) return '错误：未提供 component 或 mode'
   const components = loadACUIComponents()
   const def = components[component]
   if (!def) return `错误：组件 "${component}" 未注册（可用：${Object.keys(components).join(', ') || '无'}）`
@@ -2515,67 +2567,6 @@ function execUIUpdate({ id, props }) {
   return JSON.stringify({ ok: true, id })
 }
 
-function execUIShowInline({ mode, template, styles, code, props, hint }) {
-  if (mode !== 'inline-template' && mode !== 'inline-script') return `错误：mode 必须为 inline-template / inline-script，当前 "${mode}"`
-  // 容错：LLM 漏传 props 或写成 null 时兜底成 {}。模板里没用到字段就不需要 props。
-  if (props == null) props = {}
-  if (typeof props !== 'object' || Array.isArray(props)) return '错误：props 必须为对象（可省略，但传了就必须是对象）'
-
-  if (mode === 'inline-template') {
-    if (!template || typeof template !== 'string') return '错误：mode=inline-template 时 template 为必填字符串'
-    if (template.length > 8000) return '错误：template 过长（>8000 字符），请精简或转用 ui_register 注册组件'
-  } else {
-    if (!code || typeof code !== 'string') return '错误：mode=inline-script 时 code 为必填字符串'
-    if (code.length > 32000) return '错误：code 过长（>32000 字符），请精简或转用 ui_register'
-    if (!/export\s+default\s+class\s+\w*\s*extends\s+HTMLElement/.test(code)) {
-      return '错误：code 必须以 `export default class extends HTMLElement` 形式开头'
-    }
-    // 后端语法预检：包一层 try/catch，仅做 parse 不真正执行
-    try {
-      new Function(code.replace(/^\s*export\s+default\s+/m, 'return '))
-    } catch (e) {
-      return `错误：代码语法预检失败 — ${e.message}`
-    }
-  }
-
-  if (!hasACUIClient()) return '错误：当前没有 UI 客户端连接，请改用文字回答'
-
-  const id = `scratch-${Date.now()}-${crypto.randomBytes(3).toString('hex')}`
-  const payload = {
-    op: 'mount',
-    mode,
-    id,
-    props,
-    hint: mergeHint(hint, null),
-  }
-  if (mode === 'inline-template') {
-    payload.template = template
-    if (styles) payload.styles = styles
-  } else {
-    payload.code = code
-  }
-
-  // inline-script 草稿自动落盘，供 manage_app(save) 和服务重启后恢复
-  if (mode === 'inline-script') {
-    addDraftCode(id, code)
-    try {
-      const draftDir = path.resolve(SANDBOX_ROOT, 'apps', '.drafts')
-      fs.mkdirSync(draftDir, { recursive: true })
-      fs.writeFileSync(path.resolve(draftDir, `${id}.js`), code, 'utf-8')
-    } catch (_) {}
-  }
-
-  addActiveUICard(id, { component: mode })
-  emitUICommand(payload)
-  emitEvent('action', {
-    tool: 'ui_show_inline',
-    summary: `临场组件 (${mode})`,
-    detail: id,
-    code: mode === 'inline-script' ? code.slice(0, 800) : undefined,
-    template: mode === 'inline-template' ? template.slice(0, 800) : undefined,
-  })
-  return JSON.stringify({ ok: true, id, mode })
-}
 
 function execUIPatch({ id, op, data }) {
   if (!id) return '错误：未提供 id'
@@ -2597,7 +2588,7 @@ function execManageApp({ action, name, label, draft_id, state, hint }) {
     let code = draftCodeMap.get(draft_id)
     if (!code) {
       const draftPath = path.resolve(appsRoot, '.drafts', `${draft_id}.js`)
-      if (!fs.existsSync(draftPath)) return `错误：找不到草稿 ${draft_id}，请确认 draft_id 是 ui_show_inline 返回的 id`
+      if (!fs.existsSync(draftPath)) return `错误：找不到草稿 ${draft_id}，请确认 draft_id 是 ui_show(mode="inline-script") 返回的 id`
       code = fs.readFileSync(draftPath, 'utf-8')
     }
     const appDir = path.resolve(appsRoot, name)

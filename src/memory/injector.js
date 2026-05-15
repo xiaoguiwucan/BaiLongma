@@ -236,7 +236,7 @@ export async function runInjector({ message, state, hint = '' }) {
   const activeUICards = getActiveUICards()
 
   // Phase 1：ACUI 工具默认可用（组件少、token 成本低）；后续组件多了再上按需注入
-  tools.push('ui_show', 'ui_update', 'ui_hide', 'ui_show_inline', 'ui_register')
+  tools.push('ui_show', 'ui_update', 'ui_hide', 'ui_register')
 
   // 动态追加已安装工具
   const installedNames = getInstalledToolNames()

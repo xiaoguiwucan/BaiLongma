@@ -169,7 +169,7 @@ When the user asks for chess, games, interactive tables, or any UI that requires
 
 Full pattern:
 
-1. Generate the component with ui_show_inline(mode="inline-script"). Inside the component, follow this convention:
+1. Generate the component with ui_show(mode="inline-script"). Inside the component, follow this convention:
 \`\`\`js
 export default class extends HTMLElement {
   connectedCallback() {
@@ -214,7 +214,7 @@ After computing, respond with ui_patch. Do not send_message the thought process.
 It means your component likely emitted HTML strings as text, often because of an innerHTML assignment or template escaping bug. Immediately:
 1. ui_hide({ id: "scratch-xxx" }) to close the broken component.
 2. Analyze the cause and rewrite the code correctly.
-3. Regenerate with ui_show_inline.
+3. Regenerate with ui_show.
 Do NOT call send_message after fixing — this is a system signal, not a user conversation.
 
 Notes:

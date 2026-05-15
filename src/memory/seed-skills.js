@@ -37,7 +37,7 @@ function seedAgentGuide() {
   const summary = [
     '[Skill UI] Component authoring guide',
     'When to use UI cards / three execution modes A>B>C / inline-template and inline-script patterns / promotion flow / pitfalls.',
-    'Keywords: build a component, draw one, show it, make a card, custom, inline, missing component, ui_show_inline, ui_register.',
+    'Keywords: build a component, draw one, show it, make a card, custom, inline, missing component, ui_show, ui_register.',
   ].join('\n')
 
   insertMemory({
