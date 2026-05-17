@@ -39,8 +39,13 @@ async function streamOnce({ messages, toolSchemas, temperature, topP, maxTokens,
   if (typeof topP === 'number' && topP > 0) requestParams.top_p = topP
   if (config.provider === 'deepseek') {
     const thinkingEnabled = shouldEnableDeepSeekThinking(thinking)
-    requestParams.reasoning_effort = 'high'
-    requestParams.thinking = { type: thinkingEnabled ? 'enabled' : 'disabled' }
+    if (thinkingEnabled) {
+      requestParams.reasoning_effort = 'high'
+      requestParams.thinking = { type: 'enabled' }
+    } else {
+      // DeepSeek 拒绝 reasoning_effort 与 thinking.type='disabled' 组合
+      requestParams.thinking = { type: 'disabled' }
+    }
   } else {
     if (!thinking) requestParams.thinking = { type: 'disabled' }
   }

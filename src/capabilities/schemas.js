@@ -133,6 +133,7 @@ export const TOOL_SCHEMAS = {
 
   fetch_url: {
     type: 'function',
+    recognizer_highlights: ['body_path', 'title', 'url', 'content_length'],
     function: {
       name: 'fetch_url',
       description: 'Open a known URL with a lightweight HTTP request. Returns structured JSON with ok/status/title/content/body_path/error. Long articles (>=2000 chars) are auto-saved to sandbox/articles/ and content is truncated to a short excerpt; use the returned body_path with read_file to open the full text. Do not use this tool as a search engine. If ok is false because content is empty, blocked, or JS-rendered, try browser_read or another URL; never summarize an error as page content.',
@@ -151,6 +152,7 @@ export const TOOL_SCHEMAS = {
 
   browser_read: {
     type: 'function',
+    recognizer_highlights: ['body_path', 'title', 'url', 'content_length'],
     function: {
       name: 'browser_read',
       description: 'Use a real headless Chromium browser to open and render a webpage, wait for JavaScript, scroll, and extract readable text. Use this when fetch_url returns no readable content, a waiting page, or a JS-rendered page. Returns structured JSON with ok/title/content/body_path/error. Long articles (>=2000 chars) are auto-saved to sandbox/articles/ and content is truncated to a short excerpt; use body_path with read_file to open the full text.',
@@ -619,6 +621,7 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
                 title:         { type: 'string', description: 'Title. For articles, use the article title. Required for new memories.' },
                 content:       { type: 'string', description: 'Summary, <= 200 Chinese characters. Required for new memories.' },
                 detail:        { type: 'string', description: 'Optional detailed explanation.' },
+                entities:      { type: 'array', items: { type: 'string' }, description: 'Entity IDs this memory is about. For memories about the user, include their sender ID (e.g. "ID:000001"). For memories about other people, include their person ID. This enables entity-based memory retrieval.' },
                 tags:          { type: 'array', items: { type: 'string' }, description: 'Optional tag array.' },
                 parent_mem_id: { type: 'string', description: 'Optional parent node mem_id.' },
                 links:         {
@@ -631,6 +634,12 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
                     }
                   },
                   description: 'Optional links to other memory nodes.'
+                },
+                salience: {
+                  type: 'integer',
+                  minimum: 1,
+                  maximum: 5,
+                  description: 'Importance score 1-5. 1=trivial detail, 2=ordinary fact, 3=default stable info, 4=meaningful pattern or recurring preference, 5=identity-level / load-bearing belief. Defaults to 3 if omitted.'
                 },
                 body_path:     { type: 'string', description: 'For article type: full-text file path from fetch_url/browser_read body_path.' }
               },
@@ -653,6 +662,56 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
         type: 'object',
         properties: {
           reason: { type: 'string', description: 'Optional short reason.' }
+        }
+      }
+    }
+  },
+
+  merge_memories: {
+    type: 'function',
+    function: {
+      name: 'merge_memories',
+      description: 'Consolidator-only. Merge multiple semantically-duplicate memories into one. The keep memory is updated with merged_content; drop memories are deleted. Entities from dropped memories are union-merged into keep. Salience defaults to max(involved) unless merged_salience is set. Use this when 2+ memories say the same thing in different words, or when an old memory is superseded by a newer fact that subsumes it.',
+      parameters: {
+        type: 'object',
+        properties: {
+          keep_mem_id:     { type: 'string', description: 'mem_id of the memory to keep (will be updated).' },
+          drop_mem_ids:    { type: 'array', items: { type: 'string' }, description: 'mem_ids of memories to delete after merging their semantic content into keep.' },
+          merged_content:  { type: 'string', description: 'New content for the keep memory, <=200 Chinese characters, covering everything the dropped memories said that is still true.' },
+          merged_salience: { type: 'integer', minimum: 1, maximum: 5, description: 'Optional. Overrides default max(involved) salience.' },
+          reason:          { type: 'string', description: 'Short reason for the merge, for logs.' },
+        },
+        required: ['keep_mem_id', 'drop_mem_ids', 'merged_content']
+      }
+    }
+  },
+
+  downgrade_memory: {
+    type: 'function',
+    function: {
+      name: 'downgrade_memory',
+      description: 'Consolidator-only. Lower the salience of a memory that has become stale or less central but is not outright contradicted (otherwise merge it into the contradicting memory). Reserve aggressive downgrades for memories that no longer seem load-bearing.',
+      parameters: {
+        type: 'object',
+        properties: {
+          mem_id:       { type: 'string' },
+          new_salience: { type: 'integer', minimum: 1, maximum: 5 },
+          reason:       { type: 'string' },
+        },
+        required: ['mem_id', 'new_salience']
+      }
+    }
+  },
+
+  skip_consolidation: {
+    type: 'function',
+    function: {
+      name: 'skip_consolidation',
+      description: 'Consolidator-only. Call when the inspected memory batch contains no duplicates and no stale entries. Valid stop signal.',
+      parameters: {
+        type: 'object',
+        properties: {
+          reason: { type: 'string' }
         }
       }
     }
@@ -1136,4 +1195,6 @@ export function getToolSchemas(toolNames) {
     .filter(name => name !== 'express')
     .map(name => TOOL_SCHEMAS[name] ?? getInstalledToolSchema(name))
     .filter(Boolean)
+    // 剥离识别器专用元数据，避免发给 LLM API
+    .map(({ recognizer_highlights, ...rest }) => rest)
 }

@@ -717,6 +717,106 @@ export function setTTSConfig(updates) {
   writeStoredConfig({ ...existing, tts: next })
 }
 
+// ── Embedding config ──────────────────────────────────────────────────────────
+// Embedding 与 chat provider 完全独立。DeepSeek/Moonshot 没 embedding API，
+// 所以必须分开存。结构：config.json 的 "embedding" 块。
+//
+// 字段：
+//   provider:   'openai' | 'qwen' | 'zhipu' | 'minimax' | 'custom'
+//   model:      模型名（参考 EMBEDDING_PROVIDER_PRESETS）
+//   apiKey:     凭证（明文存储，与现有 chat apiKey 一样）
+//   baseURL:    custom 时必填；其他 provider 留空走预设
+//   dimensions: 可选，仅 OpenAI text-embedding-3-* 系列支持显式指定
+
+const EMBEDDING_CONFIG_KEYS = ['provider', 'model', 'apiKey', 'baseURL', 'dimensions']
+
+export const EMBEDDING_PROVIDER_PRESETS = {
+  openai:  { baseURL: 'https://api.openai.com/v1',                          defaultModel: 'text-embedding-3-small', defaultDims: 1536 },
+  qwen:    { baseURL: 'https://dashscope.aliyuncs.com/compatible-mode/v1',  defaultModel: 'text-embedding-v2',      defaultDims: 1536 },
+  zhipu:   { baseURL: 'https://open.bigmodel.cn/api/paas/v4',               defaultModel: 'embedding-3',            defaultDims: 2048 },
+  minimax: { baseURL: 'https://api.minimax.chat/v1',                        defaultModel: 'embo-01',                defaultDims: 1536 },
+  custom:  { baseURL: '',                                                   defaultModel: '',                       defaultDims: 1536 },
+}
+
+let _embeddingBlockCache = null
+let _embeddingBlockCacheMtime = -1
+
+function readEmbeddingBlock() {
+  let mtime = -1
+  try {
+    mtime = fs.statSync(paths.configFile).mtimeMs
+  } catch {
+    // config 文件不存在或访问失败：直接返回 {}，不缓存（让下次有机会重试）
+    return {}
+  }
+
+  if (_embeddingBlockCache !== null && mtime === _embeddingBlockCacheMtime) {
+    return _embeddingBlockCache
+  }
+
+  let block = {}
+  try {
+    const raw = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))
+    if (raw?.embedding && typeof raw.embedding === 'object') {
+      block = raw.embedding
+    }
+  } catch {
+    block = {}
+  }
+
+  _embeddingBlockCache = block
+  _embeddingBlockCacheMtime = mtime
+  return block
+}
+
+// 前端可见视图：不暴露 apiKey 明文，只暴露 configured 布尔
+export function getEmbeddingConfig() {
+  const stored = readEmbeddingBlock()
+  const provider = typeof stored.provider === 'string' ? stored.provider : ''
+  const model    = typeof stored.model === 'string'    ? stored.model    : ''
+  const baseURL  = typeof stored.baseURL === 'string'  ? stored.baseURL  : ''
+  const dimensions = Number.isFinite(stored.dimensions) ? stored.dimensions : null
+  const configured = !!(stored.apiKey && model)
+  return { provider, model, baseURL, dimensions, configured }
+}
+
+// Backend-only：读明文 apiKey。供 src/embedding.js 内部用，不要给前端。
+export function getEmbeddingCredentials() {
+  const stored = readEmbeddingBlock()
+  const provider = typeof stored.provider === 'string' ? stored.provider : ''
+  let baseURL = typeof stored.baseURL === 'string' && stored.baseURL ? stored.baseURL : ''
+  if (!baseURL && provider && EMBEDDING_PROVIDER_PRESETS[provider]) {
+    baseURL = EMBEDDING_PROVIDER_PRESETS[provider].baseURL || ''
+  }
+  return {
+    provider,
+    model:      typeof stored.model === 'string'  ? stored.model  : '',
+    apiKey:     typeof stored.apiKey === 'string' ? stored.apiKey : '',
+    baseURL,
+    dimensions: Number.isFinite(stored.dimensions) ? stored.dimensions : null,
+  }
+}
+
+export function setEmbeddingConfig(updates) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.embedding || {}
+  const next = { ...current }
+  for (const [key, val] of Object.entries(updates || {})) {
+    if (!EMBEDDING_CONFIG_KEYS.includes(key)) continue
+    if (key === 'dimensions') {
+      const n = Number(val)
+      if (Number.isFinite(n) && n > 0) next.dimensions = n
+      else delete next.dimensions
+      continue
+    }
+    const trimmed = String(val || '').trim()
+    if (trimmed) next[key] = trimmed
+    else delete next[key]
+  }
+  writeStoredConfig({ ...existing, embedding: next })
+}
+
 export const __internals = {
   DEEPSEEK_MODELS,
   MINIMAX_MODELS,

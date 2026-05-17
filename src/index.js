@@ -4,6 +4,7 @@ import { buildSystemPrompt } from './prompt.js'
 import { runRecognizer } from './memory/recognizer.js'
 import { runInjector, formatMemoriesForPrompt, formatTaskKnowledge, formatPrefetchedItems, formatActiveUICards } from './memory/injector.js'
 import { runMemoryRefreshLoop } from './memory/refresh-loop.js'
+import { startConsolidationLoop } from './memory/consolidation-loop.js'
 import { gatherContext, formatExtraContext } from './context/gatherer.js'
 import { getDB, getConfig, setConfig, getKnownEntities, getOrInitBirthTime, insertConversation, insertMemory, getRecentConversationPartners, getDueReminders, markReminderFired, advanceReminderDueAt, getNextPendingReminder, getMemoryCount, getRecentConversationTimeline } from './db.js'
 import { calculateNextDueAt, autoSpeakForVoiceReply } from './capabilities/executor.js'
@@ -177,6 +178,9 @@ const state = {
   recentActions: [], // summaries of recent turns, format: { ts, summary }
   thoughtStack: [],  // thought stack, max 3 entries, format: { concept, line }
   startupSelfCheck: null,
+  pendingConfidenceHint: null,  // 上一轮 refresh-loop 的 confidence，供下次 runInjector 调整召回数量后清空
+  tickCounter: 0,             // 累计 TICK 计数（每次进 isTick 路径自增）
+  lastTaskRefreshTick: -10,   // 上次 TICK 路径触发 refresh-loop 时的 tickCounter；初值 -10 保证首个 TICK 立刻可触发（差值 = 0 - (-10) = 10 >= 5）
 }
 
 const TASK_IDLE_TICK_LIMIT = 5  // auto-clear task after N consecutive task ticks with no tool calls
@@ -184,6 +188,7 @@ const TASK_IDLE_TICK_LIMIT = 5  // auto-clear task after N consecutive task tick
 function autoCompleteTask(reason) {
   const clearedTask = state.task
   state.task = null
+  state.lastTaskRefreshTick = -10
   state.taskSteps = []
   state.taskIdleTickCount = 0
   setConfig('current_task', '')
@@ -329,6 +334,7 @@ function buildToolContextForProcess(msg, injection) {
 
     onSetTask: (description, steps) => {
       state.task = description
+      state.lastTaskRefreshTick = -10
       state.taskSteps = steps.map(s => ({ text: s, status: 'pending', note: '' }))
       setConfig('current_task', description)
       setConfig('current_task_steps', JSON.stringify(state.taskSteps))
@@ -647,6 +653,7 @@ function buildSystemEnv(msg) {
 async function process(input, label, msg = null) {
   const sessionRef = newSessionRef()
   const isTick = !msg
+  if (isTick) state.tickCounter += 1
   const priority = getProcessPriority(msg)
   const fastUserPath = isFastUserMessage(msg)
   const controller = new AbortController()
@@ -859,15 +866,21 @@ async function process(input, label, msg = null) {
 
     // Memory refresh injection (L1 user messages only)
     let enrichedSystemPrompt = systemPrompt
-    if (!isTick && msg?.content && msg.content.trim()) {
+    const shouldRefreshL1 = !isTick && msg?.content && msg.content.trim()
+    const tickSinceLastRefresh = state.tickCounter - state.lastTaskRefreshTick
+    const shouldRefreshTick = isTick && !!state.task && tickSinceLastRefresh >= 5
+    if (shouldRefreshL1 || shouldRefreshTick) {
       try {
         const refreshResult = await runMemoryRefreshLoop({
-          originalQuery: msg.content,
+          originalQuery: shouldRefreshL1 ? msg.content : state.task,
           baseMemories: injection.memories,
           formattedBaseMemories: memoriesText,
           systemPromptBase: systemPrompt,
           signal: controller.signal,
+          maxRounds: shouldRefreshTick ? 2 : 3,
         })
+        state.pendingConfidenceHint = refreshResult?.confidence ?? null
+        if (shouldRefreshTick) state.lastTaskRefreshTick = state.tickCounter
         throwIfAborted(controller.signal)
         if (!refreshResult.skipped && (refreshResult.additionalMemories.length || refreshResult.round3Results)) {
           const extraParts = []
@@ -1145,6 +1158,13 @@ async function process(input, label, msg = null) {
   const thinkMatch = response.match(/<think>([\s\S]*?)<\/think>/i)
   const jarvisThink = thinkMatch ? thinkMatch[1].trim() : ''
   const jarvisText = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
+
+  // Silent tick with no tool calls = nothing happened worth remembering; skip LLM call entirely.
+  if (isTick && toolCallLog.length === 0 && !jarvisText) {
+    emitEvent('memories_written', { count: 0, memories: [] })
+    return
+  }
+
   runRecognizer({
     userMessage: input,
     jarvisThink,
@@ -1277,6 +1297,8 @@ let loopStarted = false
 async function startConsciousnessLoop({ runImmediateTick = true } = {}) {
   if (loopStarted) return
   loopStarted = true
+
+  startConsolidationLoop()
 
   // Register the scheduler so the control layer (stop/start) can wake it up
   setScheduler(scheduleNextTick)

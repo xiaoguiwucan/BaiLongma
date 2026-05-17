@@ -40,9 +40,42 @@ function initSchema() {
   try { db.exec(`ALTER TABLE memories ADD COLUMN title TEXT DEFAULT ''`) } catch {}
   try { db.exec(`ALTER TABLE memories ADD COLUMN mem_id TEXT`) } catch {}
   try { db.exec(`ALTER TABLE memories ADD COLUMN links TEXT DEFAULT '[]'`) } catch {}
+  try { db.exec(`ALTER TABLE memories ADD COLUMN salience INTEGER DEFAULT 3`) } catch {}
   try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_mem_id ON memories(mem_id) WHERE mem_id IS NOT NULL`) } catch {}
   // 迁移：conversations 加 channel 列
   try { db.exec(`ALTER TABLE conversations ADD COLUMN channel TEXT DEFAULT ''`) } catch {}
+
+  // 迁移：FTS5 tokenizer 从默认 unicode61 升级到 trigram。
+  // 默认 tokenizer 把中文整段当成一个 token（"咖啡偏好"被存为一个整体），
+  // 搜 "咖啡" 完全不命中。trigram 把字符串切成 3 字符滑动窗口，对中文子串可搜。
+  // 注意：trigram 要求查询至少 3 字符；2 字符查询走 LIKE fallback（见 searchMemories）。
+  //
+  // 数据安全性：只 DROP virtual 索引表 memories_fts 和 3 个 trigger；
+  // memories 真数据表完全不动。下文 schema 重建 memories_fts + trigger，
+  // 末尾 line ~280 的 rebuild 命令把 memories 全表重新索引化。
+  // 整段 try-catch；失败时回到老行为（FTS5 中文召回不工作但程序不崩）。
+  try {
+    const ftsRow = db.prepare(`SELECT sql FROM sqlite_master WHERE name='memories_fts'`).get()
+    if (ftsRow && !/trigram/i.test(String(ftsRow.sql || ''))) {
+      const memCountBefore = (() => { try { return db.prepare('SELECT COUNT(*) AS c FROM memories').get().c } catch { return -1 } })()
+      console.log(`[DB migration] Upgrading memories_fts: unicode61 → trigram. memories rows=${memCountBefore}. memories table itself is NOT touched.`)
+      db.exec(`
+        DROP TRIGGER IF EXISTS memories_ai;
+        DROP TRIGGER IF EXISTS memories_au;
+        DROP TRIGGER IF EXISTS memories_ad;
+        DROP TABLE IF EXISTS memories_fts;
+      `)
+      // memories 行数应该保持不变（DROP 只动 fts 虚拟表）
+      const memCountAfter = (() => { try { return db.prepare('SELECT COUNT(*) AS c FROM memories').get().c } catch { return -1 } })()
+      if (memCountBefore !== memCountAfter) {
+        console.error(`[DB migration] WARN memories row count changed during drop: ${memCountBefore} → ${memCountAfter} (this should never happen, please report)`)
+      } else {
+        console.log(`[DB migration] DROP complete, memories rows preserved (${memCountAfter}). Schema will recreate memories_fts with trigram + rebuild index below.`)
+      }
+    }
+  } catch (err) {
+    console.warn('[DB migration] FTS5 tokenizer migration check failed:', err.message, '— program continues, FTS5 remains in previous state')
+  }
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS conversations (
@@ -73,9 +106,11 @@ function initSchema() {
       concepts    TEXT    DEFAULT '[]',
       tags        TEXT    DEFAULT '[]',
       links       TEXT    DEFAULT '[]',
+      salience    INTEGER DEFAULT 3,
       source_ref  TEXT,
       timestamp   TEXT    NOT NULL,
       parent_id   INTEGER REFERENCES memories(id),
+      embedding   BLOB,
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
 
@@ -85,7 +120,8 @@ function initSchema() {
 
     CREATE VIRTUAL TABLE IF NOT EXISTS memories_fts USING fts5(
       content, detail, entities, concepts, tags,
-      content='memories', content_rowid='id'
+      content='memories', content_rowid='id',
+      tokenize='trigram'
     );
 
     CREATE TRIGGER IF NOT EXISTS memories_ai AFTER INSERT ON memories BEGIN
@@ -96,6 +132,13 @@ function initSchema() {
     CREATE TRIGGER IF NOT EXISTS memories_ad AFTER DELETE ON memories BEGIN
       INSERT INTO memories_fts(memories_fts, rowid, content, detail, entities, concepts, tags)
       VALUES ('delete', old.id, old.content, old.detail, old.entities, old.concepts, old.tags);
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS memories_au AFTER UPDATE ON memories BEGIN
+      INSERT INTO memories_fts(memories_fts, rowid, content, detail, entities, concepts, tags)
+      VALUES ('delete', old.id, old.content, old.detail, old.entities, old.concepts, old.tags);
+      INSERT INTO memories_fts(rowid, content, detail, entities, concepts, tags)
+      VALUES (new.id, new.content, new.detail, new.entities, new.concepts, new.tags);
     END;
 
     CREATE TABLE IF NOT EXISTS config (
@@ -111,6 +154,16 @@ function initSchema() {
       created_at  TEXT    NOT NULL DEFAULT (datetime('now'))
     );
   `)
+
+  // 迁移：memories 表添加 embedding BLOB 列（向量语义召回用，与 FTS5 双路融合）。
+  // 用 PRAGMA table_info 检查，保证幂等：已有 embedding 列时彻底 no-op。
+  try {
+    const cols = db.prepare(`PRAGMA table_info(memories)`).all()
+    const hasEmbedding = cols.some(c => c.name === 'embedding')
+    if (!hasEmbedding) {
+      db.exec(`ALTER TABLE memories ADD COLUMN embedding BLOB`)
+    }
+  } catch {}
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS action_logs (
@@ -355,6 +408,13 @@ function uniqueStrings(values) {
   return [...new Set((values || []).filter(Boolean).map(v => String(v).trim()).filter(Boolean))]
 }
 
+// LLM 可能传字符串/越界值，强制归一到 1-5
+function clampSalience(value) {
+  const n = Math.round(Number(value))
+  if (!Number.isFinite(n)) return 3
+  return Math.max(1, Math.min(5, n))
+}
+
 function inferIdentityEntities(memory) {
   const text = [
     memory.mem_id,
@@ -475,10 +535,36 @@ function ensureCanonicalIdentityRoot(entityId) {
   return result.lastInsertRowid
 }
 
-// 按语义 mem_id 读取单条记忆（用于 Agent 可自改的身份/人格类根记忆）
+// 按语义 mem_id 读取单条记忆（用于 Agent 可自改的身份/人格类根记忆 + 整合器）
+// 返回完整 row（含 salience/entities/timestamp），整合器需要这些字段
 export function getMemoryByMemId(memId) {
   const db = getDB()
-  return db.prepare('SELECT id, mem_id, event_type, title, content, detail FROM memories WHERE mem_id = ? LIMIT 1').get(memId) || null
+  return db.prepare('SELECT * FROM memories WHERE mem_id = ? LIMIT 1').get(memId) || null
+}
+
+export function deleteMemoryByMemId(mem_id) {
+  const db = getDB()
+  if (!mem_id) throw new Error('deleteMemoryByMemId 需要 mem_id')
+  const result = db.prepare(`DELETE FROM memories WHERE mem_id = ?`).run(mem_id)
+  return result.changes > 0
+}
+
+// 候选实体：fact/person 记忆数 ≥3 的 entity ID，按出现次数倒序
+export function getCandidateEntitiesForConsolidation(limit = 10) {
+  const db = getDB()
+  const rows = db.prepare(`SELECT entities FROM memories WHERE event_type IN ('fact','person')`).all()
+  const counts = new Map()
+  for (const r of rows) {
+    try {
+      const arr = JSON.parse(r.entities || '[]')
+      for (const e of arr) counts.set(e, (counts.get(e) || 0) + 1)
+    } catch {}
+  }
+  return [...counts.entries()]
+    .filter(([e, c]) => e && c >= 3)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, limit)
+    .map(([entity, count]) => ({ entity, count }))
 }
 
 // 读取配置
@@ -726,6 +812,11 @@ export function insertMemory(memory) {
   })
 }
 
+export function memoryExistsByMemId(mem_id) {
+  const db = getDB()
+  return !!db.prepare(`SELECT id FROM memories WHERE mem_id = ? LIMIT 1`).get(mem_id)
+}
+
 // 按 mem_id 做 PATCH 式 upsert：识别器走工具调用主动判重时使用。
 // 与 insertMemory 区别：
 //   - 必须有 mem_id
@@ -772,6 +863,7 @@ export function upsertMemoryByMemId(memory) {
     if (m.tags !== undefined)       { sets.push('tags = @tags');             params.tags = JSON.stringify(m.tags) }
     if (m.links !== undefined)      { sets.push('links = @links');           params.links = JSON.stringify(m.links) }
     if (m.source_ref !== undefined) { sets.push('source_ref = @source_ref'); params.source_ref = m.source_ref }
+    if (m.salience !== undefined)   { sets.push('salience = @salience');     params.salience = clampSalience(m.salience) }
     if (m.parent_ref !== undefined) {
       sets.push('parent_id = @parent_id')
       params.parent_id = m.parent_ref ? resolveParentRef(m.parent_ref) : null
@@ -791,8 +883,8 @@ export function upsertMemoryByMemId(memory) {
 
   const parentId = m.parent_ref ? resolveParentRef(m.parent_ref) : null
   const result = db.prepare(`
-    INSERT INTO memories (event_type, content, detail, title, mem_id, entities, concepts, tags, links, source_ref, timestamp, parent_id)
-    VALUES (@event_type, @content, @detail, @title, @mem_id, @entities, @concepts, @tags, @links, @source_ref, @timestamp, @parent_id)
+    INSERT INTO memories (event_type, content, detail, title, mem_id, entities, concepts, tags, links, source_ref, timestamp, salience, parent_id)
+    VALUES (@event_type, @content, @detail, @title, @mem_id, @entities, @concepts, @tags, @links, @source_ref, @timestamp, @salience, @parent_id)
   `).run({
     event_type: m.event_type,
     content:    m.content,
@@ -805,6 +897,7 @@ export function upsertMemoryByMemId(memory) {
     links:      JSON.stringify(m.links || []),
     source_ref: m.source_ref || null,
     timestamp:  m.timestamp || new Date().toISOString(),
+    salience:   clampSalience(m.salience),
     parent_id:  parentId,
   })
 
@@ -1091,7 +1184,7 @@ export function getMemoriesByEntity(entityId, limit = 10) {
       OR links LIKE ?
     )
     AND id != ?
-    ORDER BY timestamp DESC
+    ORDER BY COALESCE(salience, 3) DESC, timestamp DESC
     LIMIT ?
   `).all(`%${normalizedId}%`, root?.id || -1, `%${root?.mem_id || ''}%`, root?.id || -1, limit)
 }
@@ -1291,26 +1384,100 @@ export function getNextPendingReminder() {
 }
 
 // 按关键词搜索记忆（FTS5 全文搜索，优先相关度排序）
+// 注意：trigram tokenizer 需要查询至少 3 字符；< 3 字符（典型如 2 字中文 ngram）走 LIKE fallback。
 export function searchMemories(keyword, limit = 10) {
   const db = getDB()
+  const kw = String(keyword || '')
+  const likeFallback = () => db.prepare(`
+    SELECT * FROM memories
+    WHERE content LIKE ? OR detail LIKE ? OR concepts LIKE ?
+    ORDER BY COALESCE(salience, 3) DESC, timestamp DESC
+    LIMIT ?
+  `).all(`%${kw}%`, `%${kw}%`, `%${kw}%`, limit)
+
+  // trigram tokenizer 对 < 3 字符的查询无法匹配，直接走 LIKE
+  if (kw.length < 3) return likeFallback()
+
   try {
-    // FTS5 搜索：用 bm25 相关度排序
-    return db.prepare(`
+    const hits = db.prepare(`
       SELECT m.* FROM memories m
       JOIN memories_fts ON memories_fts.rowid = m.id
       WHERE memories_fts MATCH ?
       ORDER BY bm25(memories_fts), m.timestamp DESC
       LIMIT ?
-    `).all(keyword, limit)
+    `).all(kw, limit)
+    if (hits.length > 0) return hits
+    // FTS5 命中 0 时再 LIKE 兜底（数据未索引、特殊字符、tokenizer 边界等）
+    return likeFallback()
   } catch {
-    // FTS 语法错误时降级为 LIKE（如用户输入了特殊字符）
-    return db.prepare(`
-      SELECT * FROM memories
-      WHERE content LIKE ? OR detail LIKE ? OR concepts LIKE ?
-      ORDER BY timestamp DESC
-      LIMIT ?
-    `).all(`%${keyword}%`, `%${keyword}%`, `%${keyword}%`, limit)
+    // FTS 语法错误时降级为 LIKE
+    return likeFallback()
   }
+}
+
+// ── 向量语义召回（与 FTS5 字面召回并行的兜底路径）─────────────────────────
+//
+// 写入：识别器把命中的记忆通过 updateMemoryEmbedding 落 BLOB。
+// 召回：注入器把 focusText 算 embedding，调 searchByEmbedding 拿 top-N。
+//
+// 数量级 < 50k 之前先用 JS 内存全表扫描，避免引入 sqlite-vec 扩展。
+
+export function updateMemoryEmbedding(memId, embeddingBuffer) {
+  if (!memId) return
+  const db = getDB()
+  // null 也允许写入（清除某条的 embedding）
+  const value = embeddingBuffer == null ? null : embeddingBuffer
+  try {
+    db.prepare(`UPDATE memories SET embedding = ? WHERE mem_id = ?`).run(value, memId)
+  } catch {
+    // 静默忽略（schema 未迁移、磁盘只读、并发冲突等）— 不让 embedding 写入影响主流程
+  }
+}
+
+// cosine 相似度：两个 Buffer（都是 Float32Array 序列化字节）。
+// 长度不一致或为空时返回 -1，让排序自然把它沉底。
+function cosineSimilarity(aBuf, bBuf) {
+  if (!aBuf || !bBuf) return -1
+  if (aBuf.byteLength !== bBuf.byteLength) return -1
+  if (aBuf.byteLength === 0 || aBuf.byteLength % 4 !== 0) return -1
+  const a = new Float32Array(aBuf.buffer, aBuf.byteOffset, aBuf.byteLength / 4)
+  const b = new Float32Array(bBuf.buffer, bBuf.byteOffset, bBuf.byteLength / 4)
+  let dot = 0, na = 0, nb = 0
+  for (let i = 0; i < a.length; i++) {
+    const x = a[i], y = b[i]
+    dot += x * y
+    na  += x * x
+    nb  += y * y
+  }
+  const denom = Math.sqrt(na) * Math.sqrt(nb)
+  return denom > 0 ? dot / denom : -1
+}
+
+// 全表扫描所有有 embedding 的 memories，返回 cosine 相似度 top-N。
+// 输入 queryBuffer：Buffer，包裹 Float32Array。
+// 返回：每条形如 {...memoryRow, _vecScore: number}。
+export function searchByEmbedding(queryBuffer, limit = 20) {
+  if (!queryBuffer || !(queryBuffer instanceof Buffer) || queryBuffer.byteLength === 0) return []
+  const db = getDB()
+  let rows
+  try {
+    rows = db.prepare(`SELECT * FROM memories WHERE embedding IS NOT NULL`).all()
+  } catch {
+    // 老库 schema 未迁移 / embedding 列不存在
+    return []
+  }
+  if (!rows.length) return []
+
+  const scored = []
+  for (const row of rows) {
+    const score = cosineSimilarity(queryBuffer, row.embedding)
+    if (score <= -1) continue
+    // 别把 BLOB 一路传到调用方（大、没用、JSON 序列化会出乱码）
+    const { embedding: _drop, ...rest } = row
+    scored.push({ ...rest, _vecScore: score })
+  }
+  scored.sort((a, b) => b._vecScore - a._vecScore)
+  return scored.slice(0, Math.max(0, limit))
 }
 
 // ── 预热缓存 ──────────────────────────────────────────────────────────────

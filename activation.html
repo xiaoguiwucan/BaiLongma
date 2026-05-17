@@ -227,6 +227,72 @@
       margin-bottom: 0;
     }
 
+    /* ── Embedding card styles ── */
+    select.emb-select {
+      width: 100%;
+      box-sizing: border-box;
+      border: 1px solid rgba(132, 161, 204, 0.24);
+      border-radius: 12px;
+      background: rgba(16, 25, 38, 0.94);
+      color: #edf4ff;
+      padding: 12px 14px;
+      font-size: 15px;
+      outline: none;
+      appearance: none;
+    }
+    select.emb-select:focus {
+      border-color: rgba(117, 168, 255, 0.72);
+      box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.14);
+    }
+    .emb-status-line {
+      font-size: 12px;
+      color: #8396ae;
+      margin-bottom: 10px;
+    }
+    .emb-status-line .yes { color: #74d89f; }
+    .emb-status-line .no { color: #ff8f8f; }
+    .emb-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 4px;
+    }
+    .emb-btn {
+      border: 1px solid rgba(132, 161, 204, 0.24);
+      border-radius: 10px;
+      background: rgba(16, 25, 38, 0.94);
+      color: #d8e4f5;
+      padding: 10px 12px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s, opacity 0.15s;
+    }
+    .emb-btn:hover:not(:disabled) {
+      background: rgba(100, 150, 220, 0.12);
+      border-color: rgba(117, 168, 255, 0.4);
+    }
+    .emb-btn.primary {
+      background: linear-gradient(135deg, #4f8cff 0%, #3572ff 100%);
+      color: #ffffff;
+      border-color: transparent;
+    }
+    .emb-btn.primary:hover:not(:disabled) {
+      filter: brightness(1.05);
+    }
+    .emb-btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    .emb-result {
+      margin-top: 10px;
+      font-size: 13px;
+      min-height: 18px;
+      color: #9db0c8;
+    }
+    .emb-result.ok { color: #74d89f; }
+    .emb-result.err { color: #ff8f8f; }
+
     /* ── Custom endpoint section ── */
     #settings-toggle {
       display: block;
@@ -312,6 +378,49 @@
           </div>
         </div>
         <div id="tts-extra"></div>
+      </div>
+    </div>
+
+    <!-- Embedding Optional Section -->
+    <div class="opt-section">
+      <button class="opt-toggle" id="emb-toggle" type="button">
+        <span class="opt-toggle-icon">+</span>
+        <span class="opt-toggle-label">记忆向量召回（Embedding） <span style="color:#7a90a8;font-weight:400;">（可选）</span></span>
+        <span class="opt-chip" id="emb-chip">已配置</span>
+      </button>
+      <div class="opt-body" id="emb-body" style="display:none">
+        <div class="emb-status-line" id="emb-status-line">当前状态：<span class="no" id="emb-configured-text">未配置</span></div>
+        <div class="row">
+          <label for="emb-provider">Provider</label>
+          <select id="emb-provider" class="emb-select">
+            <option value="openai">OpenAI</option>
+            <option value="qwen">通义千问 (Qwen)</option>
+            <option value="zhipu">智谱 (Zhipu)</option>
+            <option value="minimax">MiniMax</option>
+            <option value="custom">自定义 (Custom)</option>
+          </select>
+        </div>
+        <div class="row">
+          <label for="emb-model">Model</label>
+          <input id="emb-model" type="text" autocomplete="off" spellcheck="false" placeholder="模型名称" />
+        </div>
+        <div class="row">
+          <label for="emb-apikey">API Key</label>
+          <input id="emb-apikey" type="password" autocomplete="off" spellcheck="false" placeholder="留空表示沿用已保存的 Key" />
+        </div>
+        <div class="row">
+          <label for="emb-baseurl">Base URL</label>
+          <input id="emb-baseurl" type="text" autocomplete="off" spellcheck="false" placeholder="留空使用 provider 默认端点" />
+        </div>
+        <div class="row">
+          <label for="emb-dimensions">Dimensions（维度，可选）</label>
+          <input id="emb-dimensions" type="number" min="1" autocomplete="off" spellcheck="false" placeholder="留空使用模型默认" />
+        </div>
+        <div class="emb-actions">
+          <button type="button" class="emb-btn primary" id="emb-save">保存</button>
+          <button type="button" class="emb-btn" id="emb-test">测试连接</button>
+        </div>
+        <div class="emb-result" id="emb-result"></div>
       </div>
     </div>
 
@@ -515,6 +624,154 @@
       extraContainerId: 'tts-extra', chipId: 'tts-chip',
       detectFn: detectTTSProvider,
     })
+
+    // ── Embedding settings card ──
+    const embToggle       = document.getElementById('emb-toggle')
+    const embBody         = document.getElementById('emb-body')
+    const embChip         = document.getElementById('emb-chip')
+    const embProviderSel  = document.getElementById('emb-provider')
+    const embModelInput   = document.getElementById('emb-model')
+    const embApiKeyInput  = document.getElementById('emb-apikey')
+    const embBaseURLInput = document.getElementById('emb-baseurl')
+    const embDimsInput    = document.getElementById('emb-dimensions')
+    const embConfiguredEl = document.getElementById('emb-configured-text')
+    const embSaveBtn      = document.getElementById('emb-save')
+    const embTestBtn      = document.getElementById('emb-test')
+    const embResultEl     = document.getElementById('emb-result')
+
+    let embPresets = {}
+    let embCurrentCfg = { provider: '', model: '', baseURL: '', dimensions: null, configured: false }
+
+    embToggle.addEventListener('click', () => {
+      const isOpen = embToggle.classList.contains('open')
+      embToggle.classList.toggle('open', !isOpen)
+      embBody.style.display = isOpen ? 'none' : ''
+    })
+
+    function setEmbResult(text, kind) {
+      embResultEl.textContent = text || ''
+      embResultEl.className = 'emb-result' + (kind ? ' ' + kind : '')
+    }
+
+    function updateEmbConfiguredLabel(configured) {
+      embConfiguredEl.textContent = configured ? '已配置' : '未配置'
+      embConfiguredEl.className = configured ? 'yes' : 'no'
+      embChip.classList.toggle('visible', !!configured)
+    }
+
+    function applyPresetDefaults(provider, { force = false } = {}) {
+      const preset = embPresets[provider]
+      if (!preset) return
+      // 仅在字段为空（或 force=true）时填入预设值，避免覆盖用户输入
+      if (force || !embModelInput.value.trim()) {
+        embModelInput.value = preset.defaultModel || ''
+      }
+      if (force || !embBaseURLInput.value.trim()) {
+        embBaseURLInput.value = preset.baseURL || ''
+      }
+      if (force || !embDimsInput.value.trim()) {
+        embDimsInput.value = preset.defaultDims != null ? String(preset.defaultDims) : ''
+      }
+    }
+
+    embProviderSel.addEventListener('change', () => {
+      // 用户主动切换 provider：强制覆盖三个字段为新 provider 的默认值
+      applyPresetDefaults(embProviderSel.value, { force: true })
+    })
+
+    async function loadEmbeddingSettings() {
+      try {
+        const resp = await fetch('/settings/embedding')
+        const data = await resp.json().catch(() => ({}))
+        if (!data || !data.ok) return
+        embPresets = data.presets || {}
+        embCurrentCfg = data.embedding || embCurrentCfg
+        // 选中当前 provider；如果配置里没有就保留 select 默认值（openai）
+        if (embCurrentCfg.provider && embPresets[embCurrentCfg.provider]) {
+          embProviderSel.value = embCurrentCfg.provider
+        }
+        // 填入存储里的当前值（不带 apiKey）
+        embModelInput.value   = embCurrentCfg.model || ''
+        embBaseURLInput.value = embCurrentCfg.baseURL || ''
+        embDimsInput.value    = embCurrentCfg.dimensions != null ? String(embCurrentCfg.dimensions) : ''
+        // 空字段用 preset 补齐
+        applyPresetDefaults(embProviderSel.value, { force: false })
+        updateEmbConfiguredLabel(embCurrentCfg.configured)
+      } catch {
+        // 静默失败：未启动时也不要打扰激活流程
+      }
+    }
+
+    async function saveEmbeddingSettings() {
+      const provider = embProviderSel.value
+      const model    = embModelInput.value.trim()
+      const apiKey   = embApiKeyInput.value.trim()
+      const baseURL  = embBaseURLInput.value.trim()
+      const dimsRaw  = embDimsInput.value.trim()
+
+      // custom 必须用户填 baseURL；其他 provider 留空走预设
+      if (provider === 'custom' && !baseURL) {
+        setEmbResult('✗ 自定义 provider 必须填 Base URL', 'err')
+        return
+      }
+      if (!model) {
+        setEmbResult('✗ Model 必填', 'err')
+        return
+      }
+
+      const payload = { provider, model, baseURL }
+      if (apiKey) payload.apiKey = apiKey  // 留空表示不修改已保存的 key
+      if (dimsRaw) payload.dimensions = Number(dimsRaw)
+
+      embSaveBtn.disabled = true
+      setEmbResult('保存中…', null)
+      try {
+        const resp = await fetch('/settings/embedding', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        })
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok || !data.ok) {
+          setEmbResult('✗ ' + (data.error || '保存失败'), 'err')
+        } else {
+          embCurrentCfg = data.embedding || embCurrentCfg
+          updateEmbConfiguredLabel(embCurrentCfg.configured)
+          embApiKeyInput.value = ''  // 清空 apiKey 输入框（避免误以为明文回显）
+          setEmbResult('✓ 已保存', 'ok')
+        }
+      } catch (err) {
+        setEmbResult('✗ 网络错误：' + err.message, 'err')
+      } finally {
+        embSaveBtn.disabled = false
+      }
+    }
+
+    async function testEmbedding() {
+      embTestBtn.disabled = true
+      setEmbResult('测试中…', null)
+      try {
+        const resp = await fetch('/settings/embedding/test', { method: 'POST' })
+        const data = await resp.json().catch(() => ({}))
+        if (!resp.ok) {
+          setEmbResult('✗ HTTP ' + resp.status + (data.error ? '：' + data.error : ''), 'err')
+        } else if (!data.ok) {
+          setEmbResult('✗ ' + (data.error || '测试失败'), 'err')
+        } else {
+          setEmbResult(`✓ 维度 ${data.dims}，耗时 ${data.elapsedMs}ms`, 'ok')
+        }
+      } catch (err) {
+        setEmbResult('✗ 网络错误：' + err.message, 'err')
+      } finally {
+        embTestBtn.disabled = false
+      }
+    }
+
+    embSaveBtn.addEventListener('click', saveEmbeddingSettings)
+    embTestBtn.addEventListener('click', testEmbedding)
+
+    // 页面加载即拉取当前配置和 presets
+    loadEmbeddingSettings()
 
     // ── Main activate ──
     async function activate() {

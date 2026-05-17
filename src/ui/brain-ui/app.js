@@ -823,7 +823,7 @@ function renderLegend() {
 
   const items = [
     { name: "Constraint", count: 1, color: themeColors.warm },
-    { name: "Memory", count: active, color: themeColors.nodeHigh },
+    { name: "Memory", count: total, color: themeColors.nodeHigh },
     { name: "Knowledge", count: known, color: themeColors.cool },
     { name: "Decayed", count: decayed, color: themeColors.dim },
   ];

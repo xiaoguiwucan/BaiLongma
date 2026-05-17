@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { spawn } from 'child_process'
 import { chromium } from 'playwright'
 import { nowTimestamp } from '../time.js'
-import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByMemId, normalizeConversationPartyId, createReminder, findMergeableOneOffReminder, appendReminderTask, listPendingReminders, getReminderById, cancelReminder, upsertPrefetchTask, removePrefetchTask, listPrefetchTasks, insertActionLog, upsertMusicTrack, getMusicTrack, searchMusicLibrary, listMusicLibrary, updateMusicLrc, deleteMusicTrack as dbDeleteMusicTrack, setConfig as dbSetConfig } from '../db.js'
+import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByMemId, memoryExistsByMemId, getMemoryByMemId, deleteMemoryByMemId, normalizeConversationPartyId, createReminder, findMergeableOneOffReminder, appendReminderTask, listPendingReminders, getReminderById, cancelReminder, upsertPrefetchTask, removePrefetchTask, listPrefetchTasks, insertActionLog, upsertMusicTrack, getMusicTrack, searchMusicLibrary, listMusicLibrary, updateMusicLrc, deleteMusicTrack as dbDeleteMusicTrack, setConfig as dbSetConfig } from '../db.js'
 import { emitEvent, emitUICommand, emitACUIEvent, hasACUIClient, addActiveUICard, removeActiveUICard, getActiveUICards } from '../events.js'
 import { dispatchSocialMessage } from '../social/dispatch.js'
 import { callCapability, listCapabilities } from '../providers/registry.js'
@@ -151,6 +151,9 @@ const TOOL_RISK = {
   write_file: 'medium',
   make_dir: 'medium',
   upsert_memory: 'medium',
+  merge_memories: 'high',     // 删数据
+  downgrade_memory: 'low',
+  skip_consolidation: 'low',
   manage_reminder: 'medium',
   schedule_reminder: 'medium',
   manage_prefetch_task: 'medium',
@@ -357,6 +360,12 @@ async function executeToolUnchecked(name, args, context = {}) {
         return await execUpsertMemory(args, context)
       case 'skip_recognition':
         return await execSkipRecognition(args)
+      case 'merge_memories':
+        return await execMergeMemories(args, context)
+      case 'downgrade_memory':
+        return await execDowngradeMemory(args)
+      case 'skip_consolidation':
+        return await execSkipConsolidation(args)
       case 'speak':
         return await execSpeak(args)
       case 'generate_lyrics':
@@ -1808,7 +1817,13 @@ async function execBrowserRead(args, context = {}) {
 // 输入有 keywords 时返回 JSON 字符串（结构化命中 + matched_by），用于识别器查重。
 // 输入只有 keyword 时返回旧版拼接字符串，用于主对话主动检索。
 async function execSearchMemory(args = {}) {
-  const { keyword, keywords, limit, limit_per_keyword, type_filter } = args
+  const { keyword, limit, limit_per_keyword, type_filter } = args
+
+  // XML tool call parser passes array values as JSON strings — parse if needed
+  let keywords = args.keywords
+  if (typeof keywords === 'string') {
+    try { keywords = JSON.parse(keywords) } catch { keywords = [keywords] }
+  }
 
   if (Array.isArray(keywords) && keywords.length > 0) {
     const cleaned = keywords.map(k => String(k || '').trim()).filter(Boolean).slice(0, 8)
@@ -1833,9 +1848,26 @@ async function execSearchMemory(args = {}) {
 
 // upsert_memory：识别器调用，按 mem_id 批量 upsert。
 async function execUpsertMemory(args = {}, context = {}) {
-  const list = Array.isArray(args.memories) ? args.memories : null
+  let list = null
+
+  if (Array.isArray(args.memories)) {
+    list = args.memories
+  } else if (typeof args.memories === 'string') {
+    // XML tool call parser passes all parameter values as strings — try to parse JSON
+    try { const parsed = JSON.parse(args.memories); if (Array.isArray(parsed)) list = parsed } catch {}
+  }
+
+  // LLM forgot the memories[] wrapper and put fields at top level — auto-wrap
+  if (!list && args.mem_id) {
+    list = [args]
+  }
+
   if (!list || list.length === 0) {
-    return JSON.stringify({ ok: false, error: 'missing memories[]' })
+    return JSON.stringify({
+      ok: false,
+      error: 'missing memories[]',
+      hint: 'Pass memories as an array: upsert_memory({ memories: [{ mem_id, type, title, content }] })',
+    })
   }
 
   const sourceRef = context.sessionRef || context.source_ref || null
@@ -1847,6 +1879,15 @@ async function execUpsertMemory(args = {}, context = {}) {
   const results = []
   for (const memory of ordered) {
     try {
+      // 只对 fact 兜底：fact 绝大多数是关于用户的稳定事实/偏好；
+      // person/object/article/knowledge 有各自主体，不该粘上 sender ID
+      const isFact = memory.type === 'fact' || (!memory.type && typeof memory.mem_id === 'string' && memory.mem_id.startsWith('fact_'))
+      const entitiesEmpty = !Array.isArray(memory.entities) || memory.entities.length === 0
+      // 只对新记忆兜底，避免 UPDATE 覆盖旧 entities
+      if (entitiesEmpty && isFact && context.senderId && !memoryExistsByMemId(memory.mem_id)) {
+        memory.entities = [context.senderId]
+        console.log(`[识别器] entities 兜底注入: mem_id=${memory.mem_id} entities=[${context.senderId}]`)
+      }
       const payload = { ...memory, source_ref: memory.source_ref || sourceRef }
       const r = upsertMemoryByMemId(payload)
       results.push({ mem_id: r.mem_id, action: r.updated ? 'updated' : 'inserted', id: r.id })
@@ -1863,6 +1904,84 @@ async function execUpsertMemory(args = {}, context = {}) {
 
 // skip_recognition：识别器明确表示无内容要存
 async function execSkipRecognition({ reason } = {}) {
+  return JSON.stringify({ ok: true, skipped: true, reason: reason || '' })
+}
+
+// merge_memories：整合器合并多条语义重复记忆。keep 被更新，drops 被直接 DELETE。
+async function execMergeMemories(args = {}, context = {}) {
+  const { keep_mem_id, drop_mem_ids, merged_content, merged_salience, reason } = args
+  if (!keep_mem_id || !Array.isArray(drop_mem_ids) || drop_mem_ids.length === 0 || !merged_content) {
+    return JSON.stringify({ ok: false, error: 'missing keep_mem_id / drop_mem_ids[] / merged_content' })
+  }
+
+  const keep = getMemoryByMemId(keep_mem_id)
+  if (!keep) return JSON.stringify({ ok: false, error: `keep_mem_id not found: ${keep_mem_id}` })
+
+  let mergedEntities = []
+  try { mergedEntities = JSON.parse(keep.entities || '[]') } catch {}
+  let maxSalience = keep.salience || 3
+  const drops = []
+  for (const dmid of drop_mem_ids) {
+    if (dmid === keep_mem_id) continue
+    const d = getMemoryByMemId(dmid)
+    if (!d) continue
+    drops.push(d)
+    try {
+      const de = JSON.parse(d.entities || '[]')
+      mergedEntities = [...mergedEntities, ...de]
+    } catch {}
+    if ((d.salience || 3) > maxSalience) maxSalience = d.salience || 3
+  }
+  mergedEntities = [...new Set(mergedEntities)]
+
+  const finalSalience = merged_salience !== undefined ? merged_salience : maxSalience
+
+  upsertMemoryByMemId({
+    mem_id: keep_mem_id,
+    content: merged_content,
+    entities: mergedEntities,
+    salience: finalSalience,
+  })
+
+  const deleted = []
+  for (const d of drops) {
+    if (deleteMemoryByMemId(d.mem_id)) deleted.push(d.mem_id)
+  }
+
+  console.log(`[整合器] merge: keep=${keep_mem_id} dropped=[${deleted.join(',')}] salience=${finalSalience} reason="${reason || ''}"`)
+  emitEvent('memory_consolidated', {
+    action: 'merge',
+    keep_mem_id,
+    dropped: deleted,
+    salience: finalSalience,
+    reason: reason || '',
+  })
+
+  return JSON.stringify({ ok: true, action: 'merge', keep_mem_id, dropped: deleted, salience: finalSalience })
+}
+
+// downgrade_memory：整合器降低记忆的 salience（不删，保留信号）
+async function execDowngradeMemory(args = {}) {
+  const { mem_id, new_salience, reason } = args
+  if (!mem_id || new_salience === undefined) {
+    return JSON.stringify({ ok: false, error: 'missing mem_id or new_salience' })
+  }
+  const before = getMemoryByMemId(mem_id)
+  if (!before) return JSON.stringify({ ok: false, error: `mem_id not found: ${mem_id}` })
+  upsertMemoryByMemId({ mem_id, salience: new_salience })
+  console.log(`[整合器] downgrade: ${mem_id} ${before.salience || 3} → ${new_salience} reason="${reason || ''}"`)
+  emitEvent('memory_consolidated', {
+    action: 'downgrade',
+    mem_id,
+    before: before.salience || 3,
+    after: new_salience,
+    reason: reason || '',
+  })
+  return JSON.stringify({ ok: true, action: 'downgrade', mem_id, before: before.salience || 3, after: new_salience })
+}
+
+// skip_consolidation：整合器显式表示本批无需操作
+async function execSkipConsolidation({ reason } = {}) {
   return JSON.stringify({ ok: true, skipped: true, reason: reason || '' })
 }
 

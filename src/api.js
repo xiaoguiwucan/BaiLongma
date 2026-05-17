@@ -12,7 +12,7 @@ import { getQuotaStatus } from './quota.js'
 import { isRunning, stopLoop, startLoop } from './control.js'
 import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
-import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity } from './config.js'
+import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { restartConnector } from './social/index.js'
 // manager.js (Whisper local server) removed
@@ -207,7 +207,7 @@ function stripAssistantHistoryLabels(content) {
 export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = null } = {}) {
   const onActivatedCallback = onActivated
   const host = getApiHost()
-  const server = http.createServer((req, res) => {
+  const server = http.createServer(async (req, res) => {
     const base = `http://localhost:${port}`
     const url = new URL(req.url, base)
     const origin = req.headers.origin
@@ -1014,6 +1014,104 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           jsonResponse(res, 400, { ok: false, error: err.message })
         }
       })
+      return
+    }
+
+    // GET /settings/embedding — read embedding configuration status (plaintext apiKey not returned)
+    if (req.method === 'GET' && url.pathname === '/settings/embedding') {
+      jsonResponse(res, 200, {
+        ok: true,
+        embedding: getEmbeddingConfig(),
+        presets: EMBEDDING_PROVIDER_PRESETS,
+      })
+      return
+    }
+
+    // POST /settings/embedding — save embedding configuration
+    if (req.method === 'POST' && url.pathname === '/settings/embedding') {
+      const chunks = []
+      for await (const chunk of req) chunks.push(chunk)
+      try {
+        const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+        setEmbeddingConfig(body)
+        // 写入配置后清掉 embedding 模块的 LRU 缓存（key 是 sha256(text+model)，model 变了旧缓存无效）
+        try {
+          const { clearEmbeddingCache } = await import('./embedding.js')
+          clearEmbeddingCache()
+        } catch {}
+        jsonResponse(res, 200, { ok: true, embedding: getEmbeddingConfig() })
+      } catch (err) {
+        jsonResponse(res, 400, { ok: false, error: err.message })
+      }
+      return
+    }
+
+    // POST /settings/embedding/test — connectivity probe: compute one embedding to verify provider/key
+    if (req.method === 'POST' && url.pathname === '/settings/embedding/test') {
+      try {
+        const { computeEmbedding, isEmbeddingConfigured } = await import('./embedding.js')
+        if (!isEmbeddingConfigured()) {
+          jsonResponse(res, 200, { ok: false, error: 'embedding not configured — save provider/model/apiKey first' })
+          return
+        }
+        const t0 = Date.now()
+        const buf = await computeEmbedding('embedding connectivity test')
+        if (!buf) {
+          jsonResponse(res, 200, { ok: false, error: 'computeEmbedding returned null — check apiKey / baseURL / model name; see server log if any' })
+          return
+        }
+        const elapsed = Date.now() - t0
+        const dims = buf.byteLength / 4 // Float32 = 4 bytes
+        jsonResponse(res, 200, { ok: true, dims, elapsedMs: elapsed })
+      } catch (err) {
+        jsonResponse(res, 500, { ok: false, error: err.message })
+      }
+      return
+    }
+
+    // GET /memory/embedding-backfill — current backfill status
+    if (req.method === 'GET' && url.pathname === '/memory/embedding-backfill') {
+      try {
+        const { getBackfillStatus } = await import('./memory/embedding-backfill.js')
+        jsonResponse(res, 200, { ok: true, status: getBackfillStatus() })
+      } catch (err) {
+        jsonResponse(res, 500, { ok: false, error: err.message })
+      }
+      return
+    }
+
+    // POST /memory/embedding-backfill — fire-and-forget trigger backfill
+    if (req.method === 'POST' && url.pathname === '/memory/embedding-backfill') {
+      try {
+        const { runBackfill, getBackfillStatus } = await import('./memory/embedding-backfill.js')
+        const { isEmbeddingConfigured } = await import('./embedding.js')
+        if (!isEmbeddingConfigured()) {
+          jsonResponse(res, 200, { ok: false, error: 'embedding not configured' })
+          return
+        }
+        const beforeStatus = getBackfillStatus()
+        if (beforeStatus.running) {
+          jsonResponse(res, 200, { ok: true, started: false, reason: 'already running', status: beforeStatus })
+          return
+        }
+        // fire-and-forget：不 await，立即响应
+        runBackfill({ batchSize: 20, throttleMs: 200 }).catch(() => {})
+        jsonResponse(res, 200, { ok: true, started: true, status: getBackfillStatus() })
+      } catch (err) {
+        jsonResponse(res, 500, { ok: false, error: err.message })
+      }
+      return
+    }
+
+    // DELETE /memory/embedding-backfill — request cancel of running backfill
+    if (req.method === 'DELETE' && url.pathname === '/memory/embedding-backfill') {
+      try {
+        const { cancelBackfill } = await import('./memory/embedding-backfill.js')
+        cancelBackfill()
+        jsonResponse(res, 200, { ok: true, cancelled: true })
+      } catch (err) {
+        jsonResponse(res, 500, { ok: false, error: err.message })
+      }
       return
     }
 
