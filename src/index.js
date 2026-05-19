@@ -3,6 +3,7 @@ import { callLLM } from './llm.js'
 import { buildSystemPrompt, buildContextBlock, combinePromptForPreview } from './prompt.js'
 import { runRecognizer } from './memory/recognizer.js'
 import { runInjector, formatMemoriesForPrompt, formatTaskKnowledge, formatPrefetchedItems, formatActiveUICards } from './memory/injector.js'
+import { updateFocusFrame } from './memory/focus.js'
 import { runMemoryRefreshLoop } from './memory/refresh-loop.js'
 import { startConsolidationLoop } from './memory/consolidation-loop.js'
 import { gatherContext, formatExtraContext } from './context/gatherer.js'
@@ -174,6 +175,7 @@ const state = {
   pendingConfidenceHint: null,  // 上一轮 refresh-loop 的 confidence，供下次 runInjector 调整召回数量后清空
   tickCounter: 0,             // 累计 TICK 计数（每次进 isTick 路径自增）
   lastTaskRefreshTick: -10,   // 上次 TICK 路径触发 refresh-loop 时的 tickCounter；初值 -10 保证首个 TICK 立刻可触发（差值 = 0 - (-10) = 10 >= 5）
+  focusFrame: null,           // 动态上下文记忆池第 3a 步：当前注意力焦点帧；null = 无专注；不持久化
 }
 
 const TASK_IDLE_TICK_LIMIT = 5  // auto-clear task after N consecutive task ticks with no tool calls
@@ -746,6 +748,16 @@ async function process(input, label, msg = null) {
     const injection = await runInjector({ message: input, state })
     throwIfAborted(controller.signal)
 
+    // 1b. Focus frame —— 动态上下文记忆池第 3a 步：纯启发式分类、单帧 MVP
+    // 在 runInjector 之后、buildContextBlock 之前更新，让 <focus> 段拿到最新帧。
+    try {
+      const focusResult = updateFocusFrame(state, input, { isTick, tickCounter: state.tickCounter || 0 })
+      emitEvent('focus_frame', { focusFrame: state.focusFrame, event: focusResult?.event || 'noop' })
+    } catch (e) {
+      // 焦点判断不应该影响主流程；任何异常吞掉、记录日志即可
+      console.log('[focus] updateFocusFrame failed:', e.message)
+    }
+
     const directions = [...(injection.directions || [])]
     if (isTick) {
       const startupSelfCheckDirections = buildStartupSelfCheckDirections(state.startupSelfCheck)
@@ -904,6 +916,8 @@ async function process(input, label, msg = null) {
       taskKnowledge: taskKnowledgeText,
       extraContext: extraContextJoined,
       awakeningTicks: getAwakeningTicks(),
+      focusFrame: state.focusFrame,
+      focusTickCounter: state.tickCounter || 0,
     }
     let contextBlock = buildContextBlock(baseContextArgs)
 

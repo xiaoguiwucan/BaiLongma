@@ -282,6 +282,8 @@ export function buildContextBlock({
   extraContext = '',
   awakeningTicks = 0,
   roundInfo = null,
+  focusFrame = null,
+  focusTickCounter = 0,
 } = {}) {
   const sections = []
 
@@ -325,6 +327,22 @@ Update task state only in these cases:
     sections.push(`<task active="false">
 There is no active current_task. Default to quiet presence, but do not treat quiet as paralysis. During TICK, if recent conversation, reminders, runtime context, or memory clearly indicate a heartbeat test, follow-up, useful report, or timely proactive action, you may act and send_message to a visible target. If nothing actually calls for action, wait.
 </task>`)
+  }
+
+  // <focus> —— 注意力焦点感知信号（非命令）
+  // 焦点是连续判断的副产品：让模型「知道自己在关注什么」，但用户一旦换话题就立刻松手。
+  if (focusFrame && Array.isArray(focusFrame.topic) && focusFrame.topic.length > 0) {
+    const topicAttr = focusFrame.topic.join(', ')
+    const since = Math.max(0, (focusTickCounter || 0) - (focusFrame.startedAtTick || 0))
+    const idle = Math.max(0, (focusTickCounter || 0) - (focusFrame.lastSeenTick || 0))
+    const ageDesc = (focusFrame.hitCount || 0) <= 1
+      ? 'just started focusing on this'
+      : (idle === 0
+          ? `${since} rounds since first seen, last seen this round`
+          : `${since} rounds since first seen, last seen ${idle} rounds ago`)
+    sections.push(`<focus topic="${topicAttr}" age="${ageDesc}">
+You have been focused on this topic across recent turns. Stay aligned with it unless the user clearly pivots — in which case let it go without making a fuss.
+</focus>`)
   }
 
   if (taskKnowledge) {

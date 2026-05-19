@@ -14,6 +14,10 @@ import {
 import { getActiveUICards } from '../events.js'
 import { getInstalledToolNames } from '../capabilities/marketplace/index.js'
 import { PRIMARY_USER_ID } from '../identity.js'
+import { extractKeywords } from './keywords.js'
+
+// 旧 import 路径兼容：focus.js / 其他模块也能从 injector 拿到 extractKeywords
+export { extractKeywords }
 
 const L2_CONTEXT_HOURS = 24 * 7
 
@@ -49,60 +53,6 @@ function parseMessageInput(message) {
     senderId: match ? match[1] : null,
     messageBody: match ? match[2].trim() : message,
   }
-}
-
-// 从文本中提取关键词（用于记忆相关性检索）
-// 过滤停用词，保留有意义的词，每个词单独搜索
-const STOP_WORDS = new Set([
-  '的', '了', '是', '在', '我', '你', '他', '她', '它', '我们', '你们', '他们', '这', '那', '有', '没有',
-  '和', '与', '把', '被', '因为', '所以', '如果', '一个', '一些', '什么', '怎么', '为什么',
-  '帮我', '请', '好的', '明白', '告诉', '让', '做', '去', '来', '把', '说', '给',
-])
-
-// n-gram 内含这些字符时跨越了词边界，不是完整词，过滤掉
-const STOP_CHARS = new Set(['的', '了'])
-
-function extractKeywords(text, maxKeywords = 8) {
-  if (!text) return []
-
-  const cleaned = text
-    .replace(/[，。！？、；：”””’’’【】[\]()（）\d]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-
-  const freq = new Map()
-  const bump = (word) => {
-    if (!word || word.length < 2 || STOP_WORDS.has(word)) return
-    for (const ch of word) {
-      if (STOP_CHARS.has(ch)) return
-    }
-    freq.set(word, (freq.get(word) || 0) + 1)
-  }
-
-  const chinese = cleaned.replace(/[a-zA-Z]+/g, ' ')
-  for (let i = 0; i < chinese.length - 1; i++) {
-    for (let len = 2; len <= 4 && i + len <= chinese.length; len++) {
-      bump(chinese.slice(i, i + len).trim())
-    }
-  }
-
-  const english = text.match(/[a-zA-Z]{3,}/g) || []
-  for (const word of english) {
-    const normalized = word.toLowerCase()
-    if (!STOP_WORDS.has(normalized)) bump(word)
-  }
-
-  // 按频次降序 → 长度降序排列；不做子串去重
-  //
-  // 历史上这里曾用 "较短词若被更长词覆盖则跳过" 的子串去重逻辑，
-  // 但这反了：在 FTS5/LIKE 字面召回里，较短词（"业余"）比较长 ngram（"业余写什"）
-  // 更可能命中真实记忆内容。子串去重把最有用的短关键词砍掉了。
-  // 改为直接按 (频次, 长度) 排序后截前 maxKeywords，
-  // 保留所有 ngram，让短词跟长词一起进入召回池。
-  return [...freq.entries()]
-    .sort((a, b) => (b[1] - a[1]) || (b[0].length - a[0].length))
-    .slice(0, maxKeywords)
-    .map(([word]) => word)
 }
 
 // 桶内重排：salience >= 4 的提到前面（按 salience 高到低），
