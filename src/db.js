@@ -207,6 +207,49 @@ function initSchema() {
   try { db.exec(`ALTER TABLE reminders ADD COLUMN recurrence_config TEXT`) } catch {}
 
   db.exec(`
+    CREATE TABLE IF NOT EXISTS proactive_rules (
+      id               INTEGER PRIMARY KEY AUTOINCREMENT,
+      target_id        TEXT    NOT NULL,
+      topic            TEXT    NOT NULL,
+      reason           TEXT    NOT NULL,
+      trigger_type     TEXT    NOT NULL DEFAULT 'followup',
+      message_hint     TEXT    NOT NULL DEFAULT '',
+      status           TEXT    NOT NULL DEFAULT 'active',
+      priority         TEXT    NOT NULL DEFAULT 'normal',
+      cooldown_minutes INTEGER NOT NULL DEFAULT 120,
+      max_per_day      INTEGER NOT NULL DEFAULT 5,
+      quiet_hours      TEXT    NOT NULL DEFAULT '',
+      next_due_at      TEXT,
+      last_sent_at     TEXT,
+      created_at       TEXT    NOT NULL DEFAULT (datetime('now')),
+      updated_at       TEXT    NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_proactive_rules_due ON proactive_rules(status, next_due_at);
+    CREATE INDEX IF NOT EXISTS idx_proactive_rules_target ON proactive_rules(target_id);
+
+    CREATE TABLE IF NOT EXISTS proactive_outbox (
+      id             INTEGER PRIMARY KEY AUTOINCREMENT,
+      rule_id        INTEGER,
+      target_id      TEXT    NOT NULL,
+      topic          TEXT    NOT NULL,
+      reason         TEXT    NOT NULL,
+      message_hint   TEXT    NOT NULL DEFAULT '',
+      status         TEXT    NOT NULL DEFAULT 'pending',
+      priority       TEXT    NOT NULL DEFAULT 'normal',
+      scheduled_at   TEXT    NOT NULL,
+      claimed_at     TEXT,
+      sent_at        TEXT,
+      skipped_at     TEXT,
+      failed_at      TEXT,
+      error          TEXT    NOT NULL DEFAULT '',
+      created_at     TEXT    NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY(rule_id) REFERENCES proactive_rules(id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_proactive_outbox_due ON proactive_outbox(status, scheduled_at);
+    CREATE INDEX IF NOT EXISTS idx_proactive_outbox_target ON proactive_outbox(target_id);
+  `)
+
+  db.exec(`
     CREATE TABLE IF NOT EXISTS prefetch_tasks (
       id          INTEGER PRIMARY KEY AUTOINCREMENT,
       source      TEXT    NOT NULL UNIQUE,
@@ -1381,6 +1424,160 @@ export function getNextPendingReminder() {
     ORDER BY due_at ASC, id ASC
     LIMIT 1
   `).get() || null
+}
+
+function normalizeProactivePriority(value) {
+  const v = String(value || 'normal').toLowerCase()
+  return ['ambient', 'normal', 'critical'].includes(v) ? v : 'normal'
+}
+
+function normalizeProactiveTrigger(value) {
+  const v = String(value || 'followup').toLowerCase()
+  return ['followup', 'time', 'condition'].includes(v) ? v : 'followup'
+}
+
+export function createProactiveRule({
+  targetId,
+  topic,
+  reason,
+  triggerType = 'followup',
+  messageHint = '',
+  priority = 'normal',
+  cooldownMinutes = 120,
+  maxPerDay = 5,
+  quietHours = '',
+  nextDueAt = null,
+}) {
+  const db = getDB()
+  const normalizedTargetId = normalizeConversationPartyId(targetId || CANONICAL_USER_ID)
+  return db.prepare(`
+    INSERT INTO proactive_rules (
+      target_id, topic, reason, trigger_type, message_hint,
+      priority, cooldown_minutes, max_per_day, quiet_hours, next_due_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    normalizedTargetId,
+    String(topic || '').trim(),
+    String(reason || '').trim(),
+    normalizeProactiveTrigger(triggerType),
+    String(messageHint || '').trim(),
+    normalizeProactivePriority(priority),
+    Math.max(5, Number(cooldownMinutes) || 120),
+    Math.max(1, Number(maxPerDay) || 5),
+    String(quietHours || '').trim(),
+    nextDueAt || null
+  )
+}
+
+export function listProactiveRules({ status = null, limit = 50 } = {}) {
+  const db = getDB()
+  if (status) {
+    return db.prepare(`
+      SELECT * FROM proactive_rules
+      WHERE status = ?
+      ORDER BY COALESCE(next_due_at, created_at) ASC, id ASC
+      LIMIT ?
+    `).all(status, limit)
+  }
+  return db.prepare(`
+    SELECT * FROM proactive_rules
+    ORDER BY status ASC, COALESCE(next_due_at, created_at) ASC, id ASC
+    LIMIT ?
+  `).all(limit)
+}
+
+export function getProactiveRuleById(id) {
+  const db = getDB()
+  return db.prepare(`SELECT * FROM proactive_rules WHERE id = ?`).get(id) || null
+}
+
+export function updateProactiveRuleStatus(id, status) {
+  const db = getDB()
+  return db.prepare(`
+    UPDATE proactive_rules
+    SET status = ?, updated_at = datetime('now')
+    WHERE id = ?
+  `).run(status, id)
+}
+
+export function createProactiveOutboxItem({
+  ruleId = null,
+  targetId,
+  topic,
+  reason,
+  messageHint = '',
+  priority = 'normal',
+  scheduledAt = new Date().toISOString(),
+}) {
+  const db = getDB()
+  const normalizedTargetId = normalizeConversationPartyId(targetId || CANONICAL_USER_ID)
+  return db.prepare(`
+    INSERT INTO proactive_outbox (
+      rule_id, target_id, topic, reason, message_hint, priority, scheduled_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+  `).run(
+    ruleId,
+    normalizedTargetId,
+    String(topic || '').trim(),
+    String(reason || '').trim(),
+    String(messageHint || '').trim(),
+    normalizeProactivePriority(priority),
+    scheduledAt
+  )
+}
+
+export function getDueProactiveOutbox(now = new Date().toISOString(), limit = 10) {
+  const db = getDB()
+  return db.prepare(`
+    SELECT * FROM proactive_outbox
+    WHERE status = 'pending' AND scheduled_at <= ?
+    ORDER BY scheduled_at ASC, id ASC
+    LIMIT ?
+  `).all(now, limit)
+}
+
+export function claimProactiveOutboxItem(id, claimedAt = new Date().toISOString()) {
+  const db = getDB()
+  return db.prepare(`
+    UPDATE proactive_outbox
+    SET status = 'claimed', claimed_at = ?
+    WHERE id = ? AND status = 'pending'
+  `).run(claimedAt, id)
+}
+
+export function markProactiveOutboxSent(id, sentAt = new Date().toISOString()) {
+  const db = getDB()
+  return db.prepare(`
+    UPDATE proactive_outbox
+    SET status = 'sent', sent_at = ?
+    WHERE id = ? AND status = 'claimed'
+  `).run(sentAt, id)
+}
+
+export function markProactiveOutboxFailed(id, error, failedAt = new Date().toISOString()) {
+  const db = getDB()
+  return db.prepare(`
+    UPDATE proactive_outbox
+    SET status = 'failed', failed_at = ?, error = ?
+    WHERE id = ? AND status IN ('pending', 'claimed')
+  `).run(failedAt, String(error || '').slice(0, 500), id)
+}
+
+export function listProactiveOutbox({ status = null, limit = 50 } = {}) {
+  const db = getDB()
+  if (status) {
+    return db.prepare(`
+      SELECT * FROM proactive_outbox
+      WHERE status = ?
+      ORDER BY scheduled_at ASC, id ASC
+      LIMIT ?
+    `).all(status, limit)
+  }
+  return db.prepare(`
+    SELECT * FROM proactive_outbox
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(limit)
 }
 
 // 按关键词搜索记忆（FTS5 全文搜索，优先相关度排序）

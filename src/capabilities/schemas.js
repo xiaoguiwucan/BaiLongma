@@ -1,5 +1,16 @@
 import { getInstalledToolSchema } from './marketplace/index.js'
 
+function getExecCommandDescription() {
+  const common = 'Run a shell command. Returns structured JSON with ok, mode, exit_code, stdout, stderr, timed_out, pid. Use background=true for long-running servers. Use cwd to run in a sandbox subdirectory instead of cd-chaining. Use promote_to_background=true so a foreground timeout converts the process to background instead of killing it.'
+  if (process.platform === 'darwin') {
+    return `${common} This app is running on macOS and exec_command uses /bin/sh/POSIX shell syntax. Use macOS/POSIX commands such as ls, find, grep, sed, awk, cat, mkdir -p, rm, open, osascript, sw_vers, pmset, and launchctl. Do not use PowerShell, cmd.exe, Windows paths, registry commands, or Windows environment syntax.`
+  }
+  if (process.platform === 'win32') {
+    return `${common} This app is running on Windows and exec_command uses PowerShell. Use PowerShell syntax such as Get-ChildItem, $env:USERPROFILE, and Write-Output.`
+  }
+  return `${common} This app is running on Linux and exec_command uses /bin/sh/POSIX shell syntax. Use Linux/POSIX commands such as ls, find, grep, sed, awk, cat, mkdir -p, rm, xdg-open, systemctl, and journalctl. Do not use PowerShell, cmd.exe, Windows paths, registry commands, or Windows environment syntax.`
+}
+
 // 所有工具的 schema 定义
 export const TOOL_SCHEMAS = {
   express: {
@@ -211,7 +222,7 @@ export const TOOL_SCHEMAS = {
     type: 'function',
     function: {
       name: 'exec_command',
-      description: 'Run a shell command. Returns structured JSON with ok, mode, exit_code, stdout, stderr, timed_out, pid. On Windows runs in PowerShell — use PowerShell syntax (e.g. Get-ChildItem, $env:USERPROFILE, Write-Output). Use background=true for long-running servers. Use cwd to run in a sandbox subdirectory instead of cd-chaining. Use promote_to_background=true so a foreground timeout converts the process to background instead of killing it.',
+      description: getExecCommandDescription(),
       parameters: {
         type: 'object',
         properties: {
@@ -882,6 +893,76 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
           summary: { type: 'string', description: 'Optional short completion summary.' }
         },
         required: []
+      }
+    }
+  },
+
+  manage_proactive_message: {
+    type: 'function',
+    function: {
+      name: 'manage_proactive_message',
+      description: 'Manage authorized proactive messaging rules and the proactive outbox. This tool records the intent, target, reason, schedule, cooldown, and audit trail for future outbound messages. It does not directly send; due outbox items are later handled by the scheduler and must still use send_message.',
+      parameters: {
+        type: 'object',
+        properties: {
+          action: {
+            type: 'string',
+            enum: ['create', 'queue', 'list', 'cancel', 'pause', 'resume'],
+            description: 'create makes an active proactive rule; queue creates a one-off outbox item; list shows rules/outbox; cancel disables a rule; pause/resume changes rule status.'
+          },
+          target_id: {
+            type: 'string',
+            description: 'Recipient ID, such as ID:000001 or wechat:clawbot:user-id. Defaults to the current conversation target when available.'
+          },
+          topic: {
+            type: 'string',
+            description: 'Short topic for this proactive message, e.g. Mac build follow-up.'
+          },
+          reason: {
+            type: 'string',
+            description: 'Why proactively contacting this target is appropriate. Required for create/queue.'
+          },
+          trigger: {
+            type: 'string',
+            enum: ['followup', 'time', 'condition'],
+            description: 'What causes the proactive message. Defaults to followup.'
+          },
+          due_at: {
+            type: 'string',
+            description: 'Optional ISO 8601 scheduled time. For queue this is when to send; for create this is the next due time.'
+          },
+          message_hint: {
+            type: 'string',
+            description: 'Instruction for the future message draft. Do not include secrets or other users’ private memories.'
+          },
+          priority: {
+            type: 'string',
+            enum: ['ambient', 'normal', 'critical'],
+            description: 'Priority level. Defaults to normal.'
+          },
+          cooldown_minutes: {
+            type: 'number',
+            description: 'Minimum minutes between proactive sends for this rule. Defaults to 120.'
+          },
+          max_per_day: {
+            type: 'number',
+            description: 'Maximum proactive messages per day for this rule. Defaults to 5.'
+          },
+          quiet_hours: {
+            type: 'string',
+            description: 'Optional quiet-hours window, e.g. 23:00-09:00. The initial implementation records it for policy/audit.'
+          },
+          id: {
+            type: 'number',
+            description: 'Rule id for cancel/pause/resume.'
+          },
+          status: {
+            type: 'string',
+            enum: ['active', 'paused', 'cancelled', 'pending', 'claimed', 'sent', 'failed'],
+            description: 'Optional status filter for list.'
+          }
+        },
+        required: ['action']
       }
     }
   },

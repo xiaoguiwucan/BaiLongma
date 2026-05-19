@@ -1,6 +1,28 @@
 import { nowTimestamp } from './time.js'
 import { buildAgentContextBlock } from './agents/registry.js'
 
+function getPlatformRuntimeInfo() {
+  if (process.platform === 'darwin') {
+    return {
+      platform: 'macOS',
+      shell: '/bin/sh (POSIX shell)',
+      commandGuidance: 'Use POSIX/macOS commands such as ls, find, grep, sed, awk, cat, mkdir -p, rm, open, osascript, sw_vers, pmset, and launchctl. Do not use PowerShell, cmd.exe, Windows paths, registry commands, or Windows environment syntax.',
+    }
+  }
+  if (process.platform === 'win32') {
+    return {
+      platform: 'Windows',
+      shell: 'PowerShell',
+      commandGuidance: 'Use PowerShell syntax such as Get-ChildItem, $env:USERPROFILE, Write-Output, and Windows paths. Do not use POSIX-only shell syntax unless you are explicitly running WSL or Git Bash.',
+    }
+  }
+  return {
+    platform: 'Linux',
+    shell: '/bin/sh (POSIX shell)',
+    commandGuidance: 'Use POSIX/Linux commands such as ls, find, grep, sed, awk, cat, mkdir -p, rm, xdg-open, systemctl, and journalctl. Do not use PowerShell, cmd.exe, Windows paths, or registry commands.',
+  }
+}
+
 // Compute curiosity level based on how much is known about the person.
 // Returns 'high' | 'medium' | 'low' | 'none'
 function computeCuriosity(personMemory) {
@@ -44,6 +66,7 @@ export function buildSystemPrompt({
   roundInfo = null,
 } = {}) {
   const currentTime = nowTimestamp()
+  const runtime = getPlatformRuntimeInfo()
   const fixed = `You are running. Think and speak in Chinese throughout the whole turn, including any <think> blocks. Refer to yourself in the first person as "我".
 
 You have existed for ${existenceDesc}. Current system time: ${currentTime}
@@ -101,7 +124,8 @@ When the user's message is unclear, incomplete, or has multiple plausible interp
 - Do not repeat summaries, do not ping just to prove you exist, and do not become annoying.
 
 ## Execution Environment
-Platform: Windows. Shell for exec_command: PowerShell.
+Platform: ${runtime.platform}. Shell for exec_command: ${runtime.shell}.
+Command syntax rule: ${runtime.commandGuidance}
 exec_command sandbox: ${security?.execSandbox !== false ? 'ENABLED — commands run inside sandbox/, absolute paths and home-directory references are blocked.' : 'DISABLED — commands can access the full filesystem including Desktop, user profile, and absolute paths.'}
 
 ${systemEnv}

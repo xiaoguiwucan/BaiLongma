@@ -51,7 +51,7 @@ export async function runMemoryRefreshLoop({ originalQuery, baseMemories, system
   try {
     if (signal?.aborted) return { additionalMemories, round3Results, roundsRun: 1, skipped: false, confidence: eval1.confidence }
     const sp1 = buildEvalPrompt(formattedBaseMemories, originalQuery, { round: 1 })
-    const res1 = await callLLM({ systemPrompt: sp1, message: '请评估', maxTokens: 200, thinking: false, tools: [] })
+    const res1 = await callLLM({ systemPrompt: sp1, message: '请评估', maxTokens: 200, thinking: false, tools: [], signal })
     eval1 = parseEvalResult(res1.content || '')
   } catch (e) {
     console.log('[记忆刷新] 第1轮 LLM 调用失败:', e.message)
@@ -74,7 +74,7 @@ export async function runMemoryRefreshLoop({ originalQuery, baseMemories, system
         additionalMemories = newMemories
         const combinedFormatted = formattedBaseMemories + '\n\n' + formatMemoriesForPrompt([], newMemories)
         const sp2 = buildEvalPrompt(combinedFormatted, originalQuery, { round: 2, prevMissing: eval1.missing })
-        const res2 = await callLLM({ systemPrompt: sp2, message: '请评估', maxTokens: 200, thinking: false, tools: [] })
+        const res2 = await callLLM({ systemPrompt: sp2, message: '请评估', maxTokens: 200, thinking: false, tools: [], signal })
         eval2 = parseEvalResult(res2.content || '')
       }
     }

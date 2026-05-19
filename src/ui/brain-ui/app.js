@@ -1504,7 +1504,7 @@ async function playTTSReply(text) {
     if (ttsAudioEl) { ttsAudioEl.pause(); URL.revokeObjectURL(ttsAudioEl.src); }
     ttsAudioEl = new Audio(url);
     ttsAudioEl.volume = 1.0; // ensure full volume (avoid residual duck state from previous play)
-    // Suspend cloud ASR but keep the mic hardware open for interruption detection
+    // Suspend local ASR but keep the mic hardware open for interruption detection
     window.bailongmaVoice?.suspendForTTS?.();
     ttsAudioEl.onended = () => {
       URL.revokeObjectURL(url);
@@ -2025,19 +2025,17 @@ window.addEventListener("beforeunload", () => {
   const VOICE_AUTO_SEND_KEY  = "bailongma-voice-auto-send";
   const VOICE_AUTO_MIC_KEY   = "bailongma-voice-auto-mic";
   const VOICE_THRESHOLD_KEY  = "bailongma-voice-threshold";
-  const VOICE_PROVIDER_KEY   = "bailongma-voice-provider";
 
-  function applyVoiceProviderUI(provider) {
-    const panels = { aliyun: "voice-cred-aliyun", tencent: "voice-cred-tencent", xunfei: "voice-cred-xunfei" };
-    for (const [key, id] of Object.entries(panels)) {
-      const el = document.getElementById(id);
-      if (el) el.style.display = key === provider ? "" : "none";
-    }
+  function updateAsrProviderUI(provider) {
+    const macosBox = document.getElementById("voice-provider-macos");
+    const aliyunBox = document.getElementById("voice-provider-aliyun");
+    if (macosBox) macosBox.style.display = provider === "aliyun-bailian" ? "none" : "";
+    if (aliyunBox) aliyunBox.style.display = provider === "aliyun-bailian" ? "" : "none";
   }
 
   const voiceProviderSelect = document.getElementById("voice-provider-select");
   if (voiceProviderSelect) {
-    voiceProviderSelect.addEventListener("change", () => applyVoiceProviderUI(voiceProviderSelect.value));
+    voiceProviderSelect.addEventListener("change", () => updateAsrProviderUI(voiceProviderSelect.value));
   }
 
   async function loadVoiceSettings() {
@@ -2051,9 +2049,20 @@ window.addEventListener("beforeunload", () => {
     if (voiceThreshSlider) voiceThreshSlider.value = String(savedThresh);
     if (voiceThreshVal)    voiceThreshVal.textContent = savedThresh.toFixed(3);
 
-    const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY) || "aliyun";
-    if (voiceProviderSelect) voiceProviderSelect.value = savedProvider;
-    applyVoiceProviderUI(savedProvider);
+    try {
+      const res = await fetch(`${API}/settings/voice`);
+      const data = await res.json();
+      const voice = data.voice || {};
+      const provider = voice.provider || "macos-local";
+      if (voiceProviderSelect) voiceProviderSelect.value = provider;
+      const macosMode = document.getElementById("voice-macos-mode-select");
+      if (macosMode) macosMode.value = voice.macosRecognitionMode || "auto";
+      const aliyunModel = document.getElementById("voice-aliyun-model");
+      if (aliyunModel) aliyunModel.value = voice.aliyunAsrModel || "paraformer-realtime-v2";
+      updateAsrProviderUI(provider);
+    } catch {
+      updateAsrProviderUI(voiceProviderSelect?.value || "macos-local");
+    }
   }
 
   if (voiceThreshSlider && voiceThreshVal) {
@@ -2066,52 +2075,36 @@ window.addEventListener("beforeunload", () => {
   if (saveVoiceBtn) {
     saveVoiceBtn.addEventListener("click", async () => {
       const lang      = document.getElementById("voice-lang-select")?.value || "zh-CN";
+      const provider  = document.getElementById("voice-provider-select")?.value || "macos-local";
+      const macosMode = document.getElementById("voice-macos-mode-select")?.value || "auto";
+      const aliyunKey = document.getElementById("voice-aliyun-key")?.value?.trim() || "";
+      const aliyunModel = document.getElementById("voice-aliyun-model")?.value?.trim() || "";
       const autoSend  = document.getElementById("voice-auto-send")?.checked ?? true;
       const autoMic   = document.getElementById("voice-auto-mic")?.checked ?? false;
       const threshold = parseFloat(voiceThreshSlider?.value ?? "0.008");
-      const provider  = voiceProviderSelect?.value || "aliyun";
-
       localStorage.setItem(VOICE_LANG_KEY,      lang);
       localStorage.setItem(VOICE_AUTO_SEND_KEY,  String(autoSend));
       localStorage.setItem(VOICE_AUTO_MIC_KEY,   String(autoMic));
       localStorage.setItem(VOICE_THRESHOLD_KEY,  String(threshold));
-      localStorage.setItem(VOICE_PROVIDER_KEY,   provider);
 
       window.dispatchEvent(new CustomEvent("bailongma:voice-threshold", { detail: { threshold } }));
 
-      const body = {};
-      const aliyunKey = document.getElementById("voice-aliyun-key")?.value?.trim();
-      if (aliyunKey) body.aliyunApiKey = aliyunKey;
-      const tencentSid = document.getElementById("voice-tencent-sid")?.value?.trim();
-      if (tencentSid) body.tencentSecretId = tencentSid;
-      const tencentSkey = document.getElementById("voice-tencent-skey")?.value?.trim();
-      if (tencentSkey) body.tencentSecretKey = tencentSkey;
-      const tencentAppid = document.getElementById("voice-tencent-appid")?.value?.trim();
-      if (tencentAppid) body.tencentAppId = tencentAppid;
-      const xunfeiAppid = document.getElementById("voice-xunfei-appid")?.value?.trim();
-      if (xunfeiAppid) body.xunfeiAppId = xunfeiAppid;
-      const xunfeiApikey = document.getElementById("voice-xunfei-apikey")?.value?.trim();
-      if (xunfeiApikey) body.xunfeiApiKey = xunfeiApikey;
-
-      if (Object.keys(body).length > 0) {
-        try {
-          saveVoiceBtn.disabled = true;
-          const resp = await fetch("http://127.0.0.1:3721/settings/voice", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-          });
-          if (!resp.ok) throw new Error("Save failed");
-          ["voice-aliyun-key","voice-tencent-sid","voice-tencent-skey","voice-xunfei-apikey"].forEach(id => {
-            const el = document.getElementById(id);
-            if (el) el.value = "";
-          });
-          showFeedback(voiceFeedback, "Saved");
-        } catch { showFeedback(voiceFeedback, "Save failed", true); }
-        finally { saveVoiceBtn.disabled = false; }
-      } else {
+      try {
+        saveVoiceBtn.disabled = true;
+        const voiceBody = { provider, lang, macosRecognitionMode: macosMode };
+        if (aliyunKey) voiceBody.aliyunApiKey = aliyunKey;
+        if (aliyunModel) voiceBody.aliyunAsrModel = aliyunModel;
+        const resp = await fetch("http://127.0.0.1:3721/settings/voice", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(voiceBody),
+        });
+        if (!resp.ok) throw new Error("Save failed");
+        const aliyunKeyEl = document.getElementById("voice-aliyun-key");
+        if (aliyunKeyEl) aliyunKeyEl.value = "";
         showFeedback(voiceFeedback, "Saved");
-      }
+      } catch { showFeedback(voiceFeedback, "Save failed", true); }
+      finally { saveVoiceBtn.disabled = false; }
     });
   }
 

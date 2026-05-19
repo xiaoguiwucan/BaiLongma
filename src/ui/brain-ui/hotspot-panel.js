@@ -31,33 +31,33 @@ export const createHotspotPanel = () => `
     <div class="hs-stat hs-stat--warn">
       <div class="hs-stat-icon">⚠</div>
       <div class="hs-stat-body">
-        <div class="hs-stat-label">全球预警事件</div>
-        <div class="hs-stat-value" id="hs-stat-alert">7</div>
-        <div class="hs-stat-delta hs-delta-up" id="hs-stat-alert-delta">较前15分钟 ↑2</div>
+        <div class="hs-stat-label">热榜事件流</div>
+        <div class="hs-stat-value" id="hs-stat-alert">--</div>
+        <div class="hs-stat-delta hs-delta-up" id="hs-stat-alert-delta">等待数据刷新</div>
       </div>
     </div>
     <div class="hs-stat hs-stat--hot">
       <div class="hs-stat-icon">🔥</div>
       <div class="hs-stat-body">
-        <div class="hs-stat-label">高关注度事件</div>
-        <div class="hs-stat-value" id="hs-stat-hot">23</div>
-        <div class="hs-stat-delta hs-delta-up" id="hs-stat-hot-delta">较前15分钟 ↑6</div>
+        <div class="hs-stat-label">热榜条目</div>
+        <div class="hs-stat-value" id="hs-stat-hot">--</div>
+        <div class="hs-stat-delta hs-delta-up" id="hs-stat-hot-delta">等待数据源连接</div>
       </div>
     </div>
     <div class="hs-stat hs-stat--data">
       <div class="hs-stat-icon">◈</div>
       <div class="hs-stat-body">
         <div class="hs-stat-label">信息源总量</div>
-        <div class="hs-stat-value" id="hs-stat-data">2.37M</div>
-        <div class="hs-stat-delta" id="hs-stat-data-delta">实时数据流/分钟</div>
+        <div class="hs-stat-value" id="hs-stat-data">--</div>
+        <div class="hs-stat-delta" id="hs-stat-data-delta">四平台热榜</div>
       </div>
     </div>
     <div class="hs-stat hs-stat--ai">
       <div class="hs-stat-icon">⬡</div>
       <div class="hs-stat-body">
-        <div class="hs-stat-label">AI 分析置信度</div>
-        <div class="hs-stat-value" id="hs-stat-ai">87%</div>
-        <div class="hs-stat-delta" id="hs-stat-ai-delta">模型状态：稳定</div>
+        <div class="hs-stat-label">热榜源状态</div>
+        <div class="hs-stat-value" id="hs-stat-ai">--</div>
+        <div class="hs-stat-delta" id="hs-stat-ai-delta">等待刷新</div>
       </div>
     </div>
   </div>
@@ -176,13 +176,13 @@ export const createHotspotPanel = () => `
     </div>
   </div>
 
-  <!-- ── 实时事件流（横向卡片轮播） ── -->
+  <!-- ── 热榜事件流（横向卡片轮播） ── -->
   <div class="hs-feed-bar">
     <div class="hs-feed-label">
       <span class="hs-feed-live-dot">●</span>
       <span>LIVE</span>
-      <span class="hs-feed-subtitle">实时事件流</span>
-      <span class="hs-feed-desc">24/7 全球热点持续追踪</span>
+      <span class="hs-feed-subtitle">热榜事件流</span>
+      <span class="hs-feed-desc">基于实时热榜动态生成</span>
     </div>
     <div class="hs-feed-viewport" id="hs-feed-viewport">
       <div class="hs-feed-track" id="hs-feed-track">

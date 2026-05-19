@@ -208,22 +208,17 @@ export function toggleDocPanel(topicId = null) {
 // ── 内联配置表单 ───────────────────────────────────────────────────────────────
 
 const ASR_PROVIDER_DEFS = [
-  { id: 'aliyun',  label: '阿里云百炼' },
-  { id: 'tencent', label: '腾讯云' },
-  { id: 'xunfei',  label: '科大讯飞' },
+  { id: 'macos-local', label: 'macOS 本地' },
+  { id: 'aliyun-bailian', label: '阿里云百炼' },
 ]
 
 const ASR_FIELDS = {
-  aliyun:  [{ key: 'aliyunApiKey',   label: 'API Key',   type: 'password', ph: 'sk-xxxxxxxx...' }],
-  tencent: [
-    { key: 'tencentSecretId',  label: 'SecretId',  type: 'password', ph: '' },
-    { key: 'tencentSecretKey', label: 'SecretKey', type: 'password', ph: '' },
-    { key: 'tencentAppId',     label: 'AppId',     type: 'text',     ph: '' },
+  'macos-local': [
+    { key: 'macosRecognitionMode', label: 'macOS 模式', type: 'select', options: ['auto', 'on-device', 'online'], ph: 'auto' },
   ],
-  xunfei: [
-    { key: 'xunfeiAppId',     label: 'AppID',     type: 'text',     ph: '' },
-    { key: 'xunfeiApiKey',    label: 'APIKey',    type: 'password', ph: '' },
-    { key: 'xunfeiApiSecret', label: 'APISecret', type: 'password', ph: '' },
+  'aliyun-bailian': [
+    { key: 'aliyunApiKey', label: '百炼 API Key', type: 'password', ph: 'sk-...' },
+    { key: 'aliyunAsrModel', label: '百炼 ASR 模型', type: 'text', ph: 'paraformer-realtime-v2' },
   ],
 }
 
@@ -252,7 +247,7 @@ const TTS_FIELDS = {
   ],
 }
 
-let cfgAsrProvider = 'aliyun'
+let cfgAsrProvider = 'macos-local'
 let cfgTtsProvider = 'doubao'
 let cfgVoiceState  = {}
 let cfgTtsState    = {}
@@ -263,7 +258,10 @@ async function fetchConfigState() {
       fetch(apiUrl('/settings/voice')),
       fetch(apiUrl('/settings/tts')),
     ])
-    if (vRes.ok) cfgVoiceState = (await vRes.json()).voice || {}
+    if (vRes.ok) {
+      cfgVoiceState = (await vRes.json()).voice || {}
+      if (cfgVoiceState.provider) cfgAsrProvider = cfgVoiceState.provider
+    }
     if (tRes.ok) {
       const td = await tRes.json()
       cfgTtsState = td.tts || {}
@@ -309,12 +307,20 @@ function renderFields(fields, state) {
   }).join('')
 }
 
+function renderAsrFields() {
+  const fields = ASR_FIELDS[cfgAsrProvider] || ASR_FIELDS['macos-local']
+  const hint = cfgAsrProvider === 'aliyun-bailian'
+    ? '直接使用阿里云百炼实时语音识别。音频会发送到 DashScope 百炼服务。'
+    : '使用 macOS Speech Recognition。auto 模式会在离线包不可用时使用系统识别，但不会切换到云端服务。'
+  return `<div class="dpc-info">${hint}</div>${renderFields(fields, cfgVoiceState)}`
+}
+
 function buildConfigHTML(topicId) {
   if (topicId === 'voice_asr') {
     return `
       <div class="dpc-section-title">⚡ 在此直接配置语音识别</div>
       ${renderProviderTabs(ASR_PROVIDER_DEFS, cfgAsrProvider)}
-      <div class="dpc-fields" id="dpc-asr-fields">${renderFields(ASR_FIELDS[cfgAsrProvider], cfgVoiceState)}</div>
+      <div class="dpc-fields" id="dpc-asr-fields">${renderAsrFields()}</div>
       <div class="dpc-actions">
         <button class="dpc-save-btn" id="dpc-save-btn" type="button">保存配置</button>
         <span class="dpc-status" id="dpc-status"></span>
@@ -337,7 +343,7 @@ function buildConfigHTML(topicId) {
         <div class="dpc-dual-col">
           <div class="dpc-dual-label">🎤 语音识别</div>
           ${renderProviderTabs(ASR_PROVIDER_DEFS, cfgAsrProvider)}
-          <div class="dpc-fields" id="dpc-asr-fields">${renderFields(ASR_FIELDS[cfgAsrProvider], cfgVoiceState)}</div>
+          <div class="dpc-fields" id="dpc-asr-fields">${renderAsrFields()}</div>
           <div class="dpc-actions">
             <button class="dpc-save-btn" id="dpc-asr-save-btn" type="button">保存 ASR</button>
             <span class="dpc-status" id="dpc-asr-status"></span>
@@ -407,7 +413,7 @@ function bindConfigForm(topicId) {
       if (isAsr && topicId === 'voice_asr') {
         cfgAsrProvider = pid
         const fieldsEl = $('dpc-asr-fields')
-        if (fieldsEl) fieldsEl.innerHTML = renderFields(ASR_FIELDS[pid], cfgVoiceState)
+        if (fieldsEl) fieldsEl.innerHTML = renderAsrFields()
       } else if (isTts && topicId === 'voice_tts') {
         cfgTtsProvider = pid
         const fieldsEl = $('dpc-tts-fields')
@@ -416,7 +422,7 @@ function bindConfigForm(topicId) {
         if (isAsr) {
           cfgAsrProvider = pid
           const fieldsEl = $('dpc-asr-fields')
-          if (fieldsEl) fieldsEl.innerHTML = renderFields(ASR_FIELDS[pid], cfgVoiceState)
+          if (fieldsEl) fieldsEl.innerHTML = renderAsrFields()
         } else if (isTts) {
           cfgTtsProvider = pid
           const fieldsEl = $('dpc-tts-fields')
@@ -439,7 +445,8 @@ function bindConfigForm(topicId) {
       const fieldsEl = $(fieldsId)
       if (!fieldsEl) return
       const body = collectFieldValues(fieldsEl)
-      if (!isAsr) body.ttsProvider = cfgTtsProvider
+      if (isAsr) body.provider = cfgAsrProvider
+      else body.ttsProvider = cfgTtsProvider
       await saveConfig(endpoint, body, $('dpc-status'))
     })
   }
@@ -448,7 +455,11 @@ function bindConfigForm(topicId) {
   if (asrSave) {
     asrSave.addEventListener('click', async () => {
       const fieldsEl = $('dpc-asr-fields')
-      if (fieldsEl) await saveConfig('/settings/voice', collectFieldValues(fieldsEl), $('dpc-asr-status'))
+      if (fieldsEl) {
+        const body = collectFieldValues(fieldsEl)
+        body.provider = cfgAsrProvider
+        await saveConfig('/settings/voice', body, $('dpc-asr-status'))
+      }
     })
   }
 

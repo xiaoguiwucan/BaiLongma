@@ -208,6 +208,56 @@ function formatFetchedAt(value) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function collectHotspotItems(platforms = {}, perPlatformLimit = 5) {
+  const items = []
+  for (const platform of PLATFORM_ORDER) {
+    const list = platforms?.[platform] || []
+    if (!Array.isArray(list)) continue
+    for (const item of list.slice(0, perPlatformLimit)) {
+      const title = hotspotTitle(item)
+      if (title) items.push({ ...item, title, platform: item.platform || platform })
+    }
+  }
+  return items
+}
+
+function buildHotspotEvents(platforms = {}, status = {}, fetchedAt = new Date()) {
+  const fetchedTime = formatFetchedAt(fetchedAt)
+  return collectHotspotItems(platforms, 5)
+    .sort((a, b) => Number(a.rank || 99) - Number(b.rank || 99))
+    .slice(0, 12)
+    .map((item) => {
+      const platform = item.platform || 'hotspot'
+      const rank = Number(item.rank || 0)
+      const heat = item.heat ? `热度 ${formatHeat(item.heat)}` : (item.label ? `标签 ${labelText(item.label)}` : '热榜条目')
+      const source = status?.[platform]?.source || item.source || 'hotspot-api'
+      return {
+        time: fetchedTime,
+        cat: platformLabel(platform),
+        title: hotspotTitle(item),
+        desc: `${platformLabel(platform)}${rank ? `第 ${rank} 位` : '热榜'} · ${heat}`,
+        loc: source,
+        source,
+        platform,
+        rank,
+        heat: item.heat || '',
+      }
+    })
+}
+
+function buildHotspotTicker(platforms = {}, fetchedAt = new Date()) {
+  const fetchedTime = formatFetchedAt(fetchedAt)
+  return collectHotspotItems(platforms, 4)
+    .sort((a, b) => Number(a.rank || 99) - Number(b.rank || 99))
+    .slice(0, 16)
+    .map((item) => ({
+      time: fetchedTime,
+      text: `${platformLabel(item.platform)} #${item.rank || '-'} ${hotspotTitle(item)}`,
+      platform: item.platform || 'hotspot',
+      rank: Number(item.rank || 0),
+    }))
+}
+
 function formatHotspotLines(items = []) {
   return items.map((item, idx) => {
     const rank = item.rank || idx + 1
@@ -517,6 +567,8 @@ async function fetchHotspots() {
     fetchedAtMs: fetchedAt.getTime(),
     stale: false,
     platforms,
+    events: buildHotspotEvents(platforms, status, fetchedAt),
+    ticker: buildHotspotTicker(platforms, fetchedAt),
     status,
   }
 }

@@ -1,6 +1,6 @@
 // 语音配置说明文档 & FAQ
 // 结构：每个 topic 包含 title、sections（标题+内容）、providers（服务商列表）
-// 字段名来源：src/config.js 的 VOICE_CONFIG_KEYS / TTS_CONFIG_KEYS
+// 字段名来源：src/config.js 的语音/TTS 配置
 
 export const DOC_TOPICS = {
   voice_asr: {
@@ -8,72 +8,31 @@ export const DOC_TOPICS = {
     title: '语音识别（ASR）配置指南',
     subtitle: 'Automatic Speech Recognition',
     icon: '🎤',
-    summary: '语音识别将麦克风输入实时转为文字。支持本地 Whisper 和三家云端服务。配置入口：点击左上角 ⚙ → 语音设置。',
+    summary: '语音识别将麦克风输入实时转为文字。当前使用 macOS 本地 Speech Recognition，不需要云端 ASR 密钥。',
     sections: [
       {
         title: '为什么语音识别没有内容？',
         content: `常见原因：
-① 未配置 ASR 密钥 — 云端 ASR 需要对应服务商的 API Key
-② 麦克风权限未授予 — 请检查浏览器或系统麦克风权限
-③ 本地 Whisper 模型未加载完成 — 首次下载 small 模型约 461 MB，需等待
-④ 密钥填写错误或账户欠费 — 检查控制台报错信息`,
+① 麦克风权限未授予 — 请在系统设置 → 隐私与安全性 → 麦克风中允许 Bailongma
+② 语音识别权限未授予 — 请在系统设置 → 隐私与安全性 → 语音识别中允许 Bailongma 或本地识别模块
+③ 当前语言与系统本地识别包不匹配 — 先使用中文（普通话）或 English (US)
+④ macOS 本地识别暂不可用 — 重新打开应用后再试一次`,
       },
       {
-        title: '模式一：阿里云百炼 Paraformer（推荐，延迟低）',
-        content: `阿里云百炼实时语音识别，中文效果出色，延迟低。
+        title: '当前模式：macOS 本地识别',
+        content: `Bailongma 使用 macOS Speech.framework 做本机语音识别。
 
-配置字段（POST /settings/voice）：
-■ aliyunApiKey — 阿里云百炼的 API Key（格式：sk-xxxxxxxxxxxxxxxx）
+特点：
+■ 不需要配置阿里云、腾讯云、讯飞等 ASR Key
+■ 语音识别音频不走云端 ASR 服务商
+■ 依赖 macOS 系统麦克风权限和语音识别权限
 
-申请步骤：
-1. 打开 https://bailian.console.aliyun.com/ 注册/登录
-2. 搜索「Paraformer」或「语音识别」，开通服务
-3. 前往 API Key 管理页面，创建新的 API Key
-4. 复制 API Key，在语音设置中填写 aliyunApiKey 字段
-
-文档：https://help.aliyun.com/zh/model-studio/developer-reference/paraformer-v2`,
-      },
-      {
-        title: '模式二：腾讯云 ASR',
-        content: `腾讯云实时语音识别，支持粤语、英语等多语种。
-
-配置字段（POST /settings/voice）：
-■ tencentSecretId — 腾讯云访问密钥 ID
-■ tencentSecretKey — 腾讯云访问密钥 Key
-■ tencentAppId — 腾讯云 ASR 应用 AppId
-
-申请步骤：
-1. 打开 https://console.cloud.tencent.com/ 注册/登录
-2. 进入「语音识别」产品，开通实时语音识别
-3. 在 https://console.cloud.tencent.com/cam/capi 创建访问密钥
-4. 记录 SecretId 和 SecretKey（两个都需要）
-5. 在腾讯云 ASR 控制台找到你的 AppId
-6. 在语音设置中填写以上三个字段
-
-文档：https://cloud.tencent.com/document/product/1093/48982`,
-      },
-      {
-        title: '模式三：科大讯飞 RTASR',
-        content: `科大讯飞实时转写，中文识别老牌服务。
-
-配置字段（POST /settings/voice）：
-■ xunfeiAppId — 讯飞开放平台应用 AppID
-■ xunfeiApiKey — 应用 API Key
-■ xunfeiApiSecret — 应用 API Secret
-
-申请步骤：
-1. 打开 https://www.xfyun.cn/ 注册/登录讯飞开放平台
-2. 控制台 → 创建应用 → 添加「实时语音转写（RTASR）」服务
-3. 在应用详情页找到 AppID、APIKey、APISecret（三个都需要）
-4. 在语音设置中填写以上三个字段
-
-文档：https://www.xfyun.cn/doc/asr/rtasr/API.html`,
+配置入口：
+点击左上角 ⚙ → 语音设置，只需要选择语言、自动发送和灵敏度。`,
       },
     ],
     providers: [
-      { name: '阿里云百炼 Paraformer', url: 'https://bailian.console.aliyun.com/', free: false, note: '推荐，延迟低，字段：aliyunApiKey' },
-      { name: '腾讯云 ASR', url: 'https://console.cloud.tencent.com/asr', free: false, note: '多语种，字段：tencentSecretId/Key/AppId' },
-      { name: '科大讯飞 RTASR', url: 'https://www.xfyun.cn/', free: false, note: '中文老牌，字段：xunfeiAppId/ApiKey/ApiSecret' },
+      { name: 'macOS Speech Recognition', url: '', free: true, note: '本机识别，无需 ASR Key' },
     ],
   },
 
@@ -225,8 +184,8 @@ export const DOC_TOPICS = {
       {
         title: '快速开始',
         content: `语音功能分两部分：
-■ ASR（语音识别）：麦克风 → 文字，让你可以说话输入
-  → 配置接口：POST /settings/voice
+■ ASR（语音识别）：macOS 本地 Speech Recognition，麦克风 → 文字
+  → 不需要配置云端 ASR Key
 ■ TTS（语音合成）：文字 → 声音，让 Agent 开口说话
   → 配置接口：POST /settings/tts
 
@@ -235,9 +194,9 @@ export const DOC_TOPICS = {
       },
       {
         title: '推荐配置组合',
-        content: `■ 最低延迟（国内）：阿里云百炼 ASR（aliyunApiKey） + 豆包方舟 TTS（doubaoKey）
-■ 最佳英文体验：科大讯飞 ASR + OpenAI TTS（openaiTtsKey）或 ElevenLabs（elevenLabsKey）
-■ 已用 MiniMax 作为 LLM：阿里云百炼 ASR + MiniMax TTS（自动复用密钥）`,
+        content: `■ 语音输入：macOS 本地 ASR
+■ 中文语音输出：豆包方舟 TTS（doubaoKey）
+■ 英文语音输出：OpenAI TTS（openaiTtsKey）或 ElevenLabs（elevenLabsKey）`,
       },
       {
         title: '配置后如何测试？',
@@ -253,14 +212,9 @@ ASR 测试：
       },
       {
         title: '完整字段速查表',
-        content: `ASR 配置字段（POST /settings/voice）：
-→ aliyunApiKey — 阿里云百炼 Paraformer API Key
-→ tencentSecretId — 腾讯云 SecretId
-→ tencentSecretKey — 腾讯云 SecretKey
-→ tencentAppId — 腾讯云 ASR AppId
-→ xunfeiAppId — 讯飞 AppID
-→ xunfeiApiKey — 讯飞 APIKey
-→ xunfeiApiSecret — 讯飞 APISecret
+        content: `ASR：
+→ provider = macos-local
+→ 无需保存云端 ASR 密钥
 
 TTS 配置字段（POST /settings/tts）：
 → ttsProvider — 服务商（doubao/minimax/openai/elevenlabs/volcano）
@@ -277,8 +231,8 @@ TTS 配置字段（POST /settings/tts）：
       },
       {
         title: '数据隐私',
-        content: `■ 本地 Whisper：所有音频在本地处理，完全私密
-■ 云端 ASR/TTS：音频数据会发送到对应服务商服务器
+        content: `■ ASR：使用 macOS 本地识别，不发送到云端 ASR 服务商
+■ TTS：文字会发送到你选择的语音合成服务商
 ■ API Key 仅保存在本地 config.json，不会上传到任何第三方`,
       },
     ],
@@ -297,7 +251,7 @@ export function detectDocTopic(text) {
   }
 
   // ASR 相关：麦克风输入不被识别
-  if (/识别不到|没有?内容|没有?文字|(语音|声音)识别|配置.*(识别|听|麦克风)|听不到我|我说话|麦克风|mic\b|asr|paraformer|讯飞|腾讯.*(语音|声音)|aliyun.*key|xunfei|tencent.*asr/.test(t)) {
+  if (/识别不到|没有?内容|没有?文字|(语音|声音)识别|配置.*(识别|听|麦克风)|听不到我|我说话|麦克风|mic\b|asr|speech.*recognition|本地识别/.test(t)) {
     return 'voice_asr'
   }
 

@@ -1,4 +1,4 @@
-// 热点模式主逻辑 — 切换、热点数据、时钟、实时流
+// 热点模式主逻辑 — 切换、热点数据、时钟、热榜事件流
 
 import { apiUrl } from './api-client.js';
 import { HotspotEarth } from './hotspot-earth.js';
@@ -19,29 +19,8 @@ const hotspotLists = {
   weibo: [],
 };
 
-// 实时事件流卡片
-const MOCK_FEED = [
-  { time:'19:25', cat:'自然灾害', catColor:'#e05c5c', title:'四川宜宾县发生6.0级地震', desc:'震源深度10公里，暂无人员伤亡报告，救援力量已巡查到达震源周边', loc:'中国·四川', img:'' },
-  { time:'19:24', cat:'科技',     catColor:'#5c9ee0', title:'神舟十八号发射任务圆满成功', desc:'载人飞船与空间站组合体成功对接，状态良好。', loc:'酒泉卫星发射中心', img:'' },
-  { time:'19:23', cat:'财经',     catColor:'#c97d30', title:'特斯拉全球召回超110万辆汽车', desc:'涉及安全带及软件问题，特斯拉免费修复。', loc:'全球', img:'' },
-  { time:'19:22', cat:'体育',     catColor:'#4eaa6e', title:'巴黎奥运圣火抵达马赛港', desc:'开幕式倒计时启动，法国全境传递沿线盛况空前，7月26日开幕。', loc:'法国·马赛', img:'' },
-  { time:'19:21', cat:'社会',     catColor:'#9b6bc4', title:'台风"玛莉亚"逼近东南沿海', desc:'预计26日凌晨在浙江登陆，多地发布台风橙色预警，船只回港避险。', loc:'中国·东南沿海', img:'' },
-  { time:'19:19', cat:'科技',     catColor:'#5c9ee0', title:'华为发布全新 AI 芯片', desc:'性能较上代提升60%，将首批搭载于旗舰产品线，引发行业广泛关注。', loc:'中国·深圳', img:'' },
-  { time:'19:18', cat:'政策',     catColor:'#6bbfbf', title:'欧盟正式通过 AI 监管法案', desc:'《人工智能法案》生效，将对高风险AI系统实施强制合规审查。', loc:'比利时·布鲁塞尔', img:'' },
-  { time:'19:17', cat:'旅游',     catColor:'#c4a030', title:'多地景区迎来客流高峰', desc:'暑期旅游热度持续攀升，热门景区单日接待游客超历史纪录。', loc:'中国多地', img:'' },
-];
-
-// 底部跑马灯文字
-const TICKER_ITEMS = [
-  { time:'19:20', text:'上海发布高温红色预警，气温预计突破40℃' },
-  { time:'19:19', text:'全球芯片市场半年年报告发布，亚太份额持续上升' },
-  { time:'19:18', text:'欧盟通过 AI 法案，将对高风险系统强制审查' },
-  { time:'19:17', text:'多地景区迎来客流高峰，暑运旅游市场表现亮眼' },
-  { time:'19:16', text:'国际油价小幅上涨，布伦特原油突破85美元/桶' },
-  { time:'19:15', text:'A股午后强势拉升，沪指收涨1.24%，科技板块领涨' },
-  { time:'19:14', text:'北京时间明日凌晨2点：欧洲杯决赛，全球直播' },
-  { time:'19:13', text:'研究显示：今夏北半球平均气温创历史新高' },
-];
+let hotspotFeed = [];
+let hotspotTicker = [];
 
 // ── 热点上下文构建（中性系统上下文，不强制 Agent 回复）──────────────────────────
 
@@ -55,7 +34,7 @@ let hotspotMeta = {
 
 export function buildHotspotContext() {
   const top = (arr, n) => arr.slice(0, n).map((i, idx) => `${idx + 1}. ${i.text}`).join('；');
-  const feedTop = MOCK_FEED.slice(0, 3).map(i => `[${i.cat}] ${i.title}`).join('；');
+  const feedTop = hotspotFeed.slice(0, 3).map(i => `[${i.cat}] ${i.title}`).join('；');
   const platformText = Object.entries(PLATFORM_CONFIG)
     .map(([platform, config]) => {
       const items = hotspotLists[platform] || [];
@@ -78,7 +57,7 @@ export function buildHotspotContext() {
 ${sourceText}
 
 ${platformText || '当前暂无可用实时热榜。'}
-实时事件 Top3：${feedTop}`;
+热榜事件 Top3：${feedTop || '暂无。'}`;
 }
 
 // ── 状态 ──────────────────────────────────────────────────────────────────────
@@ -126,6 +105,15 @@ const $ = (id) => document.getElementById(id);
 const TREND_ICONS = { up: '↑', down: '↓', same: '—' };
 const TREND_CLASSES = { up: 'hs-trend-up', down: 'hs-trend-dn', same: 'hs-trend-same' };
 
+function escapeHtml(value = '') {
+  return String(value)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
 function renderList(listId, items, style = 'heat') {
   const ul = $(listId);
   if (!ul) return;
@@ -144,11 +132,11 @@ function renderList(listId, items, style = 'heat') {
     const trendCls  = TREND_CLASSES[trend] || '';
     const newBadge  = isNew ? '<span class="hs-new-badge">新</span>' : '';
     const heatLabel = style === 'heat'
-      ? `<span class="hs-heat">${heat}</span>`
-      : `<span class="hs-label-badge">${heat}</span>`;
+      ? `<span class="hs-heat">${escapeHtml(heat)}</span>`
+      : `<span class="hs-label-badge">${escapeHtml(heat)}</span>`;
     return `<li class="hs-item">
       <span class="hs-rank ${rankCls}">${rank}</span>
-      <span class="hs-item-text">${text}${newBadge}</span>
+      <span class="hs-item-text">${escapeHtml(text)}${newBadge}</span>
       ${heatLabel}
       <span class="hs-trend ${trendCls}">${trendIcon}</span>
     </li>`;
@@ -187,17 +175,25 @@ function setText(id, text) {
 
 function updateHotspotMeta() {
   let total = 0;
+  let availableSources = 0;
   for (const [platform, config] of Object.entries(PLATFORM_CONFIG)) {
     const items = hotspotLists[platform] || [];
     const status = hotspotMeta.status?.[platform] || {};
     total += items.length;
+    if (status.ok) availableSources += 1;
     const source = status.ok
       ? `${status.source || '实时'}${hotspotMeta.stale ? '缓存' : '数据'}`
       : '未配置';
     setText(config.updateId, `${source} · ${formatFetchedAt(hotspotMeta.fetchedAt)}`);
   }
+  setText('hs-stat-alert', String(hotspotFeed.length));
+  setText('hs-stat-alert-delta', hotspotMeta.stale ? '缓存事件流' : '由热榜动态生成');
+  setText('hs-stat-hot', String(total));
+  setText('hs-stat-hot-delta', `${availableSources}/${Object.keys(PLATFORM_CONFIG).length} 数据源可用`);
   setText('hs-stat-data', String(total));
   setText('hs-stat-data-delta', `四平台热榜 / ${hotspotMeta.refreshMinutes || 30} 分钟缓存`);
+  setText('hs-stat-ai', hotspotMeta.stale ? '--' : 'OK');
+  setText('hs-stat-ai-delta', hotspotMeta.stale ? '当前显示缓存数据' : '热榜源连接正常');
 }
 
 async function refreshHotspots({ force = false } = {}) {
@@ -222,7 +218,11 @@ async function refreshHotspots({ force = false } = {}) {
       refreshMinutes: data.refreshMinutes || 30,
       status: data.status || {},
     };
+    hotspotFeed = Array.isArray(data.events) ? data.events.filter(item => item?.title).slice(0, 12) : [];
+    hotspotTicker = Array.isArray(data.ticker) ? data.ticker.filter(item => item?.text).slice(0, 16) : [];
     renderAllLists();
+    renderFeed();
+    renderTicker();
     updateHotspotMeta();
   } catch (err) {
     hotspotMeta = {
@@ -246,26 +246,39 @@ function stopHotspotRefresh() {
   hotspotRefreshTimer = null;
 }
 
-// ── 实时事件流 ───────────────────────────────────────────────────────────────
+// ── 热榜事件流 ───────────────────────────────────────────────────────────────
 
 const CAT_COLORS = {
   '自然灾害':'#e05c5c', '科技':'#5c9ee0', '财经':'#c97d30',
   '体育':'#4eaa6e', '社会':'#9b6bc4', '政策':'#6bbfbf', '旅游':'#c4a030',
+  '抖音':'#35d5ff', '小红书':'#ff5a72', '微信热点':'#4eaa6e', '微博':'#f0a340',
 };
 
 function renderFeed() {
   const track = $('hs-feed-track');
   if (!track) return;
-  track.innerHTML = MOCK_FEED.map((item) => {
+  if (!hotspotFeed.length) {
+    track.innerHTML = `<div class="hs-feed-card">
+      <div class="hs-feed-card-top">
+        <span class="hs-feed-time">--:--</span>
+        <span class="hs-feed-cat">等待数据</span>
+      </div>
+      <div class="hs-feed-title">暂无动态事件流</div>
+      <div class="hs-feed-desc">热榜数据刷新后会自动生成事件卡片。</div>
+      <div class="hs-feed-loc">来源：/hotspots</div>
+    </div>`;
+    return;
+  }
+  track.innerHTML = hotspotFeed.map((item) => {
     const color = item.catColor || CAT_COLORS[item.cat] || '#8fb6d8';
     return `<div class="hs-feed-card">
       <div class="hs-feed-card-top">
-        <span class="hs-feed-time">${item.time}</span>
-        <span class="hs-feed-cat" style="background:${color}22;color:${color};border-color:${color}44">${item.cat}</span>
+        <span class="hs-feed-time">${escapeHtml(item.time || '--:--')}</span>
+        <span class="hs-feed-cat" style="background:${color}22;color:${color};border-color:${color}44">${escapeHtml(item.cat || '热点')}</span>
       </div>
-      <div class="hs-feed-title">${item.title}</div>
-      <div class="hs-feed-desc">${item.desc}</div>
-      <div class="hs-feed-loc">📍 ${item.loc}</div>
+      <div class="hs-feed-title">${escapeHtml(item.title)}</div>
+      <div class="hs-feed-desc">${escapeHtml(item.desc || '')}</div>
+      <div class="hs-feed-loc">来源：${escapeHtml(item.loc || item.source || '/hotspots')}</div>
     </div>`;
   }).join('');
 }
@@ -300,8 +313,15 @@ function stopFeedAuto() {
 function renderTicker() {
   const el = $('hs-ticker-inner');
   if (!el) return;
-  const html = TICKER_ITEMS.map(
-    ({ time, text }) => `<span class="hs-ticker-item"><span class="hs-ticker-time">${time}</span>${text}</span>`
+  const items = hotspotTicker.length
+    ? hotspotTicker
+    : Object.values(hotspotLists).flat().slice(0, 12).map((item) => ({ time: formatFetchedAt(hotspotMeta.fetchedAt), text: item.text }));
+  if (!items.length) {
+    el.innerHTML = '<span class="hs-ticker-item"><span class="hs-ticker-time">--:--</span>等待热榜数据刷新</span>';
+    return;
+  }
+  const html = items.map(
+    ({ time, text }) => `<span class="hs-ticker-item"><span class="hs-ticker-time">${escapeHtml(time || '--:--')}</span>${escapeHtml(text)}</span>`
   ).join('<span class="hs-ticker-sep">●</span>');
   // 翻倍内容实现无缝
   el.innerHTML = html + '<span class="hs-ticker-sep">●</span>' + html;

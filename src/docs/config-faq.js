@@ -52,7 +52,7 @@ export const CONFIG_TOPICS = {
       },
       {
         title: '通义千问（Qwen）配置',
-        content: `阿里云通义千问，与语音识别同平台（阿里云百炼），可共用账号。
+        content: `阿里云通义千问，可作为 LLM 服务商使用；语音识别现在使用 macOS 本地模块。
 
 ■ 字段：apiKey（格式：sk-xxxxxxxx，百炼平台的 API Key）
 ■ 默认模型：qwen-turbo

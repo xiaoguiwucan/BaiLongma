@@ -11,7 +11,10 @@ const net = require('net')
 const http = require('http')
 const { EventEmitter } = require('events')
 const { pathToFileURL } = require('url')
-const { autoUpdater } = require('electron-updater')
+let autoUpdater = null
+try {
+  ;({ autoUpdater } = require('electron-updater'))
+} catch (_) {}
 
 const IS_DEV = !app.isPackaged
 const WINDOWS_APP_USER_MODEL_ID = 'com.xiaoyuanda.bailongma'
@@ -19,6 +22,7 @@ const USER_DIR = app.getPath('userData')
 const CODE_ROOT = app.getAppPath()
 const RESOURCE_ROOT = CODE_ROOT
 const BACKEND_ENTRY = path.join(CODE_ROOT, 'src', 'index.js')
+const APP_ICON = path.join(RESOURCE_ROOT, 'build', process.platform === 'win32' ? 'icon.ico' : 'icon.png')
 
 let mainWindow = null
 let backendPort = 0
@@ -105,7 +109,7 @@ async function createWindow() {
     minHeight: 600,
     backgroundColor: '#0b0b0e',
     title: 'Bailongma',
-    icon: path.join(RESOURCE_ROOT, 'build', 'icon.png'),
+    icon: APP_ICON,
     webPreferences: {
       contextIsolation: true,
       nodeIntegration: false,
@@ -139,9 +143,11 @@ async function createWindow() {
   })
 
   await mainWindow.loadURL(`http://127.0.0.1:${backendPort}/`)
-  // 关闭主窗口时最小化到托盘，不退出
+  // Windows keeps the classic tray-minimize behavior. On macOS, closing the red
+  // traffic-light button destroys the window while the app keeps running; the
+  // Dock/tray can recreate it. Hiding on macOS can leave a black stale surface.
   mainWindow.on('close', (e) => {
-    if (!app.isQuiting) {
+    if (!app.isQuiting && process.platform !== 'darwin') {
       e.preventDefault()
       mainWindow.hide()
     }
@@ -153,18 +159,16 @@ async function createWindow() {
 }
 
 function setupTray() {
-  const iconPath = path.join(RESOURCE_ROOT, 'build', 'icon.ico')
-  tray = new Tray(nativeImage.createFromPath(iconPath))
+  const trayImage = nativeImage.createFromPath(APP_ICON)
+  if (process.platform === 'darwin') trayImage.setTemplateImage(true)
+  tray = new Tray(trayImage)
   tray.setToolTip('Bailongma')
 
   const contextMenu = Menu.buildFromTemplate([
     {
       label: '显示主界面',
-      click: () => {
-        if (mainWindow) {
-          mainWindow.show()
-          mainWindow.focus()
-        }
+      click: async () => {
+        await showMainWindow()
       },
     },
     { type: 'separator' },
@@ -178,12 +182,17 @@ function setupTray() {
   ])
 
   tray.setContextMenu(contextMenu)
-  tray.on('double-click', () => {
-    if (mainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
-    }
-  })
+  tray.on('double-click', () => { showMainWindow().catch(() => {}) })
+  if (process.platform === 'darwin') tray.on('click', () => { showMainWindow().catch(() => {}) })
+}
+
+async function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    await createWindow()
+  }
+  if (mainWindow.isMinimized()) mainWindow.restore()
+  if (!mainWindow.isVisible()) mainWindow.show()
+  mainWindow.focus()
 }
 
 function createFocusBannerWindow({ task = '', current_step = '', tasks = [] } = {}) {
@@ -291,6 +300,14 @@ focusBannerBridge.on('hide', () => {
 })
 
 function setupAutoUpdater() {
+  sendUpdaterStatus({ stage: 'disabled', message: 'Update checks are disabled in this build.' })
+  return
+
+  if (!autoUpdater) {
+    sendUpdaterStatus({ stage: 'disabled', message: 'Updater is unavailable.' })
+    return
+  }
+
   autoUpdater.autoDownload = false
   autoUpdater.autoInstallOnAppQuit = true
 
@@ -338,6 +355,9 @@ function setupAutoUpdater() {
 ipcMain.handle('app:get-version', () => app.getVersion())
 
 ipcMain.handle('updater:check-for-updates', async () => {
+  sendUpdaterStatus({ stage: 'disabled', message: 'Update checks are disabled in this build.' })
+  return { ok: false, skipped: true, reason: 'disabled' }
+
   if (IS_DEV) {
     sendUpdaterStatus({ stage: 'dev' })
     return { ok: false, skipped: true, reason: 'dev' }
@@ -354,6 +374,9 @@ ipcMain.handle('updater:check-for-updates', async () => {
 })
 
 ipcMain.handle('updater:start-download', async () => {
+  sendUpdaterStatus({ stage: 'disabled', message: 'Update checks are disabled in this build.' })
+  return { ok: false, skipped: true, reason: 'disabled' }
+
   try {
     await autoUpdater.downloadUpdate()
     return { ok: true }
@@ -365,19 +388,25 @@ ipcMain.handle('updater:start-download', async () => {
 })
 
 ipcMain.handle('updater:quit-and-install', () => {
+  if (!autoUpdater) return
   autoUpdater.quitAndInstall()
 })
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  if (!mainWindow.isVisible()) mainWindow.show()
-  mainWindow.focus()
+  showMainWindow().catch(() => {})
+})
+
+app.on('activate', () => {
+  showMainWindow().catch(() => {})
 })
 
 app.on('window-all-closed', () => {
   // 主窗口关闭后保持后台运行（Focus Banner 等桌面功能继续工作）
   // 只有托盘菜单「退出」才真正退出
+})
+
+app.on('before-quit', () => {
+  app.isQuiting = true
 })
 
 app.whenReady().then(async () => {

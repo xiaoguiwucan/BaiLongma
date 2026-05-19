@@ -628,29 +628,70 @@ export function setSocialConfig(updates) {
   writeStoredConfig({ ...existing, social: next })
 }
 
-const VOICE_CONFIG_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
+const VOICE_CONFIG_KEYS = [
+  'provider',
+  'lang',
+  'macosRecognitionMode',
+  'aliyunApiKey',
+  'dashscopeApiKey',
+  'aliyunAsrModel',
+  'aliyunVocabularyId',
+]
+
+function readVoiceBlock() {
+  try { return JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.voice || {} } catch {}
+  return {}
+}
+
+function normalizeVoiceProvider(provider) {
+  const value = String(provider || '').trim()
+  if (value === 'aliyun') return 'aliyun-bailian'
+  if (value === 'aliyun-bailian' || value === 'macos-local') return value
+  return 'macos-local'
+}
 
 export function getVoiceConfig() {
-  let stored = {}
-  try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.voice || {} } catch {}
-  const result = {}
-  for (const key of VOICE_CONFIG_KEYS) {
-    result[key] = { configured: !!(stored[key]) }
+  const stored = readVoiceBlock()
+  const provider = normalizeVoiceProvider(stored.provider)
+  const aliyunKey = stored.aliyunApiKey || stored.dashscopeApiKey || process.env.DASHSCOPE_API_KEY || process.env.ALIYUN_API_KEY || ''
+  return {
+    provider,
+    lang: stored.lang || 'zh-CN',
+    macosRecognitionMode: stored.macosRecognitionMode || 'auto',
+    local: process.platform === 'darwin',
+    cloud: !!aliyunKey,
+    aliyunApiKey: { configured: !!aliyunKey },
+    dashscopeApiKey: { configured: !!aliyunKey },
+    aliyunAsrModel: stored.aliyunAsrModel || 'paraformer-realtime-v2',
+    aliyunVocabularyId: { configured: !!stored.aliyunVocabularyId },
   }
-  return result
+}
+
+export function getVoiceCredentials() {
+  const stored = readVoiceBlock()
+  const provider = normalizeVoiceProvider(stored.provider)
+  return {
+    provider,
+    lang: stored.lang || 'zh-CN',
+    macosRecognitionMode: stored.macosRecognitionMode || 'auto',
+    aliyunApiKey: stored.aliyunApiKey || stored.dashscopeApiKey || process.env.DASHSCOPE_API_KEY || process.env.ALIYUN_API_KEY || '',
+    aliyunAsrModel: stored.aliyunAsrModel || 'paraformer-realtime-v2',
+    aliyunVocabularyId: stored.aliyunVocabularyId || '',
+  }
 }
 
 export function setVoiceConfig(updates) {
   let existing = {}
   try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
   const current = existing.voice || {}
-  const next = { ...current }
-  for (const [key, val] of Object.entries(updates)) {
+  const next = { ...current, updatedAt: new Date().toISOString() }
+  for (const [key, val] of Object.entries(updates || {})) {
     if (!VOICE_CONFIG_KEYS.includes(key)) continue
     const trimmed = String(val || '').trim()
-    if (trimmed) next[key] = trimmed
+    if (trimmed) next[key] = key === 'provider' ? normalizeVoiceProvider(trimmed) : trimmed
     else delete next[key]
   }
+  next.provider = normalizeVoiceProvider(next.provider || current.provider)
   writeStoredConfig({ ...existing, voice: next })
 }
 

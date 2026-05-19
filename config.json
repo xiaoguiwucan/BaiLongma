@@ -1,7 +1,7 @@
 {
   "clawbot": {},
   "voice": {
-    "whisperModel": "small"
+    "provider": "macos-local"
   },
   "tts": {
     "ttsProvider": "doubao",

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { spawn } from 'child_process'
 import { chromium } from 'playwright'
 import { nowTimestamp } from '../time.js'
-import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByMemId, memoryExistsByMemId, getMemoryByMemId, deleteMemoryByMemId, normalizeConversationPartyId, createReminder, findMergeableOneOffReminder, appendReminderTask, listPendingReminders, getReminderById, cancelReminder, upsertPrefetchTask, removePrefetchTask, listPrefetchTasks, insertActionLog, upsertMusicTrack, getMusicTrack, searchMusicLibrary, listMusicLibrary, updateMusicLrc, deleteMusicTrack as dbDeleteMusicTrack, setConfig as dbSetConfig } from '../db.js'
+import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByMemId, memoryExistsByMemId, getMemoryByMemId, deleteMemoryByMemId, normalizeConversationPartyId, createReminder, findMergeableOneOffReminder, appendReminderTask, listPendingReminders, getReminderById, cancelReminder, createProactiveRule, listProactiveRules, getProactiveRuleById, updateProactiveRuleStatus, createProactiveOutboxItem, listProactiveOutbox, upsertPrefetchTask, removePrefetchTask, listPrefetchTasks, insertActionLog, upsertMusicTrack, getMusicTrack, searchMusicLibrary, listMusicLibrary, updateMusicLrc, deleteMusicTrack as dbDeleteMusicTrack, setConfig as dbSetConfig } from '../db.js'
 import { emitEvent, emitUICommand, emitACUIEvent, hasACUIClient, addActiveUICard, removeActiveUICard, getActiveUICards } from '../events.js'
 import { dispatchSocialMessage } from '../social/dispatch.js'
 import { callCapability, listCapabilities } from '../providers/registry.js'
@@ -51,6 +51,12 @@ import { paths } from '../paths.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // 文件操作只允许在 sandbox 目录内
 const SANDBOX_ROOT = path.resolve(paths.sandboxDir)
+
+function getShellRuntimeInfo() {
+  if (process.platform === 'darwin') return { platform: 'macOS', shell: '/bin/sh', syntax: 'POSIX' }
+  if (process.platform === 'win32') return { platform: 'Windows', shell: 'powershell.exe', syntax: 'PowerShell' }
+  return { platform: 'Linux', shell: '/bin/sh', syntax: 'POSIX' }
+}
 
 // inline-script 草稿注册表（内存 + 磁盘双存）
 const draftCodeMap = new Map()   // { scratchId → code }
@@ -156,6 +162,7 @@ const TOOL_RISK = {
   skip_consolidation: 'low',
   manage_reminder: 'medium',
   schedule_reminder: 'medium',
+  manage_proactive_message: 'medium',
   manage_prefetch_task: 'medium',
   ui_show: 'medium',
   ui_update: 'medium',
@@ -389,6 +396,8 @@ async function executeToolUnchecked(name, args, context = {}) {
       case 'schedule_reminder':
       case 'manage_reminder':
         return await execManageReminder(args, context)
+      case 'manage_proactive_message':
+        return await execManageProactiveMessage(args, context)
       case 'manage_prefetch_task':
         return execManagePrefetchTask(args)
       case 'ui_show':
@@ -663,6 +672,98 @@ function formatReminderRow(r) {
   return `#${r.id} ${recurrence} 下次 ${r.due_at} → ${r.user_id}：${r.task}`
 }
 
+function formatProactiveRuleRow(r) {
+  const due = r.next_due_at ? ` next=${r.next_due_at}` : ''
+  const last = r.last_sent_at ? ` last=${r.last_sent_at}` : ''
+  return `#${r.id} [${r.status}] ${r.target_id} ${r.topic} (${r.trigger_type}, ${r.priority}, cooldown ${r.cooldown_minutes}m${due}${last}) — ${r.reason}`
+}
+
+function formatProactiveOutboxRow(r) {
+  return `#${r.id} [${r.status}] ${r.scheduled_at} → ${r.target_id} ${r.topic} (${r.priority}) — ${r.reason}`
+}
+
+async function execManageProactiveMessage(args, context = {}) {
+  const action = String(args.action || '').toLowerCase()
+  if (!action) return '错误：未提供 action（create/queue/list/cancel/pause/resume）'
+
+  if (action === 'list') {
+    const status = args.status ? String(args.status) : null
+    const rules = listProactiveRules({ status: ['active', 'paused', 'cancelled'].includes(status) ? status : null, limit: 30 })
+    const outbox = listProactiveOutbox({ status: ['pending', 'claimed', 'sent', 'failed'].includes(status) ? status : null, limit: 30 })
+    const ruleText = rules.length ? rules.map(formatProactiveRuleRow).join('\n') : '无主动消息规则。'
+    const outboxText = outbox.length ? outbox.map(formatProactiveOutboxRow).join('\n') : '无 outbox 记录。'
+    return `主动消息规则：\n${ruleText}\n\n主动消息 outbox：\n${outboxText}`
+  }
+
+  if (['cancel', 'pause', 'resume'].includes(action)) {
+    const id = Number(args.id)
+    if (!Number.isInteger(id) || id <= 0) return '错误：需要提供合法的规则 id'
+    const rule = getProactiveRuleById(id)
+    if (!rule) return `错误：未找到主动消息规则 #${id}`
+    const nextStatus = action === 'resume' ? 'active' : (action === 'pause' ? 'paused' : 'cancelled')
+    const result = updateProactiveRuleStatus(id, nextStatus)
+    if (!result.changes) return `错误：更新主动消息规则 #${id} 失败`
+    emitEvent('proactive_rule_updated', { id, status: nextStatus, target_id: rule.target_id, topic: rule.topic })
+    return `主动消息规则 #${id} 已${action === 'resume' ? '恢复' : action === 'pause' ? '暂停' : '取消'}。`
+  }
+
+  if (!['create', 'queue'].includes(action)) return `错误：未知 action "${action}"`
+
+  const fallbackTargetId = context.visibleTargetIds?.[0] || context.allowedTargetIds?.[0] || 'ID:000001'
+  const resolvedTargetId = resolveAllowedTargetId(args.target_id || fallbackTargetId, context.allowedTargetIds)
+  assertVisibleTargetId(resolvedTargetId, context.visibleTargetIds)
+
+  const topic = String(args.topic || '').trim()
+  const reason = String(args.reason || '').trim()
+  if (!topic) return '错误：需要提供 topic'
+  if (!reason) return '错误：需要提供 reason，说明为什么可以主动联系'
+
+  const triggerType = String(args.trigger || args.trigger_type || 'followup').toLowerCase()
+  const priority = String(args.priority || 'normal').toLowerCase()
+  const dueAt = args.due_at ? parseReminderDueAt(args.due_at).toISOString() : null
+
+  if (action === 'queue') {
+    const scheduledAt = dueAt || new Date().toISOString()
+    const result = createProactiveOutboxItem({
+      targetId: resolvedTargetId,
+      topic,
+      reason,
+      messageHint: args.message_hint || '',
+      priority,
+      scheduledAt,
+    })
+    emitEvent('proactive_outbox_created', { id: Number(result.lastInsertRowid), target_id: resolvedTargetId, topic, scheduled_at: scheduledAt })
+    return `主动消息已加入 outbox：#${result.lastInsertRowid}，目标 ${resolvedTargetId}，计划 ${scheduledAt}`
+  }
+
+  const result = createProactiveRule({
+    targetId: resolvedTargetId,
+    topic,
+    reason,
+    triggerType,
+    messageHint: args.message_hint || '',
+    priority,
+    cooldownMinutes: args.cooldown_minutes,
+    maxPerDay: args.max_per_day,
+    quietHours: args.quiet_hours,
+    nextDueAt: dueAt,
+  })
+  const ruleId = Number(result.lastInsertRowid)
+  if (dueAt) {
+    createProactiveOutboxItem({
+      ruleId,
+      targetId: resolvedTargetId,
+      topic,
+      reason,
+      messageHint: args.message_hint || '',
+      priority,
+      scheduledAt: dueAt,
+    })
+  }
+  emitEvent('proactive_rule_created', { id: ruleId, target_id: resolvedTargetId, topic, next_due_at: dueAt })
+  return `主动消息规则已创建：#${ruleId}，目标 ${resolvedTargetId}${dueAt ? `，下次 ${dueAt}` : ''}`
+}
+
 async function execManageReminder(args, context = {}) {
   const action = args.action || (args.due_at || args.kind ? 'create' : null)
   if (!action) return '错误：未提供 action（create/list/cancel）'
@@ -925,6 +1026,7 @@ function trimCommandOutput(value = '', max = 6000) {
 }
 
 function execBackground(command, execCwd) {
+  const runtime = getShellRuntimeInfo()
   const child = spawn(command, {
     shell: process.platform === 'win32' ? 'powershell.exe' : true,
     cwd: execCwd,
@@ -938,6 +1040,9 @@ function execBackground(command, execCwd) {
       ok: false,
       tool: 'exec_command',
       mode: 'background',
+      platform: runtime.platform,
+      shell: runtime.shell,
+      shell_syntax: runtime.syntax,
       command,
       cwd: execCwd,
       error: 'process did not start',
@@ -967,6 +1072,9 @@ function execBackground(command, execCwd) {
     ok: true,
     tool: 'exec_command',
     mode: 'background',
+    platform: runtime.platform,
+    shell: runtime.shell,
+    shell_syntax: runtime.syntax,
     command,
     cwd: execCwd,
     pid,
@@ -978,6 +1086,7 @@ function execBackground(command, execCwd) {
 function execForeground(command, timeoutMs, signal, execCwd, promoteToBackground = false) {
   return new Promise((resolve) => {
     throwIfAborted(signal)
+    const runtime = getShellRuntimeInfo()
     const child = spawn(command, {
       shell: process.platform === 'win32' ? 'powershell.exe' : true,
       cwd: execCwd,
@@ -1004,6 +1113,9 @@ function execForeground(command, timeoutMs, signal, execCwd, promoteToBackground
         ok: false,
         tool: 'exec_command',
         mode: 'foreground',
+        platform: runtime.platform,
+        shell: runtime.shell,
+        shell_syntax: runtime.syntax,
         command,
         cwd: execCwd,
         aborted: true,
@@ -1018,6 +1130,9 @@ function execForeground(command, timeoutMs, signal, execCwd, promoteToBackground
         ok: false,
         tool: 'exec_command',
         mode: 'foreground',
+        platform: runtime.platform,
+        shell: runtime.shell,
+        shell_syntax: runtime.syntax,
         command,
         cwd: execCwd,
         aborted: true,
@@ -1056,6 +1171,9 @@ function execForeground(command, timeoutMs, signal, execCwd, promoteToBackground
           ok: true,
           tool: 'exec_command',
           mode: 'promoted_to_background',
+          platform: runtime.platform,
+          shell: runtime.shell,
+          shell_syntax: runtime.syntax,
           command,
           cwd: execCwd,
           pid,
@@ -1069,6 +1187,9 @@ function execForeground(command, timeoutMs, signal, execCwd, promoteToBackground
           ok: false,
           tool: 'exec_command',
           mode: 'foreground',
+          platform: runtime.platform,
+          shell: runtime.shell,
+          shell_syntax: runtime.syntax,
           command,
           cwd: execCwd,
           timed_out: true,
@@ -1100,6 +1221,9 @@ function execForeground(command, timeoutMs, signal, execCwd, promoteToBackground
         ok: code === 0,
         tool: 'exec_command',
         mode: 'foreground',
+        platform: runtime.platform,
+        shell: runtime.shell,
+        shell_syntax: runtime.syntax,
         command,
         cwd: execCwd,
         exit_code: code,
@@ -1116,6 +1240,9 @@ function execForeground(command, timeoutMs, signal, execCwd, promoteToBackground
         ok: false,
         tool: 'exec_command',
         mode: 'foreground',
+        platform: runtime.platform,
+        shell: runtime.shell,
+        shell_syntax: runtime.syntax,
         command,
         cwd: execCwd,
         stdout: trimCommandOutput(stdout),

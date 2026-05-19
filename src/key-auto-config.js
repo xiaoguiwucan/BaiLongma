@@ -1,7 +1,7 @@
 // 用户发送 API Key 时自动识别服务商、验证、写入配置
-// 支持 TTS（豆包、MiniMax、OpenAI、ElevenLabs、火山）和 ASR（阿里云、腾讯、讯飞）
-// 支持单条消息包含多个 key（如"百炼语音识别 sk-xxx 豆包语音发声 uuid-xxx"）
-import { setVoiceConfig, setTTSConfig } from './config.js'
+// 支持 TTS（豆包、MiniMax、OpenAI、ElevenLabs、火山）
+// ASR 已切换为 macOS 本地识别，不再自动识别或保存云端 ASR 密钥。
+import { setTTSConfig } from './config.js'
 import { streamTTS } from './voice/tts-providers.js'
 
 // 提取文本中所有候选 key 字符串（20~120 字符的字母数字 token）
@@ -65,24 +65,6 @@ const PROVIDER_RULES = [
       streamKeys: { volcanoToken: key, volcanoAppId: key2 || '' },
     }),
   },
-  // ASR
-  {
-    re: /aliyun|阿里云|百炼|dashscope|paraformer/,
-    service: 'asr', provider: 'aliyun', label: '阿里云 ASR',
-    makeConfig: (key) => ({ configUpdates: { aliyunApiKey: key } }),
-  },
-  {
-    re: /tencent|腾讯.*(?:asr|识别)|(?:asr|识别).*腾讯|secret[\s_\-]?id/,
-    service: 'asr', provider: 'tencent', label: '腾讯云 ASR',
-    makeConfig: (key, key2) => ({
-      configUpdates: { tencentSecretId: key, ...(key2 ? { tencentSecretKey: key2 } : {}) },
-    }),
-  },
-  {
-    re: /xunfei|讯飞|iflytek/,
-    service: 'asr', provider: 'xunfei', label: '讯飞 ASR',
-    makeConfig: (key) => ({ configUpdates: { xunfeiApiKey: key } }),
-  },
 ]
 
 // 从文本中识别所有 {provider, key} 对
@@ -134,11 +116,6 @@ function detectAllKeyInfos(currentText, contextText) {
         service: 'tts', provider: 'minimax', label: 'MiniMax TTS',
         configUpdates: { ttsProvider: 'minimax', minimaxKey: key },
         streamKeys: { minimaxKey: key },
-      })
-    } else if (key.startsWith('AKID')) {
-      results.push({
-        service: 'asr', provider: 'tencent', label: '腾讯云 ASR',
-        configUpdates: { tencentSecretId: key },
       })
     } else if (key.startsWith('sk-') && isKeyOnlyMessage(currentText)) {
       // sk- 纯 key 消息：尝试 OpenAI TTS，失败则静默跳过
@@ -222,17 +199,8 @@ export async function tryAutoConfigureKey(text, recentContext = '') {
   let hasTTS = false
   const failErrors = []
 
-  // 并行处理 ASR（无需测试），串行/并行处理 TTS（需要测试）
-  const asrInfos = infos.filter(i => i.service === 'asr')
+  // ASR 使用 macOS 本地识别，无需云端密钥；这里只处理 TTS。
   const ttsInfos = infos.filter(i => i.service === 'tts')
-
-  // ASR：直接配置
-  const asrUpdates = {}
-  for (const info of asrInfos) {
-    Object.assign(asrUpdates, info.configUpdates)
-    anySuccess = true
-  }
-  if (Object.keys(asrUpdates).length > 0) setVoiceConfig(asrUpdates)
 
   // TTS：逐个测试，取第一个成功的作为当前 TTS provider
   for (const info of ttsInfos) {

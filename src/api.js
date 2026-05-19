@@ -12,7 +12,7 @@ import { getQuotaStatus } from './quota.js'
 import { isRunning, stopLoop, startLoop } from './control.js'
 import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
-import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS } from './config.js'
+import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, getVoiceCredentials, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { restartConnector } from './social/index.js'
 // manager.js (Whisper local server) removed
@@ -21,7 +21,8 @@ import { persistAppState } from './capabilities/executor.js'
 import { MinimaxProvider } from './providers/minimax.js'
 import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
-import { createCloudASRSession } from './voice/cloud-asr.js'
+import { createMacSpeechSession } from './voice/macos-speech.js'
+import { createAliyunBailianASRSession } from './voice/aliyun-bailian-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
 import { setDocPanelState, getDocPanelState, DOC_TOPICS } from './docs.js'
@@ -979,7 +980,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return
     }
 
-    // POST /settings/voice — save voice configuration { whisperModel?, aliyunApiKey?, ... }
+    // POST /settings/voice — save ASR provider preferences and optional Aliyun Bailian credentials
     if (req.method === 'POST' && url.pathname === '/settings/voice') {
       const chunks = []
       req.on('data', chunk => chunks.push(chunk))
@@ -1208,48 +1209,99 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     jsonResponse(res, 404, { error: 'not found' })
   })
 
-  // Cloud ASR WebSocket channel: frontend PCM → backend proxy → cloud ASR
-  const cloudWss = new WebSocketServer({ noServer: true })
-  cloudWss.on('connection', (ws) => {
+  // ASR WebSocket channel: provider is selected by /settings/voice.
+  const voiceWss = new WebSocketServer({ noServer: true })
+  voiceWss.on('connection', (ws) => {
     let session = null
     let configured = false
+    let activeProvider = ''
+    let closingByClient = false
+    const pendingAudio = []
+    const MAX_PENDING_AUDIO = 32
 
-    ws.on('message', (raw) => {
+    const sendJson = (payload) => {
+      try {
+        if (ws.readyState === 1) ws.send(JSON.stringify(payload))
+      } catch {}
+    }
+
+    const queueOrSendAudio = (buf) => {
+      if (!buf?.length) return
+      if (session?.sendAudio) {
+        session.sendAudio(buf)
+        return
+      }
+      if (activeProvider === 'aliyun-bailian' && pendingAudio.length < MAX_PENDING_AUDIO) {
+        pendingAudio.push(Buffer.from(buf))
+      }
+    }
+
+    const drainAudio = () => {
+      if (!session?.sendAudio) return
+      while (pendingAudio.length) session.sendAudio(pendingAudio.shift())
+    }
+
+    const startAliyunSession = (voiceCfg, lang) => {
+      if (!voiceCfg.aliyunApiKey) return false
+      activeProvider = 'aliyun-bailian'
+      session = createAliyunBailianASRSession(
+        { ...voiceCfg, lang },
+        (text, isFinal) => sendJson({ type: 'transcript', text, is_final: isFinal, provider: activeProvider }),
+        (errMsg) => sendJson({ type: 'error', message: errMsg, provider: activeProvider }),
+        () => { if (!closingByClient) { session = null; try { ws.close() } catch {} } }
+      )
+      drainAudio()
+      return !!session
+    }
+
+    ws.on('message', (raw, isBinary) => {
       // First frame must be a JSON config frame
       if (!configured) {
         try {
           const msg = JSON.parse(raw.toString())
           if (msg.type !== 'config') return
-          // Read raw credentials from config.json
-          let rawCfg = {}
-          try { rawCfg = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.voice || {} } catch {}
-          session = createCloudASRSession(
-            { provider: msg.provider || 'aliyun', lang: msg.lang || 'zh', ...rawCfg },
+          const voiceCfg = getVoiceCredentials()
+          const provider = msg.provider || voiceCfg.provider || 'macos-local'
+          const lang = msg.lang || voiceCfg.lang || 'zh-CN'
+
+          if (provider === 'aliyun' || provider === 'aliyun-bailian') {
+            if (!startAliyunSession(voiceCfg, lang)) {
+              sendJson({ type: 'error', message: '未配置阿里云百炼 API Key', provider: 'aliyun-bailian' })
+            }
+            configured = true
+            return
+          }
+
+          activeProvider = 'macos-local'
+          const macSession = createMacSpeechSession(
+            { lang, mode: voiceCfg.macosRecognitionMode || 'auto' },
             (text, isFinal) => {
-              try { ws.send(JSON.stringify({ type: 'transcript', text, is_final: isFinal })) } catch {}
+              sendJson({ type: 'transcript', text, is_final: isFinal, provider: activeProvider })
             },
             (errMsg) => {
-              try { ws.send(JSON.stringify({ type: 'error', message: errMsg })) } catch {}
+              sendJson({ type: 'error', message: errMsg, provider: activeProvider })
             },
-            () => { try { ws.close() } catch {} }
+            () => {
+              try { ws.close() } catch {}
+            }
           )
+          if (macSession) session = macSession
           configured = true
         } catch {}
         return
       }
-      // Subsequent frames are PCM binary
-      if (raw instanceof Buffer) {
-        session?.sendAudio(raw)
-      } else {
-        try {
-          const msg = JSON.parse(raw.toString())
-          if (msg.type === 'flush') session?.flush()
-        } catch {}
+      if (isBinary) {
+        queueOrSendAudio(raw)
+        return
       }
+      try {
+        const msg = JSON.parse(raw.toString())
+        if (msg.type === 'flush') session?.flush()
+      } catch {}
     })
 
-    ws.on('close', () => { session?.close(); session = null })
-    ws.on('error', () => { session?.close(); session = null })
+    ws.on('close', () => { closingByClient = true; pendingAudio.length = 0; session?.close(); session = null })
+    ws.on('error', () => { closingByClient = true; pendingAudio.length = 0; session?.close(); session = null })
   })
 
   // ACUI WebSocket channel: bidirectional control + perception
@@ -1332,8 +1384,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         return
       }
       acuiWss.handleUpgrade(req, socket, head, (ws) => acuiWss.emit('connection', ws, req))
-    } else if (url.pathname === '/voice/cloud') {
-      cloudWss.handleUpgrade(req, socket, head, (ws) => cloudWss.emit('connection', ws, req))
+    } else if (url.pathname === '/voice/local' || url.pathname === '/voice/cloud') {
+      voiceWss.handleUpgrade(req, socket, head, (ws) => voiceWss.emit('connection', ws, req))
     } else {
       socket.destroy()
     }

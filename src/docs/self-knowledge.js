@@ -110,7 +110,7 @@ Brain UI 前端通过 WebSocket + REST API 与后端实时通信。`,
   - 接收 LLM 返回的 tool_calls，按名称路由执行
   - 主要能力：
     · send_message：向用户/社交平台发消息
-    · exec_command：在沙箱内执行 PowerShell 命令
+    · exec_command：在沙箱内执行当前系统的 shell 命令（macOS/Linux 为 POSIX shell，Windows 为 PowerShell）
     · ui_show / ui_update / ui_hide：推送 ACUI 可视化卡片
     · music：搜索、下载、播放本地音乐
     · manage_reminder：创建/取消/列出提醒
@@ -165,7 +165,7 @@ Brain UI 前端通过 WebSocket + REST API 与后端实时通信。`,
 ■ ASR（语音转文字）：
   · voice/whisper/ — 本地 Whisper 模型（Python 子进程）
     支持 tiny / base / small / medium 模型
-  · voice/cloud-asr.js — 云端 ASR（阿里云、百度、讯飞）
+  · voice/macos-speech.js — macOS 本地 ASR（Speech.framework）
 
 ■ TTS（文字转语音）：
   · voice/tts-providers.js — 多提供商封装

@@ -317,6 +317,24 @@ let currentText = ''
 let finalText = ''
 let sendTimer = null
 
+function floatTo16kPcm(input, inputSampleRate) {
+  const sourceRate = Number(inputSampleRate) || 16000
+  const targetRate = 16000
+  const ratio = sourceRate / targetRate
+  const outLen = Math.max(1, Math.floor(input.length / ratio))
+  const out = new Int16Array(outLen)
+  for (let i = 0; i < outLen; i++) {
+    const start = Math.floor(i * ratio)
+    const end = Math.min(input.length, Math.floor((i + 1) * ratio))
+    let sum = 0
+    let count = 0
+    for (let j = start; j < end; j++) { sum += input[j]; count++ }
+    const sample = count > 0 ? sum / count : input[Math.min(input.length - 1, start)] || 0
+    out[i] = Math.max(-32768, Math.min(32767, sample * 32768))
+  }
+  return out.buffer
+}
+
 /* ════════════════════════════════
    渲染
    ════════════════════════════════ */
@@ -440,11 +458,7 @@ async function startRecording() {
   scriptProcessor.onaudioprocess = (e) => {
     if (!cloudWs || cloudWs.readyState !== WebSocket.OPEN) return
     const f32 = e.inputBuffer.getChannelData(0)
-    const i16 = new Int16Array(f32.length)
-    for (let i = 0; i < f32.length; i++) {
-      i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768))
-    }
-    cloudWs.send(i16.buffer)
+    cloudWs.send(floatTo16kPcm(f32, audioCtx?.sampleRate || 16000))
   }
 
   cloudWs = new WebSocket(`ws://127.0.0.1:${backendPort}/voice/cloud`)

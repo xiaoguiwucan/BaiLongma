@@ -503,6 +503,7 @@
       if (key.length >= 20) return {
         id: 'aliyun', label: '阿里云百炼',
         primaryField: 'aliyunApiKey',
+        voiceProvider: 'aliyun-bailian',
         extra: []
       }
       return null
@@ -605,6 +606,7 @@
           }
         }
         if (detected.ttsProvider) cfg.ttsProvider = detected.ttsProvider
+        if (detected.voiceProvider) cfg.provider = detected.voiceProvider
         return cfg
       }
 

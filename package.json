@@ -1,7 +1,7 @@
 {
   "name": "bailongma",
   "productName": "Bailongma",
-  "version": "2.1.136",
+  "version": "2.1.139",
   "description": "A continuously running digital consciousness framework",
   "type": "module",
   "main": "electron/main.cjs",
@@ -10,12 +10,17 @@
   },
   "scripts": {
     "start": "electron .",
-    "start:lan": "powershell -ExecutionPolicy Bypass -File scripts/start-lan.ps1 app",
+    "start:lan": "node scripts/start-lan.mjs app",
     "start:backend": "node --env-file=.env src/index.js",
-    "start:backend:lan": "powershell -ExecutionPolicy Bypass -File scripts/start-lan.ps1 backend",
+    "start:backend:lan": "node scripts/start-lan.mjs backend",
     "dev": "node --env-file=.env --watch src/index.js",
-    "build": "powershell -ExecutionPolicy Bypass -File scripts/prebuild-clean.ps1 && electron-rebuild -f -w better-sqlite3 -v 33.4.11 && electron-builder --win",
-    "publish": "electron-builder --win --publish always",
+    "prebuild": "node scripts/prebuild-clean.mjs && node scripts/build-macos-speech.mjs",
+    "build": "npm run build:mac",
+    "build:mac": "npm run prebuild && electron-rebuild -f -w better-sqlite3 -v 33.4.11 && electron-builder --mac",
+    "build:win": "powershell -ExecutionPolicy Bypass -File scripts/prebuild-clean.ps1 && electron-rebuild -f -w better-sqlite3 -v 33.4.11 && electron-builder --win",
+    "publish": "npm run publish:mac",
+    "publish:mac": "electron-builder --mac --publish always",
+    "publish:win": "electron-builder --win --publish always",
     "postinstall": "electron-builder install-app-deps",
     "smoke:tools": "node scripts/smoke-tools.mjs",
     "smoke:brain-ui": "node scripts/smoke-brain-ui.mjs",
@@ -45,7 +50,8 @@
       "**/node_modules/better-sqlite3/**",
       "**/node_modules/playwright/**",
       "**/node_modules/playwright-core/**",
-      "src/voice/**"
+      "src/voice/**",
+      "build/native-speech-recognizer"
     ],
     "files": [
       "electron/**/*",
@@ -60,6 +66,7 @@
       "activation.html",
       "focus-banner.html",
       "build/icon.ico",
+      "build/native-speech-recognizer",
       "sandbox/**/*",
       "music/**/*",
       "package.json",
@@ -83,6 +90,24 @@
           ]
         }
       ]
+    },
+    "mac": {
+      "icon": "build/icon.icns",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "category": "public.app-category.productivity",
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "Bailongma uses the microphone for voice input when you enable voice features.",
+        "NSSpeechRecognitionUsageDescription": "Bailongma may use speech recognition for voice input features."
+      },
+      "target": [
+        "dmg",
+        "zip"
+      ],
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false
+    },
+    "dmg": {
+      "artifactName": "${productName}-${version}-${arch}.${ext}"
     },
     "nsis": {
       "oneClick": false,

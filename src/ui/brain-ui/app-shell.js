@@ -353,44 +353,35 @@ const createSettingsModal = () => `
         <!-- ── 语音 tab ── -->
         <div class="settings-tab" data-tab="voice">
           <div class="settings-section">
-            <div class="settings-section-label">云端模式配置</div>
+            <div class="settings-section-label">语音识别（ASR）</div>
+            <p class="settings-hint">选择语音识别服务。macOS 本地不会上传音频；阿里云百炼会把麦克风音频发送到 DashScope 实时识别服务。</p>
             <div class="settings-row">
-              <label class="settings-label" for="voice-provider-select">服务商</label>
+              <label class="settings-label" for="voice-provider-select">识别方式</label>
               <select class="settings-select" id="voice-provider-select">
-                <option value="aliyun">阿里云百炼（推荐）</option>
-                <option value="tencent">腾讯云 ASR</option>
-                <option value="xunfei">科大讯飞 RTASR</option>
+                <option value="macos-local">macOS 本地</option>
+                <option value="aliyun-bailian">阿里云百炼</option>
               </select>
             </div>
-            <div id="voice-cred-aliyun">
+            <div id="voice-provider-macos">
               <div class="settings-row">
-                <label class="settings-label" for="voice-aliyun-key">阿里云 API Key</label>
-                <input class="settings-input" type="password" id="voice-aliyun-key" placeholder="留空则不修改">
+                <label class="settings-label" for="voice-macos-mode-select">macOS 模式</label>
+                <select class="settings-select" id="voice-macos-mode-select">
+                  <option value="auto">自动（优先离线，不可用则系统识别）</option>
+                  <option value="on-device">强制离线</option>
+                  <option value="online">系统识别</option>
+                </select>
               </div>
             </div>
-            <div id="voice-cred-tencent" style="display:none;">
+            <div id="voice-provider-aliyun" style="display:none;">
               <div class="settings-row">
-                <label class="settings-label" for="voice-tencent-sid">SecretId</label>
-                <input class="settings-input" type="password" id="voice-tencent-sid" placeholder="留空则不修改">
+                <label class="settings-label" for="voice-aliyun-key">百炼 API Key</label>
+                <input class="settings-input" type="password" id="voice-aliyun-key" placeholder="留空则不修改已保存的 Key">
               </div>
               <div class="settings-row">
-                <label class="settings-label" for="voice-tencent-skey">SecretKey</label>
-                <input class="settings-input" type="password" id="voice-tencent-skey" placeholder="留空则不修改">
+                <label class="settings-label" for="voice-aliyun-model">ASR 模型</label>
+                <input class="settings-input" type="text" id="voice-aliyun-model" placeholder="paraformer-realtime-v2">
               </div>
-              <div class="settings-row">
-                <label class="settings-label" for="voice-tencent-appid">AppId</label>
-                <input class="settings-input" type="text" id="voice-tencent-appid" placeholder="腾讯云 AppId">
-              </div>
-            </div>
-            <div id="voice-cred-xunfei" style="display:none;">
-              <div class="settings-row">
-                <label class="settings-label" for="voice-xunfei-appid">AppId</label>
-                <input class="settings-input" type="text" id="voice-xunfei-appid" placeholder="讯飞 AppId">
-              </div>
-              <div class="settings-row">
-                <label class="settings-label" for="voice-xunfei-apikey">ApiKey</label>
-                <input class="settings-input" type="password" id="voice-xunfei-apikey" placeholder="留空则不修改">
-              </div>
+              <p class="settings-hint">百炼实时识别默认使用 paraformer-realtime-v2。切换到此方式后不会启动 macOS Speech。</p>
             </div>
           </div>
 
@@ -399,7 +390,7 @@ const createSettingsModal = () => `
             <div class="settings-row">
               <label class="settings-label" for="voice-lang-select">识别语言</label>
               <select class="settings-select" id="voice-lang-select">
-                <option value="zh-CN">中文（普通话）</option>
+                <option value="zh-CN">中英混合 / 中文优先</option>
                 <option value="en-US">English (US)</option>
               </select>
             </div>

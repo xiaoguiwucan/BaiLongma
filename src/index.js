@@ -6,7 +6,7 @@ import { runInjector, formatMemoriesForPrompt, formatTaskKnowledge, formatPrefet
 import { runMemoryRefreshLoop } from './memory/refresh-loop.js'
 import { startConsolidationLoop } from './memory/consolidation-loop.js'
 import { gatherContext, formatExtraContext } from './context/gatherer.js'
-import { getDB, getConfig, setConfig, getKnownEntities, getOrInitBirthTime, insertConversation, insertMemory, getRecentConversationPartners, getDueReminders, markReminderFired, advanceReminderDueAt, getNextPendingReminder, getMemoryCount, getRecentConversationTimeline } from './db.js'
+import { getDB, getConfig, setConfig, getKnownEntities, getOrInitBirthTime, insertConversation, insertMemory, getRecentConversationPartners, getDueReminders, markReminderFired, advanceReminderDueAt, getNextPendingReminder, getMemoryCount, getRecentConversationTimeline, normalizeConversationPartyId, getDueProactiveOutbox, claimProactiveOutboxItem, markProactiveOutboxSent, markProactiveOutboxFailed } from './db.js'
 import { calculateNextDueAt, autoSpeakForVoiceReply } from './capabilities/executor.js'
 import { popMessage, hasMessages, hasUserMessages, getQueueSnapshot, setInterruptCallback, requeueMessage, pushMessage } from './queue.js'
 import { startTUI } from './tui.js'
@@ -324,7 +324,7 @@ export function buildToolContext({ currentTargetId = null, conversationWindow = 
 
 function buildToolContextForProcess(msg, injection) {
   const base = buildToolContext({
-    currentTargetId: msg?.reminderTargetId || msg?.fromId || null,
+    currentTargetId: msg?.proactiveTargetId || msg?.reminderTargetId || msg?.fromId || null,
     conversationWindow: injection.conversationWindow || [],
     includeRecentPartners: true,
   })
@@ -616,11 +616,48 @@ function enqueueDueReminders() {
   }
 }
 
+function buildProactiveSystemMessage(item) {
+  return [
+    `I am the system. A proactive message outbox item is due.`,
+    `Outbox id: ${item.id}`,
+    `Target user: ${item.target_id}`,
+    `Topic: ${item.topic}`,
+    `Reason: ${item.reason}`,
+    `Priority: ${item.priority}`,
+    item.message_hint ? `Message guidance: ${item.message_hint}` : '',
+    `You may proactively contact this target now. Use send_message with target_id "${item.target_id}". Keep the message concise, explain only what is useful, and do not include private memories from other users or conversations.`,
+  ].filter(Boolean).join('\n')
+}
+
+function enqueueDueProactiveMessages() {
+  const now = new Date().toISOString()
+  const dueItems = getDueProactiveOutbox(now, 10)
+  for (const item of dueItems) {
+    const claimed = claimProactiveOutboxItem(item.id, now)
+    if (!claimed.changes) continue
+    pushMessage('SYSTEM', buildProactiveSystemMessage(item), 'APP_SIGNAL', {
+      proactiveOutboxId: item.id,
+      proactiveTargetId: item.target_id,
+      proactiveTopic: item.topic,
+    })
+    emitEvent('proactive_outbox_claimed', {
+      id: item.id,
+      rule_id: item.rule_id,
+      target_id: item.target_id,
+      topic: item.topic,
+      scheduled_at: item.scheduled_at,
+    })
+  }
+}
+
 // Common LLM failure handler: set rate-limit on 429, requeue message, drop after max retries
 function handleLLMFailure(err, label, msg) {
   console.error('LLM call failed:', err.message)
   if (err.message?.includes('429') || err.status === 429) setRateLimited()
   emitEvent('error', { label, error: err.message })
+  if (msg?.proactiveOutboxId) {
+    markProactiveOutboxFailed(msg.proactiveOutboxId, err.message || 'LLM call failed')
+  }
   if (msg) {
     const nextRetry = (msg.retryCount || 0) + 1
     if (nextRetry <= MAX_MESSAGE_RETRIES) {
@@ -866,7 +903,9 @@ async function process(input, label, msg = null) {
 
     // Memory refresh injection (L1 user messages only)
     let enrichedSystemPrompt = systemPrompt
-    const shouldRefreshL1 = !isTick && msg?.content && msg.content.trim()
+    // Real-time user messages should reach the main reply path immediately.
+    // The refresh loop can run multiple LLM rounds, so keep it off the blocking path for L1.
+    const shouldRefreshL1 = !fastUserPath && !isTick && msg?.content && msg.content.trim()
     const tickSinceLastRefresh = state.tickCounter - state.lastTaskRefreshTick
     const shouldRefreshTick = isTick && !!state.task && tickSinceLastRefresh >= 5
     if (shouldRefreshL1 || shouldRefreshTick) {
@@ -947,6 +986,12 @@ async function process(input, label, msg = null) {
         if (name === 'send_message' && args?.target_id && args?.content) {
           const cleanedContent = trimAssistantFluff(args.content)
           if (!cleanedContent) return
+          if (
+            msg?.proactiveOutboxId &&
+            normalizeConversationPartyId(args.target_id) === normalizeConversationPartyId(msg.proactiveTargetId)
+          ) {
+            markProactiveOutboxSent(msg.proactiveOutboxId)
+          }
           insertConversation({
             role: 'jarvis',
             from_id: 'jarvis',
@@ -997,6 +1042,17 @@ async function process(input, label, msg = null) {
 
   console.log('\nJarvis:', response)
   emitEvent('response', { sessionRef, label, content: response })
+
+  if (msg?.proactiveOutboxId && !toolCallLog.some(t => t.name === 'send_message')) {
+    markProactiveOutboxFailed(msg.proactiveOutboxId, 'LLM did not call send_message for due proactive outbox item')
+    emitEvent('proactive_outbox_failed', {
+      id: msg.proactiveOutboxId,
+      target_id: msg.proactiveTargetId,
+      reason: 'missing_send_message',
+      content: String(response || '').slice(0, 500),
+    })
+    return
+  }
 
   // User messages must not fail silently: if the model generated a response but forgot to call send_message,
   // the runtime delivers it as a fallback; TICK/proactive messages must still go through explicit tool calls.
@@ -1192,6 +1248,7 @@ async function onTick() {
 
   try {
     enqueueDueReminders()
+    enqueueDueProactiveMessages()
     if (hasMessages()) {
       const msg = popMessage()
       const lane = msg.queueName === 'background' ? 'BG' : 'L1'
@@ -1225,6 +1282,7 @@ function scheduleNextTick() {
   if (currentTimer) { clearTimeout(currentTimer); currentTimer = null }
 
   enqueueDueReminders()
+  enqueueDueProactiveMessages()
 
   const hasPending = hasMessages()
   const hasPendingUser = hasUserMessages()
