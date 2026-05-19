@@ -42,6 +42,16 @@ function initSchema() {
   try { db.exec(`ALTER TABLE memories ADD COLUMN links TEXT DEFAULT '[]'`) } catch {}
   try { db.exec(`ALTER TABLE memories ADD COLUMN salience INTEGER DEFAULT 3`) } catch {}
   try { db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_memories_mem_id ON memories(mem_id) WHERE mem_id IS NOT NULL`) } catch {}
+  // 迁移：visibility 软隐藏三件套（动态上下文记忆池：剔除=软隐藏，不硬删除）
+  //   visibility  : 1=可见、0=软隐藏。所有读路径默认 WHERE visibility = 1。
+  //   hidden_at   : 软隐藏时间戳（ISO 8601），便于回溯与第3步专注帧恢复路径。
+  //   merged_into : 因 merge_memories 被隐藏时，记录 keep 的 mem_id，形成可追踪链路。
+  // FTS5 索引不动：所有 SELECT 已 JOIN memories 过滤 visibility=1，无需 trigger 改动。
+  // 已存在行 visibility 默认取 1（向后兼容，无需 backfill）。
+  try { db.exec(`ALTER TABLE memories ADD COLUMN visibility INTEGER NOT NULL DEFAULT 1`) } catch {}
+  try { db.exec(`ALTER TABLE memories ADD COLUMN hidden_at TEXT`) } catch {}
+  try { db.exec(`ALTER TABLE memories ADD COLUMN merged_into TEXT`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_memories_visibility ON memories(visibility)`) } catch {}
   // 迁移：conversations 加 channel 列
   try { db.exec(`ALTER TABLE conversations ADD COLUMN channel TEXT DEFAULT ''`) } catch {}
   // 迁移：conversations 加 external_party_id 列（保留外部渠道原始 ID，供回送投递）
@@ -598,10 +608,34 @@ export function deleteMemoryByMemId(mem_id) {
   return result.changes > 0
 }
 
+// 软隐藏记忆（动态记忆池：剔除 = 看不见，不是删除）。
+// 把行的 visibility 设为 0，hidden_at 落时间戳，mergedInto 可选记录合并去向。
+// 读路径默认 WHERE visibility = 1，所以隐藏后 search / get* 等都自动过滤。
+// 数据仍完整保留：FTS5 索引、embedding、links、parent 链全部不动，
+// 第 3 步专注帧恢复机制可以靠 mem_id 反向 UPDATE visibility=1 复活。
+export function hideMemoryByMemId(memId, { mergedInto = null, hiddenAt = null } = {}) {
+  const db = getDB()
+  if (!memId) throw new Error('hideMemoryByMemId 需要 mem_id')
+  const ts = hiddenAt || new Date().toISOString()
+  const result = db.prepare(`
+    UPDATE memories
+    SET visibility = 0, hidden_at = ?, merged_into = ?
+    WHERE mem_id = ?
+  `).run(ts, mergedInto || null, memId)
+  return result.changes > 0
+}
+
+// 集中点：所有读路径共用的可见性谓词。
+// 写成常量 + 拼接片段，确保改一处所有路径同步变。
+// 注意：memoryExistsByMemId / getMemoryByMemId / mem_id 主键去重 SELECT 故意不用这个常量，
+// 因为它们要看到隐藏行（避免 UNIQUE 冲突，且 merge 工具自己要能取 drops 的当前状态）。
+const VISIBLE_CLAUSE = 'visibility = 1'
+
 // 候选实体：fact/person 记忆数 ≥3 的 entity ID，按出现次数倒序
+// 只统计 visible 行（否则已经被合并隐藏的记忆还会反复让同一 entity 被挑出来）
 export function getCandidateEntitiesForConsolidation(limit = 10) {
   const db = getDB()
-  const rows = db.prepare(`SELECT entities FROM memories WHERE event_type IN ('fact','person')`).all()
+  const rows = db.prepare(`SELECT entities FROM memories WHERE event_type IN ('fact','person') AND ${VISIBLE_CLAUSE}`).all()
   const counts = new Map()
   for (const r of rows) {
     try {
@@ -759,12 +793,13 @@ export function insertMemory(memory) {
   }
 
   // person / object 根节点：按 entity ID upsert，避免重复根节点（旧格式兼容）
+  // 只看 visible 行：被隐藏的根概念上"暂时不在"，允许新写入复活该实体
   if (['person', 'object'].includes(m.event_type) && !m.parent_ref) {
     const firstEntity = (m.entities || [])[0]
     if (firstEntity) {
       const existing = db.prepare(`
         SELECT id FROM memories
-        WHERE event_type = ? AND entities LIKE ? AND parent_id IS NULL
+        WHERE event_type = ? AND entities LIKE ? AND parent_id IS NULL AND ${VISIBLE_CLAUSE}
         LIMIT 1
       `).get(m.event_type, `%${firstEntity}%`)
       if (existing) {
@@ -792,6 +827,7 @@ export function insertMemory(memory) {
   const parentId = m.parent_ref ? resolveParentRef(m.parent_ref) : null
 
   // 工具知识记忆去重：按 tool:标签匹配，同工具只保留最新（旧格式兼容）
+  // 只看 visible：被隐藏的工具知识让位给新记忆
   const memoryTags = m.tags || []
   const toolTag = Array.isArray(memoryTags) ? memoryTags.find(t => t.startsWith('tool:')) : null
   if (toolTag && m.event_type === 'knowledge') {
@@ -800,6 +836,7 @@ export function insertMemory(memory) {
       SELECT id FROM memories
       WHERE event_type = 'knowledge'
       AND tags LIKE ?
+      AND ${VISIBLE_CLAUSE}
       ORDER BY timestamp DESC LIMIT 1
     `).get(`%tool:${toolName}%`)
     if (existing) {
@@ -820,21 +857,23 @@ export function insertMemory(memory) {
   }
 
   // 普通记忆去重：同类型且 content 前40字相同则跳过
+  // 只看 visible：之前被合并隐藏的同义内容，让 LLM 重新插入为新记忆——
+  // 隐藏 ≈ "概念上不再 load-bearing"，如果用户重新提起就该出现，下一轮 consolidator 自然合并
   const contentPrefix = (m.content || '').slice(0, 40)
   const dup = db.prepare(`
-    SELECT id FROM memories WHERE event_type = ? AND content LIKE ? LIMIT 1
+    SELECT id FROM memories WHERE event_type = ? AND content LIKE ? AND ${VISIBLE_CLAUSE} LIMIT 1
   `).get(m.event_type, `${contentPrefix}%`)
   if (dup) {
     console.log(`[DB] 跳过重复记忆：${contentPrefix}…`)
     return null
   }
 
-  // URL 去重：同 URL 当天已有记录则跳过
+  // URL 去重：同 URL 当天已有记录则跳过（同样只看 visible）
   const urlTag = Array.isArray(memoryTags) ? memoryTags.find(t => t.startsWith('url:')) : null
   if (urlTag) {
     const today = new Date().toISOString().slice(0, 10)
     const urlDup = db.prepare(`
-      SELECT id FROM memories WHERE tags LIKE ? AND timestamp LIKE ? LIMIT 1
+      SELECT id FROM memories WHERE tags LIKE ? AND timestamp LIKE ? AND ${VISIBLE_CLAUSE} LIMIT 1
     `).get(`%${urlTag}%`, `${today}%`)
     if (urlDup) {
       console.log(`[DB] 跳过当日重复 URL 记忆：${urlTag}`)
@@ -1043,6 +1082,7 @@ export function getOpinionsByTarget(entityId, limit = 5) {
     SELECT * FROM memories
     WHERE event_type = 'opinion_expressed'
     AND tags LIKE ?
+    AND ${VISIBLE_CLAUSE}
     ORDER BY timestamp DESC
     LIMIT ?
   `).all(`%target:${entityId}%`, limit)
@@ -1055,6 +1095,7 @@ export function getImpressiveBySource(entityId, limit = 5) {
     SELECT * FROM memories
     WHERE event_type = 'impressive_statement'
     AND tags LIKE ?
+    AND ${VISIBLE_CLAUSE}
     ORDER BY timestamp DESC
     LIMIT ?
   `).all(`%from:${entityId}%`, limit)
@@ -1167,6 +1208,7 @@ export function getActiveConstraints() {
   const rows = db.prepare(`
     SELECT * FROM memories
     WHERE event_type = 'behavioral_constraint'
+    AND ${VISIBLE_CLAUSE}
     ORDER BY timestamp DESC
   `).all()
 
@@ -1188,6 +1230,7 @@ export function getTaskKnowledge(limit = 30) {
   return db.prepare(`
     SELECT * FROM memories
     WHERE event_type = 'task_knowledge'
+    AND ${VISIBLE_CLAUSE}
     ORDER BY timestamp DESC
     LIMIT ?
   `).all(limit)
@@ -1200,6 +1243,7 @@ export function getToolMemories(limit = 20) {
     SELECT * FROM memories
     WHERE event_type = 'knowledge'
     AND tags LIKE '%kind:tool_usage%'
+    AND ${VISIBLE_CLAUSE}
     ORDER BY timestamp DESC
     LIMIT ?
   `).all(limit)
@@ -1215,6 +1259,7 @@ export function getPersonMemory(entityId) {
     WHERE event_type IN ('person', 'object')
     AND entities LIKE ?
     AND parent_id IS NULL
+    AND ${VISIBLE_CLAUSE}
     ORDER BY CASE WHEN mem_id = ? THEN 0 ELSE 1 END, timestamp DESC
     LIMIT 1
   `).get(`%${normalizedId}%`, rootMemId || '')
@@ -1233,6 +1278,7 @@ export function getMemoriesByEntity(entityId, limit = 10) {
       OR links LIKE ?
     )
     AND id != ?
+    AND ${VISIBLE_CLAUSE}
     ORDER BY COALESCE(salience, 3) DESC, timestamp DESC
     LIMIT ?
   `).all(`%${normalizedId}%`, root?.id || -1, `%${root?.mem_id || ''}%`, root?.id || -1, limit)
@@ -1434,12 +1480,15 @@ export function getNextPendingReminder() {
 
 // 按关键词搜索记忆（FTS5 全文搜索，优先相关度排序）
 // 注意：trigram tokenizer 需要查询至少 3 字符；< 3 字符（典型如 2 字中文 ngram）走 LIKE fallback。
+// 软隐藏过滤：FTS5 索引保留全量内容，但 JOIN memories 后用 m.visibility=1 过滤；
+// LIKE fallback 直接 WHERE 加 visibility=1。两条路径都不会返回隐藏行。
 export function searchMemories(keyword, limit = 10) {
   const db = getDB()
   const kw = String(keyword || '')
   const likeFallback = () => db.prepare(`
     SELECT * FROM memories
-    WHERE content LIKE ? OR detail LIKE ? OR concepts LIKE ?
+    WHERE (content LIKE ? OR detail LIKE ? OR concepts LIKE ?)
+    AND ${VISIBLE_CLAUSE}
     ORDER BY COALESCE(salience, 3) DESC, timestamp DESC
     LIMIT ?
   `).all(`%${kw}%`, `%${kw}%`, `%${kw}%`, limit)
@@ -1451,7 +1500,7 @@ export function searchMemories(keyword, limit = 10) {
     const hits = db.prepare(`
       SELECT m.* FROM memories m
       JOIN memories_fts ON memories_fts.rowid = m.id
-      WHERE memories_fts MATCH ?
+      WHERE memories_fts MATCH ? AND m.${VISIBLE_CLAUSE}
       ORDER BY bm25(memories_fts), m.timestamp DESC
       LIMIT ?
     `).all(kw, limit)
@@ -1510,7 +1559,8 @@ export function searchByEmbedding(queryBuffer, limit = 20) {
   const db = getDB()
   let rows
   try {
-    rows = db.prepare(`SELECT * FROM memories WHERE embedding IS NOT NULL`).all()
+    // 软隐藏过滤：被隐藏的记忆即使有 embedding 也不参与召回
+    rows = db.prepare(`SELECT * FROM memories WHERE embedding IS NOT NULL AND ${VISIBLE_CLAUSE}`).all()
   } catch {
     // 老库 schema 未迁移 / embedding 列不存在
     return []

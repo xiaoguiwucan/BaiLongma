@@ -676,12 +676,12 @@ To play music, use media_mode with mode=music and src=file_path to show the reco
     type: 'function',
     function: {
       name: 'merge_memories',
-      description: 'Consolidator-only. Merge multiple semantically-duplicate memories into one. The keep memory is updated with merged_content; drop memories are deleted. Entities from dropped memories are union-merged into keep. Salience defaults to max(involved) unless merged_salience is set. Use this when 2+ memories say the same thing in different words, or when an old memory is superseded by a newer fact that subsumes it.',
+      description: 'Consolidator-only. Merge multiple semantically-duplicate memories into one. The keep memory is updated with merged_content; drop memories become hidden (visibility=0, merged_into=keep_mem_id) — NOT deleted. Rows + FTS + embedding fully preserved and still reachable by recovery flows; routine search/get* just stops surfacing them. Entities from hidden memories are union-merged into keep. Salience defaults to max(involved) unless merged_salience is set. Use this when 2+ memories say the same thing in different words, or when an old memory is superseded by a newer fact that subsumes it.',
       parameters: {
         type: 'object',
         properties: {
           keep_mem_id:     { type: 'string', description: 'mem_id of the memory to keep (will be updated).' },
-          drop_mem_ids:    { type: 'array', items: { type: 'string' }, description: 'mem_ids of memories to delete after merging their semantic content into keep.' },
+          drop_mem_ids:    { type: 'array', items: { type: 'string' }, description: 'mem_ids of memories to hide (soft-delete) after merging their semantic content into keep.' },
           merged_content:  { type: 'string', description: 'New content for the keep memory, <=200 Chinese characters, covering everything the dropped memories said that is still true.' },
           merged_salience: { type: 'integer', minimum: 1, maximum: 5, description: 'Optional. Overrides default max(involved) salience.' },
           reason:          { type: 'string', description: 'Short reason for the merge, for logs.' },

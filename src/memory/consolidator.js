@@ -17,7 +17,7 @@ A batch of memories about one entity, each with:
 
 Read the batch. Identify:
 
-1. SEMANTIC DUPLICATES — two or more memories that say the same thing in different words. Pick the best-phrased one as keep, merge the rest into it via merge_memories. merged_content should preserve any unique facts from drops.
+1. SEMANTIC DUPLICATES — two or more memories that say the same thing in different words. Pick the best-phrased one as keep, merge the rest into it via merge_memories. merged_content should preserve any unique facts from drops. Drop memories are NOT deleted: they become hidden (visibility=0, merged_into=keep_mem_id). The row + FTS index + embedding are fully preserved and remain reachable by future recovery flows; routine search/get* simply stops returning them.
 
 2. SUPERSEDED FACTS — an older memory whose claim is strictly contained in a newer, more complete one. Merge the older into the newer.
 

@@ -67,8 +67,10 @@ export async function runBackfill({ batchSize = 20, throttleMs = 100, signal, on
     let rows
     try {
       const db = getDB()
+      // 不给已软隐藏（visibility=0）的记忆补 embedding：节省 API 调用，
+      // 隐藏意味着这条不再参与召回，连 embedding 都不必算。
       rows = db.prepare(
-        `SELECT id, mem_id, title, content FROM memories WHERE embedding IS NULL AND content IS NOT NULL AND TRIM(content) != ''`
+        `SELECT id, mem_id, title, content FROM memories WHERE embedding IS NULL AND content IS NOT NULL AND TRIM(content) != '' AND visibility = 1`
       ).all()
     } catch (err) {
       state.lastError = err.message

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url'
 import { spawn } from 'child_process'
 import { chromium } from 'playwright'
 import { nowTimestamp } from '../time.js'
-import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByMemId, memoryExistsByMemId, getMemoryByMemId, deleteMemoryByMemId, normalizeConversationPartyId, createReminder, findMergeableOneOffReminder, appendReminderTask, listPendingReminders, getReminderById, cancelReminder, upsertPrefetchTask, removePrefetchTask, listPrefetchTasks, insertActionLog, insertConversation, upsertMusicTrack, getMusicTrack, searchMusicLibrary, listMusicLibrary, updateMusicLrc, deleteMusicTrack as dbDeleteMusicTrack, setConfig as dbSetConfig } from '../db.js'
+import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByMemId, memoryExistsByMemId, getMemoryByMemId, deleteMemoryByMemId, hideMemoryByMemId, normalizeConversationPartyId, createReminder, findMergeableOneOffReminder, appendReminderTask, listPendingReminders, getReminderById, cancelReminder, upsertPrefetchTask, removePrefetchTask, listPrefetchTasks, insertActionLog, insertConversation, upsertMusicTrack, getMusicTrack, searchMusicLibrary, listMusicLibrary, updateMusicLrc, deleteMusicTrack as dbDeleteMusicTrack, setConfig as dbSetConfig } from '../db.js'
 import { emitEvent, emitUICommand, emitACUIEvent, hasACUIClient, addActiveUICard, removeActiveUICard, getActiveUICards } from '../events.js'
 import { dispatchSocialMessage } from '../social/dispatch.js'
 import { callCapability, listCapabilities } from '../providers/registry.js'
@@ -2003,7 +2003,10 @@ async function execSkipRecognition({ reason } = {}) {
   return JSON.stringify({ ok: true, skipped: true, reason: reason || '' })
 }
 
-// merge_memories：整合器合并多条语义重复记忆。keep 被更新，drops 被直接 DELETE。
+// merge_memories：整合器合并多条语义重复记忆。
+// keep 被 PATCH 更新；drops 不再硬删除，改为软隐藏（visibility=0, merged_into=keep_mem_id）。
+// 软隐藏的记忆 search/get* 不会再返回，但行、FTS5 索引、embedding 完整保留，
+// 第 3 步专注帧机制可凭 mem_id 复活；merged_into 字段也保证可追踪合并去向。
 async function execMergeMemories(args = {}, context = {}) {
   const { keep_mem_id, drop_mem_ids, merged_content, merged_salience, reason } = args
   if (!keep_mem_id || !Array.isArray(drop_mem_ids) || drop_mem_ids.length === 0 || !merged_content) {
@@ -2039,21 +2042,28 @@ async function execMergeMemories(args = {}, context = {}) {
     salience: finalSalience,
   })
 
-  const deleted = []
+  const hiddenAt = new Date().toISOString()
+  const hidden = []
   for (const d of drops) {
-    if (deleteMemoryByMemId(d.mem_id)) deleted.push(d.mem_id)
+    if (hideMemoryByMemId(d.mem_id, { mergedInto: keep_mem_id, hiddenAt })) {
+      hidden.push(d.mem_id)
+    }
   }
 
-  console.log(`[整合器] merge: keep=${keep_mem_id} dropped=[${deleted.join(',')}] salience=${finalSalience} reason="${reason || ''}"`)
+  console.log(`[整合器] merge: keep=${keep_mem_id} hidden=[${hidden.join(',')}] merged_into=${keep_mem_id} salience=${finalSalience} reason="${reason || ''}"`)
   emitEvent('memory_consolidated', {
     action: 'merge',
     keep_mem_id,
-    dropped: deleted,
+    hidden,
+    // 'dropped' 字段保留作为向后兼容（旧 UI / 日志消费者仍期望此键），
+    // 但语义已从"已删除"变为"已软隐藏"——读者请以 'hidden' 为准。
+    dropped: hidden,
+    merged_into: keep_mem_id,
     salience: finalSalience,
     reason: reason || '',
   })
 
-  return JSON.stringify({ ok: true, action: 'merge', keep_mem_id, dropped: deleted, salience: finalSalience })
+  return JSON.stringify({ ok: true, action: 'merge', keep_mem_id, hidden, dropped: hidden, merged_into: keep_mem_id, salience: finalSalience })
 }
 
 // downgrade_memory：整合器降低记忆的 salience（不删，保留信号）
