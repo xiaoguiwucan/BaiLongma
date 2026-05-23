@@ -202,8 +202,15 @@ function hasNone(tools, names) {
     isTick: true,
     startupSelfCheckActive: true,
   })
-  assert(has(tools, 'complete_startup_self_check'),
-    '11) startupSelfCheckActive → complete_startup_self_check injected')
+  assert(hasAll(tools, [
+    'speak',
+    'complete_startup_self_check',
+    'read_file',
+    'write_file',
+    'web_search',
+    'media_mode',
+    'hotspot_mode',
+  ]), '11) startupSelfCheckActive → full startup self-check tool set injected')
 }
 
 // ====== 12) Exec 触发 ======

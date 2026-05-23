@@ -46,6 +46,14 @@ const REMINDER_TOOLS    = ['manage_reminder']
 const PREFETCH_TOOLS    = ['manage_prefetch_task']
 const TICKER_TOOLS      = ['set_tick_interval']
 const HOTSPOT_TOOLS     = ['hotspot_mode']
+const STARTUP_SELF_CHECK_TOOLS = [
+  'speak',
+  'complete_startup_self_check',
+  ...FILESYSTEM_TOOLS,
+  ...WEB_TOOLS,
+  ...MEDIA_TOOLS,
+  ...HOTSPOT_TOOLS,
+]
 const PERSON_CARD_TOOLS = ['person_card_mode']
 const FOCUS_BANNER_TOOLS = ['focus_banner']
 const ADMIN_TOOLS       = [
@@ -191,8 +199,10 @@ export function selectTools(ctx = {}) {
   // 记忆搜索：跟原行为对齐
   if (senderId || hasRecall || isTick) out.add('search_memory')
 
-  // 启动自检
-  if (startupSelfCheckActive) out.add('complete_startup_self_check')
+  // 启动自检：这条链路是一次性系统检查，指令里明确要求语音播报、文件读写、热点面板和视频模式。
+  if (startupSelfCheckActive) {
+    for (const t of STARTUP_SELF_CHECK_TOOLS) out.add(t)
+  }
 
   // —— 按关键词逐组判断 ——
 
