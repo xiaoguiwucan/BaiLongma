@@ -660,6 +660,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.210</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">固化 GitHub Release 备份规则，并新增小智语音架构借鉴研究报告。</p>
+                <ul class="release-note-points">
+                  <li>明确以后任何版本修改或更新都必须上传 GitHub 并创建 Release。</li>
+                  <li>新增 xiaozhi-esp32 研究报告，整理本地唤醒、AFE、Opus 流式音频、声纹和状态机。</li>
+                  <li>给出白龙马后续落地路线：pre-roll、KWS、声纹升级、流式 TTS 和统一语音状态机。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.209</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
