@@ -15,3 +15,8 @@
 - Verification passed: `npm run smoke:voice-mapping` 25/25.
 - Verification passed: `npm run smoke:voice-events` 26/26.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.233 as `eccc194 feat: make voice event tts speak limits configurable`.
+- Tagged and pushed `v2.1.233` to origin.
+- Created local release assets: `backups/v2.1.233/BaiLongma-v2.1.233-source.tar.gz` and `backups/v2.1.233/BaiLongma-v2.1.233.bundle`.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.233
+- Uploaded release assets via GitHub API: source tarball and git bundle.

@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.233 with configurable `/voice/events` `tts:speak` safety limits. The limits should be readable/writable through TTS settings, reflected in `/voice/events/protocol` and WebSocket hello, used by validation/rate limiting, covered by smoke tests, documented, shown in Brain UI, and backed up to GitHub Release.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -28,11 +28,11 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [ ] Commit changes
-- [ ] Tag and push v2.1.233
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** in_progress
+- [x] Commit changes
+- [x] Tag and push v2.1.233
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
