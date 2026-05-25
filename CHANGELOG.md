@@ -4,6 +4,42 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.228 - 2026-05-26
+
+### 更新内容
+
+- 继续增强 `scripts/smoke-voice-events.mjs`。
+- `npm run smoke:voice-events` 从 11 项检查扩展到 15 项检查。
+- 在 `POST /voice/events/publish` smoke 中补齐 TTS lifecycle 事件：
+  - `tts:start`；
+  - `tts:sentence_start`；
+  - `tts:audio_ready`；
+  - `tts:sentence_end`；
+  - `tts:stop`。
+- 新增断言这些事件能映射为小智式 `tts start / sentence_start / audio_ready / sentence_end / stop`，并保留 `sessionId/index/text/url/reason` 等关键字段。
+
+### 改变原因
+
+- v2.1.227 已覆盖 wake 和 `tts:audio_ready`，但 TTS 完整生命周期还缺 start、sentence_start、sentence_end、stop 的自动保护。
+- 外部设备播放队列依赖这些事件判断一轮 TTS 的开始、每句开始结束和整体停止，需要纳入 smoke。
+
+### 影响范围
+
+- 不改变运行时协议行为。
+- 只增强 smoke 测试覆盖范围。
+
+### 验证结果
+
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-events` 15/15 通过。
+- `node --check scripts/voice-events-client.mjs` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 开发者可运行 `npm run smoke:voice-events` 验证 WebSocket 协议核心映射。
+
 ## v2.1.227 - 2026-05-26
 
 ### 更新内容

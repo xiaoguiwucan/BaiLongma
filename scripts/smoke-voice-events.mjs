@@ -84,7 +84,11 @@ try {
       const events = [
         { type: 'asr:final', seq: 77, at: Date.now(), detail: { text: '烟雾测试' } },
         { type: 'wake:accepted', seq: 78, at: Date.now(), detail: { text: '小白龙', word: '小白龙' } },
-        { type: 'tts:audio_ready', seq: 79, at: Date.now(), detail: { sessionId: 'tts_smoke', index: 0, text: '你好', url: '/tts/session/tts_smoke/audio/0', contentType: 'audio/mpeg' } },
+        { type: 'tts:start', seq: 79, at: Date.now(), detail: { sessionId: 'tts_smoke', segmentCount: 1 } },
+        { type: 'tts:sentence_start', seq: 80, at: Date.now(), detail: { sessionId: 'tts_smoke', index: 0, text: '你好' } },
+        { type: 'tts:audio_ready', seq: 81, at: Date.now(), detail: { sessionId: 'tts_smoke', index: 0, text: '你好', url: '/tts/session/tts_smoke/audio/0', contentType: 'audio/mpeg' } },
+        { type: 'tts:sentence_end', seq: 82, at: Date.now(), detail: { sessionId: 'tts_smoke', index: 0, text: '你好' } },
+        { type: 'tts:stop', seq: 83, at: Date.now(), detail: { reason: 'completed' } },
       ]
       for (const event of events) {
         await fetch(`${API}/voice/events/publish`, {
@@ -97,13 +101,21 @@ try {
     until: (msg, messages) => messages.some(item => item.type === 'voice_event' && item.event?.type === 'asr:final')
       && messages.some(item => item.type === 'stt' && item.state === 'final' && item.text === '烟雾测试')
       && messages.some(item => item.type === 'wake' && item.state === 'accepted' && item.word === '小白龙')
-      && messages.some(item => item.type === 'tts' && item.state === 'audio_ready' && item.sessionId === 'tts_smoke' && item.url === '/tts/session/tts_smoke/audio/0'),
+      && messages.some(item => item.type === 'tts' && item.state === 'start' && item.sessionId === 'tts_smoke' && item.segmentCount === 1)
+      && messages.some(item => item.type === 'tts' && item.state === 'sentence_start' && item.sessionId === 'tts_smoke' && item.index === 0 && item.text === '你好')
+      && messages.some(item => item.type === 'tts' && item.state === 'audio_ready' && item.sessionId === 'tts_smoke' && item.url === '/tts/session/tts_smoke/audio/0')
+      && messages.some(item => item.type === 'tts' && item.state === 'sentence_end' && item.sessionId === 'tts_smoke' && item.index === 0 && item.text === '你好')
+      && messages.some(item => item.type === 'tts' && item.state === 'stop' && item.reason === 'completed'),
   })
   const publishMessages = await publishMessagesPromise
   assert(publishMessages.some(msg => msg.type === 'voice_event' && msg.event?.type === 'asr:final'), 'publish broadcasts raw voice_event', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'stt' && msg.state === 'final' && msg.text === '烟雾测试'), 'publish maps asr:final to Xiaozhi-style stt final', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'wake' && msg.state === 'accepted' && msg.word === '小白龙'), 'publish maps wake:accepted to Xiaozhi-style wake accepted', JSON.stringify(publishMessages))
+  assert(publishMessages.some(msg => msg.type === 'tts' && msg.state === 'start' && msg.sessionId === 'tts_smoke' && msg.segmentCount === 1), 'publish maps tts:start to Xiaozhi-style tts start', JSON.stringify(publishMessages))
+  assert(publishMessages.some(msg => msg.type === 'tts' && msg.state === 'sentence_start' && msg.sessionId === 'tts_smoke' && msg.index === 0 && msg.text === '你好'), 'publish maps tts:sentence_start to Xiaozhi-style sentence_start', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'tts' && msg.state === 'audio_ready' && msg.sessionId === 'tts_smoke' && msg.url === '/tts/session/tts_smoke/audio/0'), 'publish maps tts:audio_ready to Xiaozhi-style audio_ready', JSON.stringify(publishMessages))
+  assert(publishMessages.some(msg => msg.type === 'tts' && msg.state === 'sentence_end' && msg.sessionId === 'tts_smoke' && msg.index === 0 && msg.text === '你好'), 'publish maps tts:sentence_end to Xiaozhi-style sentence_end', JSON.stringify(publishMessages))
+  assert(publishMessages.some(msg => msg.type === 'tts' && msg.state === 'stop' && msg.reason === 'completed'), 'publish maps tts:stop to Xiaozhi-style tts stop', JSON.stringify(publishMessages))
 
   await new Promise(resolve => setTimeout(resolve, 50))
   const statusAfter = await fetch(`${API}/voice/events/status`).then(r => r.json())

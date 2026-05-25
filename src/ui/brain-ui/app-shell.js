@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.228</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">继续增强语音协议 smoke，覆盖完整 TTS lifecycle 映射。</p>
+                <ul class="release-note-points">
+                  <li>smoke:voice-events 从 11 项扩展到 15 项检查。</li>
+                  <li>新增 tts:start、tts:sentence_start、tts:sentence_end、tts:stop 映射断言。</li>
+                  <li>保护外部设备播放队列依赖的 TTS 生命周期事件。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.227</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
