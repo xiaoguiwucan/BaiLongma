@@ -11,3 +11,8 @@
 - Bumped package version to 2.1.213.
 - Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.213.
 - Verification: Python compile, JS syntax checks, and `npm run smoke:tools` passed.
+
+- Committed v2.1.213 as `7e6ee1a feat: improve voiceprint enrollment stability`.
+- Tagged and pushed `v2.1.213` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.213
+- Uploaded release assets: source tarball and Git bundle under `backups/v2.1.213/`.

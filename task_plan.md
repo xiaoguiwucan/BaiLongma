@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.213 with more stable local voiceprint recognition: multi-sample enrollment, enrollment quality/calibration feedback, speaker self-test, settings UI, docs, GitHub backup, and Release assets.
 
 ## Current Phase
-Phase 4
+Complete
 
 ## Phases
 
@@ -27,8 +27,8 @@ Phase 4
 ### Phase 4: Version, Docs, Release
 - [x] Bump version to 2.1.213
 - [x] Update README / CHANGELOG / BACKUP / in-app release notes
-- [ ] Commit, tag, push, create GitHub Release with source/bundle assets
-- **Status:** in_progress
+- [x] Commit, tag, push, create GitHub Release with source/bundle assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
