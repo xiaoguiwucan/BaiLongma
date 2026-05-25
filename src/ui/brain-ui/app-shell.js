@@ -738,6 +738,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.234</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">为 /voice/events 增加可选 token 鉴权元数据和 WebSocket 访问检查。</p>
+                <ul class="release-note-points">
+                  <li>WebSocket upgrade 复用现有 BAILONGMA_API_TOKEN / ?token= 机制。</li>
+                  <li>/voice/events/protocol 和 hello 新增 auth 元数据，不泄露 token。</li>
+                  <li>smoke:voice-mapping 增至 27 项，smoke:voice-events 增至 29 项。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.233</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

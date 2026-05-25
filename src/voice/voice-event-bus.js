@@ -20,7 +20,7 @@ export const VOICE_EVENTS_PROTOCOL_STATES = Object.freeze({
   interrupt: ['interrupt'],
 })
 
-export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits } = {}) {
+export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {}) {
   const activeTTSSpeakLimits = normalizeVoiceEventsTTSSpeakLimits(ttsSpeakLimits)
   return {
     service: 'bailongma.voice.events',
@@ -31,6 +31,13 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits } = {}) {
       status: '/voice/events/status',
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
+    },
+    auth: {
+      requiredForRemote: Boolean(auth.requiredForRemote ?? auth.tokenConfigured ?? false),
+      tokenConfigured: Boolean(auth.tokenConfigured || false),
+      methods: ['Authorization: Bearer <token>', '?token=<token>'],
+      envVar: 'BAILONGMA_API_TOKEN',
+      localhostExempt: true,
     },
     clientMessages: ['ping', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
     errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text', 'text_too_long', 'rate_limited'],
@@ -130,11 +137,11 @@ export function validateVoiceEventClientMessage(msg, { limits = VOICE_EVENTS_TTS
   return { ok: true, type, requestId }
 }
 
-export function addVoiceEventClient(ws, { ttsSpeakLimits } = {}) {
+export function addVoiceEventClient(ws, { ttsSpeakLimits, auth } = {}) {
   clients.add(ws)
   clientOptions.set(ws, { audio: false, binaryAudio: false })
   ws.voiceEventsTTSSpeakLimits = normalizeVoiceEventsTTSSpeakLimits(ttsSpeakLimits)
-  safeSend(ws, { type: 'hello', ...getVoiceEventsProtocolMetadata({ ttsSpeakLimits: ws.voiceEventsTTSSpeakLimits }), history: history.slice(-20) })
+  safeSend(ws, { type: 'hello', ...getVoiceEventsProtocolMetadata({ ttsSpeakLimits: ws.voiceEventsTTSSpeakLimits, auth }), history: history.slice(-20) })
 }
 
 export function removeVoiceEventClient(ws) {

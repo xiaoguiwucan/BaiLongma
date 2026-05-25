@@ -1,21 +1,24 @@
-# Findings: v2.1.233 Configurable Voice Event TTS Speak Limits
+# Findings: v2.1.234 Voice Events Optional Token Authentication
 
 ## Current baseline
-- v2.1.232 added fixed `tts:speak` limits: 800 chars and 1200ms per WebSocket connection.
-- `/settings/tts` already exists and is used by Brain UI for TTS provider, voice, and credentials.
-- `/voice/events/protocol` and WebSocket hello currently use fixed protocol metadata from `voice-event-bus.js`.
-- Validation and cooldown currently read fixed `VOICE_EVENTS_TTS_SPEAK_LIMITS`.
+- v2.1.233 made `tts:speak` limits configurable.
+- HTTP paths already use `hasAllowedAccess(req, url)` / `requireLocalOrToken(req, res, url)`.
+- `/acui` WebSocket upgrade checks origin and allowed access.
+- `/voice/events` WebSocket upgrade currently calls `handleUpgrade` directly without origin/access checks.
 
 ## Design finding
-- Users may need a shorter limit for hardware buttons or a longer limit for desktop debugging.
-- The external client should not need separate docs to know active limits; `/voice/events/protocol` and hello should report the configured values.
-- A settings-backed override must preserve safe defaults and clamp values.
+- `/voice/events` is increasingly capable: it can receive `tts:speak`, stream audio, expose protocol metadata, and receive client commands.
+- Before recommending LAN/external clients, the WebSocket should have the same access posture as `/acui`.
+- Existing `BAILONGMA_API_TOKEN` supports Authorization Bearer and `?token=` query parameter via `hasValidAuthToken`.
+- Protocol metadata should say whether auth is configured and which methods are accepted, without exposing the token.
 
-## Chosen config keys
-- `voiceEventsTtsSpeakMaxTextChars`: default 800, clamp 40-3000.
-- `voiceEventsTtsSpeakCooldownMs`: default 1200, clamp 0-10000.
+## Auth behavior
+- Loopback clients remain allowed without token.
+- LAN/private clients are allowed if `BAILONGMA_ALLOW_LAN=true`, matching existing helper behavior.
+- If `BAILONGMA_API_TOKEN` is set, clients can pass `Authorization: Bearer <token>` or `?token=<token>`.
+- Origin must be loopback or private LAN origin when LAN is enabled.
 
 ## Remaining future direction
+- Add per-device pairing tokens.
 - Add global/IP-level rate limiting.
-- Add authentication/pairing for LAN devices.
-- Move voice protocol settings to a dedicated external-device settings panel if the list grows.
+- Add UI helper to generate/copy token and LAN connection URL.

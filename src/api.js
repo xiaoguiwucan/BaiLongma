@@ -143,6 +143,13 @@ function hasAllowedAccess(req, url) {
   return isLoopbackRequest(req) || hasValidAuthToken(req, url) || isLanRequest(req)
 }
 
+function getVoiceEventsAuthMetadata() {
+  return {
+    tokenConfigured: Boolean(getAuthToken()),
+    requiredForRemote: Boolean(getAuthToken()),
+  }
+}
+
 function isSensitivePath(pathname) {
   return pathname === '/activate'
     || pathname === '/settings'
@@ -1093,7 +1100,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /voice/events/protocol — current voice event protocol metadata
     if (req.method === 'GET' && url.pathname === '/voice/events/protocol') {
-      jsonResponse(res, 200, { ok: true, ...getVoiceEventsProtocolMetadata({ ttsSpeakLimits: getConfiguredVoiceEventsTTSSpeakLimits() }) })
+      jsonResponse(res, 200, { ok: true, ...getVoiceEventsProtocolMetadata({ ttsSpeakLimits: getConfiguredVoiceEventsTTSSpeakLimits(), auth: getVoiceEventsAuthMetadata() }) })
       return
     }
 
@@ -1614,7 +1621,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
   // Experimental voice event WebSocket channel: JSON lifecycle events and opt-in TTS audio for external clients
   const voiceEventWss = new WebSocketServer({ noServer: true })
   voiceEventWss.on('connection', (ws) => {
-    addVoiceEventClient(ws, { ttsSpeakLimits: getConfiguredVoiceEventsTTSSpeakLimits() })
+    addVoiceEventClient(ws, { ttsSpeakLimits: getConfiguredVoiceEventsTTSSpeakLimits(), auth: getVoiceEventsAuthMetadata() })
     const cleanupVoiceClient = () => {
       cancelVoiceEventTTSSpeak(ws, 'client_disconnected')
       removeVoiceEventClient(ws)
@@ -1741,6 +1748,17 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       }
       acuiWss.handleUpgrade(req, socket, head, (ws) => acuiWss.emit('connection', ws, req))
     } else if (url.pathname === '/voice/events') {
+      const origin = req.headers.origin
+      if (origin && !isAllowedOrigin(origin)) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
+        socket.destroy()
+        return
+      }
+      if (!hasAllowedAccess(req, url)) {
+        socket.write('HTTP/1.1 403 Forbidden\r\n\r\n')
+        socket.destroy()
+        return
+      }
       voiceEventWss.handleUpgrade(req, socket, head, (ws) => voiceEventWss.emit('connection', ws, req))
     } else if (url.pathname === '/voice/cloud') {
       cloudWss.handleUpgrade(req, socket, head, (ws) => cloudWss.emit('connection', ws, req))

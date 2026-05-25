@@ -45,6 +45,28 @@ function connectAndCollect({ onOpen, until, timeout = 2500 } = {}) {
   })
 }
 
+function connectAndCollectUrl(url, { onOpen, until, timeout = 2500 } = {}) {
+  return new Promise((resolve, reject) => {
+    const ws = new WebSocket(url)
+    const messages = []
+    const timer = setTimeout(() => {
+      try { ws.close() } catch {}
+      reject(new Error(`timeout waiting for ${until || 'messages'}`))
+    }, timeout)
+    ws.on('open', () => onOpen?.(ws))
+    ws.on('message', (data, isBinary) => {
+      const item = isBinary ? { binary: true, bytes: data.length } : JSON.parse(data.toString())
+      messages.push(item)
+      if (until?.(item, messages, ws)) {
+        clearTimeout(timer)
+        try { ws.close() } catch {}
+        ws.once('close', () => resolve(messages))
+      }
+    })
+    ws.on('error', err => { clearTimeout(timer); reject(err) })
+  })
+}
+
 const server = startAPI(PORT, { getStateSnapshot: () => ({}) })
 try {
   await waitForServer(server)
@@ -56,6 +78,7 @@ try {
   assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
   assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
   assert(protocolMeta.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocolMeta.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol endpoint exposes tts speak limits', JSON.stringify(protocolMeta.limits))
+  assert(protocolMeta.auth?.localhostExempt === true && protocolMeta.auth?.methods?.includes('?token=<token>'), 'protocol endpoint exposes auth metadata', JSON.stringify(protocolMeta.auth))
 
   await fetch(`${API}/settings/tts`, {
     method: 'POST',
@@ -74,6 +97,12 @@ try {
   assert(hello?.service === 'bailongma.voice.events', 'websocket sends hello service', JSON.stringify(hello))
   assert(hello?.version >= 3 && hello?.capabilities?.includes('tts_speak'), 'hello advertises v3 tts_speak capability', JSON.stringify(hello))
   assert(hello?.limits?.ttsSpeak?.maxTextChars === 120 && hello?.limits?.ttsSpeak?.cooldownMs === 250, 'hello reflects configured tts speak limits', JSON.stringify(hello?.limits))
+  assert(hello?.auth?.localhostExempt === true && Array.isArray(hello?.auth?.methods), 'hello advertises auth metadata', JSON.stringify(hello?.auth))
+
+  const tokenMessages = await connectAndCollectUrl(`${WS}?token=smoke-token`, {
+    until: msg => msg.type === 'hello',
+  })
+  assert(tokenMessages.some(msg => msg.type === 'hello' && msg.auth?.methods?.includes('?token=<token>')), 'websocket accepts query token and sends auth metadata')
 
   const pingMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'ping' })),

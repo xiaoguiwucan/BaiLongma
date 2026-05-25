@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.233 更新：tts:speak 限制可配置）
+版本：v3（BaiLongma v2.1.234 更新：/voice/events 可选 token 鉴权）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -26,6 +26,26 @@ GET http://127.0.0.1:3721/voice/events/protocol
 
 如果白龙马运行在局域网 Mac 上，客户端需要把 `127.0.0.1` 替换为 Mac 的局域网 IP，并自行确认端口暴露和安全策略。
 
+
+## 1.1 访问控制与 token
+
+本机 localhost / Electron 默认可直接访问。外部设备或 LAN 客户端建议设置环境变量：
+
+```bash
+export BAILONGMA_API_TOKEN="换成强随机token"
+export BAILONGMA_ALLOW_LAN=true
+npm start
+```
+
+客户端可用两种方式传 token：
+
+```text
+Authorization: Bearer <token>
+ws://<mac-ip>:3721/voice/events?token=<token>
+```
+
+`/voice/events/protocol` 和 WebSocket hello 会返回 `auth` 元数据，说明是否已配置 token、是否远端建议鉴权、支持哪些传 token 方法。服务端不会返回 token 明文。
+
 ## 2. Hello
 
 连接成功后服务端发送：
@@ -37,6 +57,13 @@ GET http://127.0.0.1:3721/voice/events/protocol
   "version": 3,
   "capabilities": ["json_events", "tts_audio_chunks", "tts_speak", "protocol_errors", "tts_speak_limits"],
   "limits": { "ttsSpeak": { "maxTextChars": 800, "cooldownMs": 1200 } },
+  "auth": {
+    "requiredForRemote": true,
+    "tokenConfigured": true,
+    "methods": ["Authorization: Bearer <token>", "?token=<token>"],
+    "envVar": "BAILONGMA_API_TOKEN",
+    "localhostExempt": true
+  },
   "history": []
 }
 ```
@@ -48,6 +75,7 @@ GET http://127.0.0.1:3721/voice/events/protocol
 | `version` | 当前协议版本。v3 支持 JSON 事件、TTS 音频块、直接 `tts:speak`。 |
 | `capabilities` | 能力声明。客户端应按能力判断是否启用 speak/audio/protocol_error/tts_speak_limits 处理。 |
 | `limits.ttsSpeak` | `tts:speak` 文本长度和发送冷却限制。 |
+| `auth` | 鉴权元数据，说明 token 是否配置、远端是否建议鉴权、支持的传 token 方法。 |
 | `history` | 最近事件历史，方便调试客户端连上后看到上下文。 |
 
 ## 3. 心跳
@@ -397,4 +425,5 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 - 当前协议未做鉴权，局域网暴露时请自行控制访问范围。
 - 当前 `tts:cancel` 只取消同连接 active speak，不支持跨连接 session 管理。
 - 当前调试客户端是参考实现，不是正式 SDK。
-- 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本和单连接 speak 冷却；文本长度和冷却可配置，但还没有鉴权或全局/IP 级限流。
+- 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本和单连接 speak 冷却；文本长度和冷却可配置。
+- `/voice/events` 已支持复用 `BAILONGMA_API_TOKEN` 的可选 token 鉴权，但还没有每设备配对或全局/IP 级限流。

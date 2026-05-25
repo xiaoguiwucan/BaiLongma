@@ -1,45 +1,45 @@
-# Task Plan: v2.1.233 Configurable Voice Event TTS Speak Limits
+# Task Plan: v2.1.234 Voice Events Optional Token Authentication
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.233 with configurable `/voice/events` `tts:speak` safety limits. The limits should be readable/writable through TTS settings, reflected in `/voice/events/protocol` and WebSocket hello, used by validation/rate limiting, covered by smoke tests, documented, shown in Brain UI, and backed up to GitHub Release.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.234 with optional token authentication metadata and enforcement for `/voice/events`, so LAN/external clients can use the existing `BAILONGMA_API_TOKEN` mechanism instead of leaving the voice WebSocket unauthenticated.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Confirm v2.1.232 clean baseline and release state
-- [x] Inspect TTS config API/UI and voice event limit usage
-- [x] Identify fixed constants need settings-backed overrides
+- [x] Confirm v2.1.233 clean baseline and release state
+- [x] Inspect API access helpers and WebSocket upgrade handling
+- [x] Identify `/voice/events` upgrade lacks the same access guard as `/acui`
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add TTS config fields for `voiceEventsTtsSpeakMaxTextChars` and `voiceEventsTtsSpeakCooldownMs`
-- [x] Allow protocol metadata and validation to receive active limits
-- [x] Use configured limits in `/voice/events/protocol`, WebSocket hello, validation, and cooldown
-- [x] Add settings UI inputs and save/load wiring
+- [x] Add auth metadata to voice events protocol response and hello
+- [x] Enforce origin/access checks for `/voice/events` WebSocket upgrade
+- [x] Reuse existing `BAILONGMA_API_TOKEN` Bearer/query token behavior
+- [x] Keep localhost developer usage working without token
 - **Status:** complete
 
 ### Phase 3: Tests, docs, UI notes
-- [x] Extend smoke tests for configurable limits
-- [x] Bump version to 2.1.233 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
+- [x] Extend smoke tests for auth metadata and query-token WebSocket connection
+- [x] Bump version to 2.1.234 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
 - [x] Run syntax checks and smoke tests
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [x] Commit changes
-- [x] Tag and push v2.1.233
-- [x] Create source tarball and git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag and push v2.1.234
+- [ ] Create source tarball and git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** in_progress
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Store limits under TTS config | These limits protect TTS speak behavior and belong with TTS service settings |
-| Keep defaults 800 / 1200ms | Preserve v2.1.232 behavior for users who do not configure anything |
-| Clamp values | Prevent unusable or unsafe settings from UI/API mistakes |
+| Reuse `BAILONGMA_API_TOKEN` | Avoids inventing another token mechanism and aligns HTTP settings/admin security behavior |
+| Allow localhost without token | Keeps local Electron/dev workflow unchanged |
+| Advertise auth metadata without exposing token | Clients need to know how to authenticate, but never receive the secret itself |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

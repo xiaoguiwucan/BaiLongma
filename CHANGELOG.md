@@ -4,6 +4,57 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.234 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` WebSocket upgrade 增加与 `/acui` 一致的 origin/access 检查。
+- 复用现有 `BAILONGMA_API_TOKEN` 鉴权机制：
+  - `Authorization: Bearer <token>`；
+  - `?token=<token>`。
+- localhost / Electron 本机访问保持免 token，开发体验不变。
+- `/voice/events/protocol` 新增 `auth` 元数据：
+  - `tokenConfigured`；
+  - `requiredForRemote`；
+  - `methods`；
+  - `envVar`；
+  - `localhostExempt`。
+- WebSocket hello 同步携带 `auth` 元数据，外部客户端连上后也能知道当前鉴权方式。
+- `scripts/smoke-voice-mapping.mjs` 从 25 项扩展到 27 项，覆盖 auth metadata。
+- `scripts/smoke-voice-events.mjs` 从 26 项扩展到 29 项，覆盖 protocol auth metadata、hello auth metadata、query token WebSocket 连接。
+
+### 改变原因
+
+- `/voice/events` 已经具备外部客户端发起 `tts:speak`、订阅音频块、接收生命周期事件的能力，继续开放给 LAN/设备前需要补齐基础访问保护。
+- 项目已有 `BAILONGMA_API_TOKEN`，直接复用可以避免新增一套 token 配置。
+- 协议元数据需要告诉客户端如何鉴权，但不能泄露 token 本身。
+
+### 影响范围
+
+- 本机 localhost 连接不受影响。
+- LAN/private 地址仍遵循 `BAILONGMA_ALLOW_LAN` 现有策略。
+- 设置了 `BAILONGMA_API_TOKEN` 后，远端客户端可用 Bearer header 或 query token 连接。
+- Origin 不允许时会在 WebSocket upgrade 阶段返回 403。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 27/27 通过。
+- `npm run smoke:voice-events` 29/29 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 如果要让外部设备接入，建议设置：
+  - `BAILONGMA_API_TOKEN=<强随机token>`；
+  - 需要 LAN 时再设置 `BAILONGMA_ALLOW_LAN=true`。
+- 外部客户端连接示例：`ws://<mac-ip>:3721/voice/events?token=<token>`。
+- 不要把 token 写进公开仓库或截图。
+
 ## v2.1.233 - 2026-05-26
 
 ### 更新内容
