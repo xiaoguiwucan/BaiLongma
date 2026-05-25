@@ -11,3 +11,7 @@
 
 - Verification passed: `node --check src/voice/voice-event-bus.js`, `node --check src/api.js`, and `node --check src/ui/brain-ui/app-shell.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.221 as `dfabe42 feat: add websocket tts speak`.
+- Tagged and pushed `v2.1.221` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.221
+- Uploaded release assets: `backups/v2.1.221/BaiLongma-v2.1.221-source.tar.gz` and `backups/v2.1.221/BaiLongma-v2.1.221.bundle`.
