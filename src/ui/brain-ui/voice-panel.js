@@ -1,3 +1,5 @@
+import { createVoiceStateMachine, VOICE_STATES } from '../../voice/voice-state-machine.js';
+
 // 声波点云球 + ASR 语音输入面板
 // 默认本地 Whisper；也可切换云端 ASR（阿里云/腾讯云/讯飞），通过后端 WebSocket 代理
 //
@@ -130,6 +132,9 @@ export function initVoicePanel({
     scale = Math.min(W, H) * 0.34;
   }
 
+  const voiceMachine = createVoiceStateMachine();
+  window.bailongmaVoiceState = voiceMachine;
+
   // ─── 渲染状态 ───
   let sk = 'idle';
   let animState = {
@@ -141,14 +146,18 @@ export function initVoicePanel({
   let eventFlashCount = 0;
   let doneTimer = null;
 
-  function setStatus(newSk) { sk = newSk; }
+  function setStatus(newSk, meta = {}) {
+    const snap = voiceMachine.transition(newSk, meta);
+    sk = snap.state;
+  }
+
 
   function triggerDone() {
-    setStatus('done');
+    setStatus(VOICE_STATES.DONE, { reason: 'final transcript accepted' });
     if (doneTimer) clearTimeout(doneTimer);
     doneTimer = setTimeout(() => {
       doneTimer = null;
-      if (sk === 'done') setStatus(micActive ? 'listening' : 'idle');
+      if (sk === VOICE_STATES.DONE) setStatus(micActive ? VOICE_STATES.LISTENING : VOICE_STATES.IDLE, { reason: 'done timeout' });
     }, 2000);
   }
 
@@ -251,19 +260,19 @@ export function initVoicePanel({
         s.amp = lerp(s.amp, 0.08 + vol * 1.2, 0.4);
         s.spd = lerp(s.spd, 1.0 + vol * 5.0, 0.2);
         // speaking 状态下用户开口 → 视觉反馈但不覆盖状态（等 barge-in 触发后自然切换）
-        if (sk !== 'recognizing' && sk !== 'event' && sk !== 'speaking')
-          setStatus(vol > 0.15 ? 'recognizing' : 'listening');
-        else if (sk === 'speaking' && vol > BARGEIN_THRESHOLD)
-          setStatus('recognizing');
-      } else if (sk !== 'idle' && sk !== 'event' && sk !== 'processing' && sk !== 'done' && sk !== 'speaking') {
-        setStatus('idle');
+        if (sk !== VOICE_STATES.RECOGNIZING && sk !== VOICE_STATES.EVENT && sk !== VOICE_STATES.SPEAKING)
+          setStatus(vol > 0.15 ? VOICE_STATES.RECORDING : VOICE_STATES.LISTENING, { reason: 'microphone volume activity', volume: Number(vol.toFixed(4)) });
+        else if (sk === VOICE_STATES.SPEAKING && vol > BARGEIN_THRESHOLD)
+          setStatus(VOICE_STATES.INTERRUPTED, { reason: 'possible barge-in', volume: Number(vol.toFixed(4)) });
+      } else if (sk !== VOICE_STATES.IDLE && sk !== VOICE_STATES.EVENT && sk !== VOICE_STATES.THINKING && sk !== VOICE_STATES.DONE && sk !== VOICE_STATES.SPEAKING) {
+        setStatus(VOICE_STATES.IDLE, { reason: 'microphone silence' });
       }
     }
 
     // 声音事件闪烁效果自动恢复
-    if (sk === 'event') {
+    if (sk === VOICE_STATES.EVENT) {
       eventFlashCount--;
-      if (eventFlashCount <= 0) setStatus(micActive ? 'listening' : 'idle');
+      if (eventFlashCount <= 0) setStatus(micActive ? VOICE_STATES.LISTENING : VOICE_STATES.IDLE, { reason: 'sound event flash end' });
     }
 
     s.t    += 0.016 * s.spd;
@@ -376,7 +385,7 @@ export function initVoicePanel({
       return stream;
     } catch (e) {
       // 权限拒绝时球体变红，不在 transcript 显示文字
-      setStatus('error');
+      setStatus(VOICE_STATES.ERROR, { reason: 'microphone permission denied' });
       return null;
     }
   }
@@ -393,7 +402,7 @@ export function initVoicePanel({
       lastTranscriptText = '';
       accumulatedText = '';
       if (transcript) transcript.textContent = '';
-      setStatus('listening');
+      setStatus(VOICE_STATES.LISTENING, { reason: 'filtered hallucination' });
       return;
     }
     const input = getChatInput?.();
@@ -463,7 +472,7 @@ export function initVoicePanel({
     if (autoSendTimer) clearTimeout(autoSendTimer);
     autoSendTimer = setTimeout(() => {
       autoSendTimer = null;
-      setStatus('processing');
+      setStatus(VOICE_STATES.THINKING, { reason: 'auto send recognized text' });
       sendRecognizedVoiceText();
     }, 2000);
   }
@@ -492,7 +501,7 @@ export function initVoicePanel({
   async function createRecognitionWs() {
     const provider = getAsrProvider();
     if (provider === 'local') {
-      setStatus('recognizing');
+      setStatus(VOICE_STATES.RECOGNIZING, { reason: 'starting local asr' });
       if (transcript) transcript.textContent = '正在启动本地语音模型…';
       await ensureLocalAsrServer();
       return { ws: new WebSocket(LOCAL_WS_URL), provider };
@@ -518,7 +527,7 @@ export function initVoicePanel({
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'config_ok') {
-        setStatus('listening');
+        setStatus(VOICE_STATES.LISTENING, { reason: 'recognition config ok' });
         if (transcript && transcript.textContent === '正在启动本地语音模型…') transcript.textContent = '';
         return;
       }
@@ -532,7 +541,7 @@ export function initVoicePanel({
           if (!gated.accepted) {
             if (gated.wokeOnly) {
               if (transcript) transcript.textContent = '已唤醒，请继续说指令…';
-              setStatus('listening');
+              setStatus(VOICE_STATES.WAKE_DETECTED, { reason: 'wake word detected, waiting command' });
             }
             return;
           }
@@ -552,13 +561,13 @@ export function initVoicePanel({
         }
         scheduleAutoSend();
       } else if (msg.type === 'speaker_rejected') {
-        setStatus('listening');
+        setStatus(VOICE_STATES.LISTENING, { reason: 'speaker rejected' });
         if (transcript) transcript.textContent = msg.reason || `已忽略非本人声音${msg.score != null ? `（声纹 ${msg.score}/${msg.threshold}）` : ''}`;
         return;
       } else if (msg.type === 'sound_event') {
         // 本地语音服务可选返回环境声音事件。这里保持静默，不干扰转写文本。
       } else if (msg.type === 'error') {
-        setStatus('error');
+        setStatus(VOICE_STATES.ERROR, { reason: msg.message || 'recognition error' });
         if (transcript) transcript.textContent = msg.message || '语音识别错误';
       }
     } catch {}
@@ -570,7 +579,7 @@ export function initVoicePanel({
     try {
       ({ ws, provider } = await createRecognitionWs());
     } catch (err) {
-      setStatus('error');
+      setStatus(VOICE_STATES.ERROR, { reason: err?.message || 'recognition startup failed' });
       if (transcript) transcript.textContent = err?.message || '本地语音识别启动失败';
       return;
     }
@@ -580,13 +589,13 @@ export function initVoicePanel({
     ws.onopen = () => {
       if (cloudWs !== ws) return;
       sendRecognitionConfig(ws, provider);
-      setStatus('listening');
+      setStatus(VOICE_STATES.LISTENING, { reason: 'recognition websocket open', provider });
       // 注意：此处不重置 accumulatedText，由调用方在首次启动时负责清空
     };
 
     ws.onmessage = (ev) => handleRecognitionMessage(ev, ws);
 
-    ws.onerror = () => { if (cloudWs === ws) setStatus('error'); };
+    ws.onerror = () => { if (cloudWs === ws) setStatus(VOICE_STATES.ERROR, { reason: 'recognition websocket error' }); };
 
     ws.onclose = () => {
       if (cloudWs !== ws) return; // 已被新连接取代，忽略旧连接的 close 事件
@@ -596,7 +605,7 @@ export function initVoicePanel({
         setTimeout(() => { if (micActive) connectCloudWs(); }, 800);
       } else {
         cloudWsIntentional = false;
-        if (micActive) setStatus('idle');
+        if (micActive) setStatus(VOICE_STATES.IDLE, { reason: 'recognition websocket closed' });
       }
     };
   }
@@ -614,6 +623,7 @@ export function initVoicePanel({
     // 首次启动清空累积文字；重连时由 connectCloudWs 直接调用，不经过此处
     accumulatedText = '';
     if (transcript) transcript.textContent = '';
+    voiceMachine.beginAsrSession('recognition stream start');
     connectCloudWs();
   }
 
@@ -662,6 +672,7 @@ export function initVoicePanel({
   // ─── 统一开关 ───
   async function toggleVoice() {
     if (!micActive) {
+      voiceMachine.beginRound('manual microphone start');
       micActive = true;
       userWantedMic = true;
       suspendedByMedia = false;
@@ -692,7 +703,7 @@ export function initVoicePanel({
     bargeinBuffering = false;
     stopCloudStream();
     stopMic();
-    setStatus('idle');
+    setStatus(VOICE_STATES.IDLE, { reason: reason || 'voice input stopped' });
     if (transcript) transcript.textContent = '';
   }
 
@@ -725,7 +736,7 @@ export function initVoicePanel({
 
     if (micActive && micData && cloudProcessor) {
       // TTS 模式：ScriptProcessor 仍存活，只需重连 WebSocket
-      setStatus('listening');
+      setStatus(VOICE_STATES.LISTENING, { reason: 'resume voice input from media' });
 
       // barge-in 触发的恢复：等待真实语音，超时则续播
       if (fromBargein) startBargeinNoSpeechTimer();
@@ -736,7 +747,7 @@ export function initVoicePanel({
       try {
         ({ ws: bargeinWs, provider: bargeinProvider } = await createRecognitionWs());
       } catch (err) {
-        setStatus('error');
+        setStatus(VOICE_STATES.ERROR, { reason: err?.message || 'barge-in recognition startup failed' });
         if (transcript) transcript.textContent = err?.message || '语音识别启动失败';
         return;
       }
@@ -762,7 +773,7 @@ export function initVoicePanel({
         } catch {}
         handleRecognitionMessage(ev, bargeinWs);
       };
-      bargeinWs.onerror = () => { if (cloudWs === bargeinWs) setStatus('error'); };
+      bargeinWs.onerror = () => { if (cloudWs === bargeinWs) setStatus(VOICE_STATES.ERROR, { reason: 'barge-in websocket error' }); };
       bargeinWs.onclose = () => {
         if (cloudWs !== bargeinWs) return;
         cloudWs = null;
@@ -770,7 +781,7 @@ export function initVoicePanel({
           setTimeout(() => { if (micActive) connectCloudWs(); }, 800);
         } else {
           cloudWsIntentional = false;
-          if (micActive) setStatus('idle');
+          if (micActive) setStatus(VOICE_STATES.IDLE, { reason: 'recognition websocket closed' });
         }
       };
     } else {
@@ -829,7 +840,7 @@ export function initVoicePanel({
     const finalize = () => {
       if (lastTranscriptText) {
         if (autoSendTimer) { clearTimeout(autoSendTimer); autoSendTimer = null; }
-        setStatus('processing');
+        setStatus(VOICE_STATES.THINKING, { reason: 'ptt send recognized text' });
         sendRecognizedVoiceText();
         if (startedMic) setTimeout(() => stopVoiceInput(), 120);
       } else if (startedMic) {
@@ -898,10 +909,12 @@ export function initVoicePanel({
       bargeinBuffer = [];
       bargeinBuffering = true;
       stopCloudStream({ preserveProcessor: true }); // 保留 Processor，只断 WS
-      setStatus('speaking');
+      voiceMachine.beginTtsSession('tts playback started');
+      setStatus(VOICE_STATES.SPEAKING, { reason: 'tts playback started' });
     },
     resumeAfterMedia: () => {
       clearBargeinNoSpeechTimer(); // TTS 正常结束，不需要续播
+      voiceMachine.clearTtsSession('tts playback ended');
       resumeVoiceInputFromMedia(false);
     },
     stop: () => stopVoiceInput(),
@@ -942,7 +955,7 @@ export function initVoicePanel({
   btn?.addEventListener('click', toggleVoice);
   canvas.addEventListener('click', toggleVoice);
 
-  setStatus('idle');
+  setStatus(VOICE_STATES.IDLE, { reason: 'voice panel initialized' });
   openPanel();
   if (getAutoMic?.()) toggleVoice();
 }

@@ -342,6 +342,23 @@ const createSettingsModal = () => `
 
         <!-- ── 语音 tab ── -->
         <div class="settings-tab" data-tab="voice">
+
+          <div class="settings-section">
+            <div class="settings-section-label">小智式语音状态机</div>
+            <p class="settings-hint">用于调试唤醒词、声纹、视频抗干扰、ASR 和后续分句 TTS。状态机记录每一轮 roundId / asrSessionId / ttsSessionId，旧轮次事件会被识别并丢弃，避免串音和误触发。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-debug-enabled">显示语音调试状态</label>
+              <input id="voice-debug-enabled" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <div id="voice-debug-panel" style="display:grid;grid-template-columns:120px 1fr;gap:6px 12px;margin-top:10px;font-size:12px;color:var(--ink2);">
+              <span>当前状态</span><strong id="voice-debug-state" style="color:var(--ink);">idle</strong>
+              <span>状态原因</span><span id="voice-debug-reason">init</span>
+              <span>Round</span><code id="voice-debug-round">—</code>
+              <span>ASR Session</span><code id="voice-debug-asr">—</code>
+              <span>TTS Session</span><code id="voice-debug-tts">—</code>
+            </div>
+          </div>
+
           <div class="settings-section">
             <div class="settings-section-label">语音识别模式</div>
             <div class="settings-row">
@@ -658,6 +675,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.211</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">启动小智式语音改造第一阶段：新增语音状态机、轮次守卫和调试面板。</p>
+                <ul class="release-note-points">
+                  <li>新增 Voice State Machine，统一 idle/listening/wake/recording/recognizing/thinking/speaking/interrupted/error 状态。</li>
+                  <li>新增 roundId、ASR sessionId、TTS sessionId，给后续分句 TTS 和旧音频丢弃打基础。</li>
+                  <li>设置页新增小智式语音状态调试面板，便于排查唤醒、声纹、视频抗干扰和打断问题。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.210</span>

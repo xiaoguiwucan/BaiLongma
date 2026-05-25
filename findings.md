@@ -1,31 +1,16 @@
-# Findings: Local Whisper ASR Default
+# Findings: v2.1.211 Xiaozhi-style Voice Foundation
 
-## Existing state
-- User wants local speech recognition connected and default.
-- Current UI voice panel is cloud-oriented and connects to `/voice/cloud`.
-- Existing local Whisper assets/code are present:
-  - `src/voice/whisper_server.py`
-  - `src/voice/manager.js`
-  - `src/voice/whisper/` vendored Whisper package
+## Existing baseline
+- Latest released version before this work: v2.1.210.
+- Existing local ASR stack already includes SenseVoiceSmall default, Whisper fallback, wake-word gate, voiceprint gate, and video protection toggles.
+- User requires every version/update to be backed up to GitHub and GitHub Releases with detailed notes and assets.
 
-## Open findings
-- Need confirm if backend currently imports/uses `manager.js`.
-- Need inspect voice settings config shape.
-- Need inspect local Whisper WebSocket protocol expected by frontend.
+## Research carryover from Xiaozhi
+- Xiaozhi-style flow should be event/state driven: wake, ASR, LLM, TTS lifecycle, interruption, stale round protection.
+- The first safe BaiLongma step is a voice state machine + round/session IDs + settings/debug UI.
 
-## Phase 1 discovery update
-- Frontend `voice-panel.js` currently connects only to `ws://127.0.0.1:3721/voice/cloud`.
-- Backend `api.js` exposes `/voice/cloud` WebSocket and does not currently import/use `src/voice/manager.js`.
-- Local Whisper protocol is compatible with the cloud proxy client shape: it accepts JSON `{type:'config', lang}` plus 16-bit PCM binary chunks and emits `{type:'transcript', text, is_final}`.
-- `manager.js` already starts local Whisper on port `3723`, but there are no HTTP lifecycle endpoints wired into `api.js`.
-- Settings currently store ASR provider in localStorage key `bailongma-voice-provider`, defaulting to `aliyun`.
 
-## SenseVoice discovery
-- Hugging Face model card for FunAudioLLM/SenseVoiceSmall recommends FunASR AutoModel with `model="FunAudioLLM/SenseVoiceSmall"`, `trust_remote_code=True`, `hub="hf"`, `language` options including zh/en/yue/ja/ko, and `use_itn=True`.
-- Model card states SenseVoiceSmall is Chinese-first, faster than Whisper-small/large, and supports speech/event/emotion tags.
-
-## Runtime notes for SenseVoice
-- `funasr` also requires `torchaudio`; installed it into `.venv-whisper`.
-- Hugging Face snapshot download stalled on `model.pt`; direct `curl -L https://huggingface.co/FunAudioLLM/SenseVoiceSmall/resolve/main/model.pt` succeeded.
-- FunASR tries to install model requirements using `/Users/imac/.venv`; this warning is harmless after dependencies are installed, and the model still loads.
-- Using local `models/SenseVoiceSmall/` avoids repeated large downloads on startup.
+## Phase 1 discovery
+- `src/ui/brain-ui/voice-panel.js` is the main runtime voice controller: mic lifecycle, ASR WebSocket, wake-word gate, speaker rejection, barge-in, video/media mode, and TTS suspension hooks all live there.
+- Settings markup is generated in `src/ui/brain-ui/app-shell.js`; settings behavior is in `src/ui/brain-ui/app.js` around the voice keys block.
+- Safe integration path: add a small browser-compatible state machine module and wire existing `setStatus(...)` calls through it. Avoid changing ASR/TTS provider behavior in this foundation release.

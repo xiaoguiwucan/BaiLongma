@@ -2125,6 +2125,7 @@ function initTTSSettings() {
   const VOICE_VIDEO_DUCK_KEY = "bailongma-voice-video-duck";
   const VOICE_VIDEO_PTT_KEY = "bailongma-voice-video-ptt";
   const VOICE_VIDEO_AEC_KEY = "bailongma-voice-video-aec";
+  const VOICE_DEBUG_ENABLED_KEY = "bailongma-voice-debug-enabled";
   const VOICE_LOCAL_DEFAULT_MIGRATION_KEY = "bailongma-voice-local-default-v1";
 
   function applyVoiceProviderUI(provider) {
@@ -2178,6 +2179,8 @@ function initTTSSettings() {
     const videoDuck = document.getElementById("voice-video-duck");
     const videoPtt = document.getElementById("voice-video-ptt");
     const videoAec = document.getElementById("voice-video-aec");
+    const voiceDebugEnabled = document.getElementById("voice-debug-enabled");
+    const voiceDebugPanel = document.getElementById("voice-debug-panel");
     const savedWakeEnabled = typeof serverVoice?.wakeWordEnabled === "boolean" ? serverVoice.wakeWordEnabled : localStorage.getItem(VOICE_WAKE_ENABLED_KEY) !== "false";
     const savedWakeWords = Array.isArray(serverVoice?.wakeWords) ? serverVoice.wakeWords.join("，") : (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || "小龙马，龙马，白龙马");
     if (wakeEnabled) wakeEnabled.checked = savedWakeEnabled;
@@ -2193,6 +2196,9 @@ function initTTSSettings() {
     if (videoDuck) videoDuck.checked = localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== "false";
     if (videoPtt) videoPtt.checked = localStorage.getItem(VOICE_VIDEO_PTT_KEY) !== "false";
     if (videoAec) videoAec.checked = localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== "false";
+    const debugEnabled = localStorage.getItem(VOICE_DEBUG_ENABLED_KEY) !== "false";
+    if (voiceDebugEnabled) voiceDebugEnabled.checked = debugEnabled;
+    if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
     applyVoiceProviderUI(savedProvider);
   }
 
@@ -2308,6 +2314,7 @@ function initTTSSettings() {
       const videoDuck = document.getElementById("voice-video-duck")?.checked ?? true;
       const videoPtt = document.getElementById("voice-video-ptt")?.checked ?? true;
       const videoAec = document.getElementById("voice-video-aec")?.checked ?? true;
+      const voiceDebugEnabled = document.getElementById("voice-debug-enabled")?.checked ?? true;
 
       localStorage.setItem(VOICE_LANG_KEY,      lang);
       localStorage.setItem(VOICE_AUTO_SEND_KEY,  String(autoSend));
@@ -2323,6 +2330,7 @@ function initTTSSettings() {
       localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(videoDuck));
       localStorage.setItem(VOICE_VIDEO_PTT_KEY, String(videoPtt));
       localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(videoAec));
+      localStorage.setItem(VOICE_DEBUG_ENABLED_KEY, String(voiceDebugEnabled));
       localStorage.setItem(VOICE_LOCAL_DEFAULT_MIGRATION_KEY, "1");
 
       window.dispatchEvent(new CustomEvent("bailongma:voice-threshold", { detail: { threshold } }));
@@ -2369,6 +2377,35 @@ function initTTSSettings() {
       }
     });
   }
+
+  const voiceDebugToggle = document.getElementById("voice-debug-enabled");
+  const voiceDebugPanel = document.getElementById("voice-debug-panel");
+  const voiceDebugState = document.getElementById("voice-debug-state");
+  const voiceDebugReason = document.getElementById("voice-debug-reason");
+  const voiceDebugRound = document.getElementById("voice-debug-round");
+  const voiceDebugAsr = document.getElementById("voice-debug-asr");
+  const voiceDebugTts = document.getElementById("voice-debug-tts");
+
+  function updateVoiceDebugPanel(detail = {}) {
+    if (!voiceDebugPanel) return;
+    const enabled = localStorage.getItem(VOICE_DEBUG_ENABLED_KEY) !== "false";
+    voiceDebugPanel.style.display = enabled ? "grid" : "none";
+    if (!enabled) return;
+    if (voiceDebugState) voiceDebugState.textContent = detail.state || "idle";
+    if (voiceDebugReason) voiceDebugReason.textContent = detail.reason || detail.event || "—";
+    if (voiceDebugRound) voiceDebugRound.textContent = detail.roundId || "—";
+    if (voiceDebugAsr) voiceDebugAsr.textContent = detail.asrSessionId || "—";
+    if (voiceDebugTts) voiceDebugTts.textContent = detail.ttsSessionId || "—";
+  }
+
+  if (voiceDebugToggle) {
+    voiceDebugToggle.addEventListener("change", () => {
+      localStorage.setItem(VOICE_DEBUG_ENABLED_KEY, String(voiceDebugToggle.checked));
+      updateVoiceDebugPanel(window.bailongmaVoiceState?.getSnapshot?.() || {});
+    });
+  }
+  window.addEventListener("bailongma:voice-state", (event) => updateVoiceDebugPanel(event.detail || {}));
+  updateVoiceDebugPanel(window.bailongmaVoiceState?.getSnapshot?.() || {});
 
   initTTSSettings();
 

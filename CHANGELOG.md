@@ -4,6 +4,42 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.211 - 2026-05-26
+
+### 更新内容
+
+- 新增 `src/voice/voice-state-machine.js`，建立小智式语音状态机基础。
+- 状态机统一管理 `idle / listening / wake_detected / recording / recognizing / thinking / speaking / interrupted / done / error / event`。
+- 新增 `roundId`、`asrSessionId`、`ttsSessionId`，为后续“旧轮次识别结果丢弃”“旧 TTS 音频不串入新对话”“分句 TTS session”打基础。
+- 前端 `voice-panel.js` 接入状态机，现有本地 SenseVoice、Whisper 备用、唤醒词、声纹、视频抗干扰、TTS 打断逻辑保持可用。
+- 设置页“语音识别”新增“小智式语音状态机”调试面板，可查看当前状态、状态原因、Round、ASR Session、TTS Session。
+- Brain UI“设置 -> 更新 -> 更新说明”新增 v2.1.211 版本说明。
+
+### 改变原因
+
+- 用户确认开始按小智架构对白龙马进行系统性优化。
+- 后续要做分句 TTS、WebSocket 音频通道、唤醒/声纹/视频抗干扰协同，必须先有统一状态机和轮次守卫，避免旧识别、旧音频和新对话互相串扰。
+
+### 影响范围
+
+- 本版本是语音交互底座改造，不替换当前 ASR/TTS Provider。
+- 当前听写、唤醒词、声纹、视频抗干扰逻辑仍沿用 v2.1.208-v2.1.210 的实现。
+- 新增调试面板默认显示，可在设置中关闭。
+
+### 验证结果
+
+- `node --check src/voice/voice-state-machine.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告，但不影响 smoke 断言。
+- `npm run smoke:brain-ui` 当前超时等待 `#graph circle`，记录为非本次语音状态机改造引入的既有 UI smoke 阻塞点。
+
+### 部署注意事项
+
+- 源码部署仍按 `BACKUP-2026-05-26.md` 执行：`npm install`、准备 Python 3.11、本地 ASR 虚拟环境和 SenseVoiceSmall 模型。
+- 本版本没有新增大型模型文件，`models/SenseVoiceSmall/` 和 `.venv-whisper/` 仍不进入 GitHub，需要本地重建。
+
 ## v2.1.210 - 2026-05-26
 
 ### 更新内容
