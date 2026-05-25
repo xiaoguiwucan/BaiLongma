@@ -1,4 +1,4 @@
-import { mapVoiceEventToXiaozhi } from '../src/voice/voice-event-bus.js'
+import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi } from '../src/voice/voice-event-bus.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -76,6 +76,10 @@ for (const item of cases) {
 
 assert(mapVoiceEventToXiaozhi({ type: 'unknown:event', detail: {} }) === null, 'unknown event maps to null')
 assert(mapVoiceEventToXiaozhi(null) === null, 'null event maps to null')
+
+const protocol = getVoiceEventsProtocolMetadata()
+assert(protocol.version >= 3 && protocol.capabilities.includes('tts_speak'), 'protocol metadata exposes version and tts_speak')
+assert(protocol.endpoints?.protocol === '/voice/events/protocol' && protocol.endpoints?.websocket === '/voice/events', 'protocol metadata exposes endpoints')
 
 const failed = checks.filter(item => !item.ok)
 console.log(`\nVoice mapping smoke checks: ${checks.length - failed.length}/${checks.length} passed`)

@@ -1,3 +1,33 @@
+export const VOICE_EVENTS_PROTOCOL_VERSION = 3
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak'])
+export const VOICE_EVENTS_PROTOCOL_STATES = Object.freeze({
+  wake: ['accepted', 'rejected'],
+  stt: ['partial', 'final'],
+  tts: ['start', 'session', 'sentence_start', 'audio_ready', 'audio_start', 'audio_chunk', 'audio_chunk_base64', 'audio_end', 'audio_error', 'sentence_end', 'stop', 'cancelled', 'error'],
+  interrupt: ['interrupt'],
+})
+
+export function getVoiceEventsProtocolMetadata() {
+  return {
+    service: 'bailongma.voice.events',
+    version: VOICE_EVENTS_PROTOCOL_VERSION,
+    capabilities: [...VOICE_EVENTS_PROTOCOL_CAPABILITIES],
+    endpoints: {
+      websocket: '/voice/events',
+      status: '/voice/events/status',
+      protocol: '/voice/events/protocol',
+      publish: '/voice/events/publish',
+    },
+    clientMessages: ['ping', 'subscribe', 'unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
+    mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
+    audio: {
+      defaultContentType: 'audio/mpeg',
+      binarySubscribe: { type: 'subscribe', audio: true, binaryAudio: true },
+      base64Subscribe: { type: 'subscribe', audio: true },
+    },
+  }
+}
+
 const clients = new Set()
 const clientOptions = new WeakMap()
 const history = []
@@ -43,7 +73,7 @@ export function getVoiceEventClientOptions(ws) {
 export function addVoiceEventClient(ws) {
   clients.add(ws)
   clientOptions.set(ws, { audio: false, binaryAudio: false })
-  safeSend(ws, { type: 'hello', service: 'bailongma.voice.events', version: 3, capabilities: ['json_events', 'tts_audio_chunks', 'tts_speak'], history: history.slice(-20) })
+  safeSend(ws, { type: 'hello', ...getVoiceEventsProtocolMetadata(), history: history.slice(-20) })
 }
 
 export function removeVoiceEventClient(ws) {
@@ -184,5 +214,5 @@ export function getVoiceEventBusStatus() {
     if (options.audio) audioSubscribers += 1
     if (options.audio && options.binaryAudio) binaryAudioSubscribers += 1
   }
-  return { clients: clients.size, history: history.length, audioSubscribers, binaryAudioSubscribers, version: 3 }
+  return { clients: clients.size, history: history.length, audioSubscribers, binaryAudioSubscribers, version: VOICE_EVENTS_PROTOCOL_VERSION }
 }

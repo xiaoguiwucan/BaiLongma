@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.230</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增语音事件协议元数据端点，方便小智式外部设备接入前自检能力。</p>
+                <ul class="release-note-points">
+                  <li>新增 GET /voice/events/protocol，返回版本、能力、端点和消息类型。</li>
+                  <li>WebSocket hello/status/protocol 统一复用共享协议常量，减少版本漂移。</li>
+                  <li>smoke:voice-mapping 增至 15 项，smoke:voice-events 增至 17 项。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.229</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

@@ -4,6 +4,49 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.230 - 2026-05-26
+
+### 更新内容
+
+- `src/voice/voice-event-bus.js` 新增共享协议常量：
+  - `VOICE_EVENTS_PROTOCOL_VERSION`；
+  - `VOICE_EVENTS_PROTOCOL_CAPABILITIES`；
+  - `VOICE_EVENTS_PROTOCOL_STATES`。
+- 新增 `getVoiceEventsProtocolMetadata()`，集中返回服务名、版本、能力、HTTP/WebSocket 端点、客户端消息类型、映射状态和音频订阅示例。
+- WebSocket `/voice/events` hello 消息改为复用协议元数据，避免 hello、status、文档和测试之间出现版本漂移。
+- `GET /voice/events/status` 的版本号改为复用 `VOICE_EVENTS_PROTOCOL_VERSION`。
+- `src/api.js` 新增 `GET /voice/events/protocol`，返回当前语音事件协议元数据。
+- `scripts/smoke-voice-mapping.mjs` 增加协议元数据纯函数检查，从 13 项扩展到 15 项。
+- `scripts/smoke-voice-events.mjs` 增加 `/voice/events/protocol` HTTP 集成检查，从 15 项扩展到 17 项。
+
+### 改变原因
+
+- 小智式外部设备、桌面调试客户端或未来移动端接入前，需要先知道当前服务支持哪些协议能力、端点和消息类型。
+- 只靠 Markdown 文档或 WebSocket hello 不够稳定；HTTP metadata endpoint 可以让客户端在打开 WebSocket、订阅音频或发送 `tts:speak` 前先做兼容性自检。
+- 共享常量能减少后续继续扩展协议时出现“hello 写了一个版本、status 写了另一个版本、测试又写死第三个版本”的维护风险。
+
+### 影响范围
+
+- 新增向后兼容的 HTTP 查询端点，不改变既有 `/voice/events` WebSocket 消息形状。
+- 既有客户端可以继续只连接 WebSocket；新客户端可优先请求 `/voice/events/protocol` 做能力发现。
+- WebSocket hello 消息字段更完整，会额外包含 `endpoints/clientMessages/mappedStates/audio` 等元数据。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 15/15 通过。
+- `npm run smoke:voice-events` 17/17 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端可以访问 `http://127.0.0.1:3721/voice/events/protocol` 获取协议元数据。
+- 调试建议：先请求 `/voice/events/protocol`，确认 `capabilities` 包含 `tts_speak` 和 `tts_audio_chunks` 后再连接 `ws://127.0.0.1:3721/voice/events`。
+
 ## v2.1.229 - 2026-05-26
 
 ### 更新内容

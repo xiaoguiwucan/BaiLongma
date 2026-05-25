@@ -51,6 +51,10 @@ try {
   const statusBefore = await fetch(`${API}/voice/events/status`).then(r => r.json())
   assert(statusBefore.ok === true && statusBefore.version >= 3, 'status exposes voice event protocol version', JSON.stringify(statusBefore))
 
+  const protocolMeta = await fetch(`${API}/voice/events/protocol`).then(r => r.json())
+  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
+  assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
+
   const helloMessages = await connectAndCollect({
     until: msg => msg.type === 'hello',
   })
