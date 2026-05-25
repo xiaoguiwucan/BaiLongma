@@ -1,49 +1,47 @@
-# Task Plan: v2.1.230 Voice Events Protocol Metadata
+# Task Plan: v2.1.231 Voice Event Client Message Validation
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.230 with a discoverable `/voice/events/protocol` metadata endpoint, shared protocol constants, updated smoke coverage, updated docs/UI release notes, and a GitHub Release with source and bundle assets.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.231 with explicit WebSocket client message validation and structured protocol error replies, so external clients get clear feedback for bad JSON, missing `type`, unsupported message types, and invalid `tts:speak` payloads.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
-### Phase 1: Recover and verify WIP
-- [x] Inspect git status and current uncommitted v2.1.230 changes
-- [x] Confirm protocol metadata endpoint and smoke tests already exist in WIP
+### Phase 1: Discovery
+- [x] Inspect v2.1.230 clean baseline and release state
+- [x] Inspect `/voice/events` WebSocket message handling
+- [x] Identify missing validation/error replies for malformed/unsupported client messages
+- **Status:** complete
+
+### Phase 2: Implementation
+- [x] Add shared client message validation helpers in `src/voice/voice-event-bus.js`
+- [x] Use validation in `/voice/events` WebSocket handling in `src/api.js`
+- [x] Keep existing ping/subscribe/unsubscribe/tts:speak/tts:cancel behavior compatible
+- **Status:** complete
+
+### Phase 3: Tests, docs, UI notes
+- [x] Extend pure smoke coverage for validation helper
+- [x] Extend WebSocket smoke coverage for invalid JSON, unsupported type, invalid speak text
+- [x] Bump version to 2.1.231 and update README/CHANGELOG/BACKUP/docs/UI notes
+- **Status:** complete
+
+### Phase 4: Verification and release
 - [x] Run syntax checks and smoke tests
-- **Status:** complete
-
-### Phase 2: Version, docs, UI notes
-- [x] Bump package version to 2.1.230
-- [x] Update README, CHANGELOG, BACKUP document, Brain UI release notes
-- [x] Update planning files with detailed findings/progress
-- **Status:** complete
-
-### Phase 3: Verification
-- [x] Run `node --check` for touched JS files
-- [x] Run `npm run smoke:voice-mapping`
-- [x] Run `npm run smoke:voice-events`
-- [x] Run `npm run smoke:tools`
-- **Status:** complete
-
-### Phase 4: GitHub backup and Release
-- [x] Commit changes
-- [x] Tag `v2.1.230`
-- [x] Push main and tag to GitHub
-- [x] Create `backups/v2.1.230` source tarball and git bundle
-- [x] Create GitHub Release with detailed notes and upload assets
-- [x] Finalize release docs if needed, then push/re-tag/re-upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag and push v2.1.231
+- [ ] Create source tarball and git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** in_progress
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Add a metadata endpoint instead of only documenting protocol in Markdown | External devices and debug clients can discover version/capabilities/endpoints programmatically |
-| Reuse shared constants for hello/status/protocol endpoint | Avoid version/capability drift across WebSocket hello, HTTP status, and docs/tests |
-| Extend both pure mapping smoke and integration smoke | Pure smoke protects metadata function cheaply; integration smoke protects the HTTP endpoint and running API path |
+| Validate external messages at the WebSocket boundary | Prevents silent failures and makes ESP32/debug client integration easier to diagnose |
+| Return structured `protocol_error` JSON instead of closing immediately | Keeps clients connected and gives them actionable feedback |
+| Preserve protocol version 3 | Validation is backward-compatible and does not change successful message shapes |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| `gh release create/upload` appeared to stall while uploading large assets and left a draft release / starter asset | 1 | Used GitHub API directly: deleted starter asset, uploaded source and bundle with `curl`, patched release to `draft=false` and tag `v2.1.230` |
+| None yet | - | - |

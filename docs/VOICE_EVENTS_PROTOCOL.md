@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.224 文档固化）
+版本：v3（BaiLongma v2.1.231 更新：协议元数据与 protocol_error）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -18,6 +18,12 @@ ws://127.0.0.1:3721/voice/events
 GET http://127.0.0.1:3721/voice/events/status
 ```
 
+协议元数据接口：
+
+```text
+GET http://127.0.0.1:3721/voice/events/protocol
+```
+
 如果白龙马运行在局域网 Mac 上，客户端需要把 `127.0.0.1` 替换为 Mac 的局域网 IP，并自行确认端口暴露和安全策略。
 
 ## 2. Hello
@@ -29,7 +35,7 @@ GET http://127.0.0.1:3721/voice/events/status
   "type": "hello",
   "service": "bailongma.voice.events",
   "version": 3,
-  "capabilities": ["json_events", "tts_audio_chunks", "tts_speak"],
+  "capabilities": ["json_events", "tts_audio_chunks", "tts_speak", "protocol_errors"],
   "history": []
 }
 ```
@@ -39,7 +45,7 @@ GET http://127.0.0.1:3721/voice/events/status
 | 字段 | 说明 |
 |---|---|
 | `version` | 当前协议版本。v3 支持 JSON 事件、TTS 音频块、直接 `tts:speak`。 |
-| `capabilities` | 能力声明。客户端应按能力判断是否启用 speak/audio。 |
+| `capabilities` | 能力声明。客户端应按能力判断是否启用 speak/audio/protocol_error 处理。 |
 | `history` | 最近事件历史，方便调试客户端连上后看到上下文。 |
 
 ## 3. 心跳
@@ -269,6 +275,42 @@ voice_event tts:stop
 - 同连接发起新的 `tts:speak` 会自动取消旧 speak，reason 为 `replaced_by_new_speak`。
 - 连接关闭或错误会自动取消当前 speak，reason 为 `client_disconnected`。
 
+
+## 8.5 协议错误：protocol_error
+
+从 BaiLongma v2.1.231 开始，客户端消息格式错误时服务端会返回结构化协议错误，而不是静默忽略。
+
+示例：
+
+```json
+{
+  "type": "protocol_error",
+  "code": "unsupported_type",
+  "message": "Unsupported voice event client message type: unknown",
+  "receivedType": "unknown",
+  "requestId": "r1",
+  "at": 1710000000000
+}
+```
+
+错误码：
+
+| code | 含义 | 建议处理 |
+|---|---|---|
+| `invalid_json` | WebSocket 文本帧不是合法 JSON | 检查序列化逻辑 |
+| `invalid_message` | JSON 不是对象 | 改为发送对象 |
+| `missing_type` | 缺少非空字符串 `type` | 补齐消息类型 |
+| `unsupported_type` | `type` 不在支持列表 | 检查协议版本或拼写 |
+| `missing_text` | `tts:speak` / `speak` 缺少非空 `text`/`ttsText` | 补齐要合成的文本 |
+
+支持的客户端消息类型可以通过：
+
+```bash
+curl http://127.0.0.1:3721/voice/events/protocol
+```
+
+查看 `clientMessages` 和 `errorCodes`。
+
 ## 9. 状态接口
 
 ```bash
@@ -329,6 +371,7 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 ## 11. 客户端实现建议
 
 - 优先解析 `hello.version` 和 `hello.capabilities`，不要硬编码能力。
+- 监听 `protocol_error`，把 `code/message/requestId/receivedType` 打进客户端日志。
 - 如果是硬件端，建议使用 `binaryAudio=true`，避免 base64 体积膨胀。
 - `audio_chunk` metadata 和紧随其后的 binary frame 应按顺序消费。
 - 对每个 `requestId/sessionId/index` 建立播放队列，收到 `audio_end` 后进入下一段。
@@ -341,3 +384,4 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 - 当前协议未做鉴权，局域网暴露时请自行控制访问范围。
 - 当前 `tts:cancel` 只取消同连接 active speak，不支持跨连接 session 管理。
 - 当前调试客户端是参考实现，不是正式 SDK。
+- 当前 `protocol_error` 只做格式/类型/空文本校验，还没有鉴权、限流或最大文本长度限制。

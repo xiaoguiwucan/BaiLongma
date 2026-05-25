@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.231</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增语音 WebSocket 客户端消息校验和 protocol_error 错误回执。</p>
+                <ul class="release-note-points">
+                  <li>坏 JSON、未知 type、空 tts:speak 不再静默失败。</li>
+                  <li>/voice/events/protocol 新增 protocol_errors 能力和 errorCodes。</li>
+                  <li>smoke:voice-mapping 与 smoke:voice-events 均扩展到 20 项。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.230</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

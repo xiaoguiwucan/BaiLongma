@@ -52,7 +52,7 @@ try {
   assert(statusBefore.ok === true && statusBefore.version >= 3, 'status exposes voice event protocol version', JSON.stringify(statusBefore))
 
   const protocolMeta = await fetch(`${API}/voice/events/protocol`).then(r => r.json())
-  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
+  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
   assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
 
   const helloMessages = await connectAndCollect({
@@ -74,6 +74,26 @@ try {
   })
   const subscribed = subMessages.find(msg => msg.type === 'subscribed')
   assert(subscribed?.options?.audio === true && subscribed?.options?.binaryAudio === true, 'subscribe enables audio and binary options', JSON.stringify(subscribed))
+
+  const invalidJsonMessages = await connectAndCollect({
+    onOpen: ws => ws.send('{bad json'),
+    until: msg => msg.type === 'protocol_error' && msg.code === 'invalid_json',
+  })
+  assert(invalidJsonMessages.some(msg => msg.type === 'protocol_error' && msg.code === 'invalid_json'), 'invalid JSON receives protocol_error invalid_json')
+
+  const unsupportedMessages = await connectAndCollect({
+    onOpen: ws => ws.send(JSON.stringify({ type: 'unknown:thing', requestId: 'bad-type' })),
+    until: msg => msg.type === 'protocol_error' && msg.code === 'unsupported_type',
+  })
+  const unsupported = unsupportedMessages.find(msg => msg.type === 'protocol_error' && msg.code === 'unsupported_type')
+  assert(unsupported?.receivedType === 'unknown:thing' && unsupported?.requestId === 'bad-type', 'unsupported type receives structured protocol_error', JSON.stringify(unsupported))
+
+  const invalidSpeakMessages = await connectAndCollect({
+    onOpen: ws => ws.send(JSON.stringify({ type: 'tts:speak', requestId: 'empty-speak', text: '' })),
+    until: msg => msg.type === 'protocol_error' && msg.code === 'missing_text',
+  })
+  const invalidSpeak = invalidSpeakMessages.find(msg => msg.type === 'protocol_error' && msg.code === 'missing_text')
+  assert(invalidSpeak?.requestId === 'empty-speak', 'empty tts:speak receives missing_text protocol_error', JSON.stringify(invalidSpeak))
 
   const cancelMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'tts:cancel', requestId: 'smoke-no-active' })),

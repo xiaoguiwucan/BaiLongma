@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors'])
 export const VOICE_EVENTS_PROTOCOL_STATES = Object.freeze({
   wake: ['accepted', 'rejected'],
   stt: ['partial', 'final'],
@@ -18,7 +18,8 @@ export function getVoiceEventsProtocolMetadata() {
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
     },
-    clientMessages: ['ping', 'subscribe', 'unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
+    clientMessages: ['ping', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
+    errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text'],
     mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
     audio: {
       defaultContentType: 'audio/mpeg',
@@ -70,6 +71,44 @@ export function getVoiceEventClientOptions(ws) {
   return { ...getOptions(ws) }
 }
 
+export function createVoiceEventProtocolError(code, message, extra = {}) {
+  return {
+    type: 'protocol_error',
+    code: String(code || 'protocol_error'),
+    message: String(message || 'Voice event protocol error'),
+    at: Date.now(),
+    ...extra,
+  }
+}
+
+export function sendVoiceEventProtocolError(ws, code, message, extra = {}) {
+  const payload = createVoiceEventProtocolError(code, message, extra)
+  safeSend(ws, payload)
+  return payload
+}
+
+export function validateVoiceEventClientMessage(msg) {
+  if (!msg || typeof msg !== 'object' || Buffer.isBuffer(msg) || Array.isArray(msg)) {
+    return { ok: false, code: 'invalid_message', message: 'Client message must be a JSON object.' }
+  }
+  if (typeof msg.type !== 'string' || !msg.type.trim()) {
+    return { ok: false, code: 'missing_type', message: 'Client message must include a non-empty string type.' }
+  }
+  const type = msg.type.trim()
+  const requestId = msg.requestId || msg.id || undefined
+  const supported = new Set(['ping', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'])
+  if (!supported.has(type)) {
+    return { ok: false, code: 'unsupported_type', message: `Unsupported voice event client message type: ${type}`, receivedType: type, requestId }
+  }
+  if (type === 'tts:speak' || type === 'speak') {
+    const text = String(msg.text || msg.ttsText || '').trim()
+    if (!text) {
+      return { ok: false, code: 'missing_text', message: 'tts:speak requires non-empty text or ttsText.', receivedType: type, requestId }
+    }
+  }
+  return { ok: true, type, requestId }
+}
+
 export function addVoiceEventClient(ws) {
   clients.add(ws)
   clientOptions.set(ws, { audio: false, binaryAudio: false })
@@ -87,7 +126,18 @@ function parseClientMessage(raw) {
 }
 
 export function handleVoiceEventClientMessage(ws, raw) {
-  const msg = parseClientMessage(raw)
+  let msg
+  try {
+    msg = parseClientMessage(raw)
+  } catch {
+    const error = sendVoiceEventProtocolError(ws, 'invalid_json', 'Client message must be valid JSON.')
+    return { handled: true, error }
+  }
+  const validation = validateVoiceEventClientMessage(msg)
+  if (!validation.ok) {
+    const error = sendVoiceEventProtocolError(ws, validation.code, validation.message, { requestId: validation.requestId, receivedType: validation.receivedType })
+    return { handled: true, error }
+  }
   if (msg?.type === 'ping') {
     safeSend(ws, { type: 'pong', at: Date.now() })
     return { handled: true }
@@ -108,7 +158,11 @@ export function handleVoiceEventClientMessage(ws, raw) {
     safeSend(ws, { type: 'subscribed', service: 'bailongma.voice.events', options })
     return { handled: true, options }
   }
-  return { handled: false }
+  if (msg?.type === 'tts:speak' || msg?.type === 'speak' || msg?.type === 'tts:cancel' || msg?.type === 'cancel') {
+    return { handled: false, message: msg, validation }
+  }
+  const error = sendVoiceEventProtocolError(ws, 'unsupported_type', `Unsupported voice event client message type: ${msg?.type}`, { receivedType: msg?.type })
+  return { handled: true, error }
 }
 
 export function mapVoiceEventToXiaozhi(event) {

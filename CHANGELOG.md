@@ -4,6 +4,54 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.231 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` WebSocket 新增客户端消息校验。
+- 新增 `protocol_errors` 协议能力声明。
+- `getVoiceEventsProtocolMetadata()` 新增：
+  - `voice:subscribe` / `voice:unsubscribe` 兼容消息声明；
+  - `errorCodes`：`invalid_json`、`invalid_message`、`missing_type`、`unsupported_type`、`missing_text`。
+- 新增 `validateVoiceEventClientMessage(msg)`，用于纯函数检查客户端消息是否合法。
+- 新增 `createVoiceEventProtocolError()` / `sendVoiceEventProtocolError()`，统一输出结构化错误回执。
+- WebSocket 收到以下异常输入时不再静默失败，而是返回 `protocol_error`：
+  - 非法 JSON：`invalid_json`；
+  - 非对象消息：`invalid_message`；
+  - 缺少 `type`：`missing_type`；
+  - 未支持的类型：`unsupported_type`；
+  - `tts:speak` / `speak` 缺少非空文本：`missing_text`。
+- `scripts/smoke-voice-mapping.mjs` 从 15 项扩展到 20 项，覆盖协议能力和消息校验纯函数。
+- `scripts/smoke-voice-events.mjs` 从 17 项扩展到 20 项，覆盖 invalid JSON、unsupported type、empty `tts:speak` 的 WebSocket 错误回执。
+
+### 改变原因
+
+- ESP32/硬件端、手机端和桌面调试客户端如果发错消息，之前可能只看到“没有反应”，很难定位是 JSON 错误、类型写错还是 `tts:speak` 缺文本。
+- 小智式语音服务端需要可诊断性：错误也应该是协议的一部分，客户端可以按 `code` 做日志、重试或降级。
+- 这一步为后续 SDK、Schema 文档、鉴权和限流打基础。
+
+### 影响范围
+
+- 保持向后兼容：合法的 `ping`、`subscribe`、`unsubscribe`、`tts:speak`、`tts:cancel` 行为不变。
+- 新增错误消息类型 `protocol_error`，只在客户端输入不合法或不支持时出现。
+- `tts:speak` 的空文本错误从 TTS error 提前为协议层 `missing_text`，更明确也更容易被外部客户端处理。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 20/20 通过。
+- `npm run smoke:voice-events` 20/20 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端可通过 `/voice/events/protocol` 检查 `capabilities` 是否包含 `protocol_errors`。
+- 客户端应监听 `protocol_error` 并按 `code` 输出日志或提示，例如 `invalid_json`、`unsupported_type`、`missing_text`。
+
 ## v2.1.230 - 2026-05-26
 
 ### 更新内容

@@ -1,4 +1,4 @@
-import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi } from '../src/voice/voice-event-bus.js'
+import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi, validateVoiceEventClientMessage } from '../src/voice/voice-event-bus.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -78,8 +78,13 @@ assert(mapVoiceEventToXiaozhi({ type: 'unknown:event', detail: {} }) === null, '
 assert(mapVoiceEventToXiaozhi(null) === null, 'null event maps to null')
 
 const protocol = getVoiceEventsProtocolMetadata()
-assert(protocol.version >= 3 && protocol.capabilities.includes('tts_speak'), 'protocol metadata exposes version and tts_speak')
+assert(protocol.version >= 3 && protocol.capabilities.includes('tts_speak') && protocol.capabilities.includes('protocol_errors'), 'protocol metadata exposes version, tts_speak, and protocol_errors')
 assert(protocol.endpoints?.protocol === '/voice/events/protocol' && protocol.endpoints?.websocket === '/voice/events', 'protocol metadata exposes endpoints')
+assert(validateVoiceEventClientMessage({ type: 'ping' }).ok === true, 'client validation accepts ping')
+assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: '你好' }).ok === true, 'client validation accepts tts speak with text')
+assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: '' }).code === 'missing_text', 'client validation rejects empty tts speak')
+assert(validateVoiceEventClientMessage({ type: 'unknown' }).code === 'unsupported_type', 'client validation rejects unsupported type')
+assert(validateVoiceEventClientMessage({}).code === 'missing_type', 'client validation rejects missing type')
 
 const failed = checks.filter(item => !item.ok)
 console.log(`\nVoice mapping smoke checks: ${checks.length - failed.length}/${checks.length} passed`)

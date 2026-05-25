@@ -14,7 +14,7 @@ import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { createTTSSession, cancelTTSSession, streamTTSSegment, getTTSSession } from './voice/tts-session.js'
-import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventsProtocolMetadata, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
+import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -1614,18 +1614,27 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     ws.on('close', cleanupVoiceClient)
     ws.on('error', cleanupVoiceClient)
     ws.on('message', (raw) => {
+      let msg
       try {
-        const msg = JSON.parse(raw.toString())
-        if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
-          handleVoiceEventTTSSpeak(ws, msg).catch(err => sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', error: err.message }))
-          return
-        }
-        if (msg?.type === 'tts:cancel' || msg?.type === 'cancel') {
-          cancelVoiceEventTTSSpeak(ws, msg.reason || 'client_cancelled', msg.requestId || msg.id || null)
-          return
-        }
-        handleVoiceEventClientMessage(ws, msg)
-      } catch {}
+        msg = JSON.parse(raw.toString())
+      } catch {
+        sendVoiceEventProtocolError(ws, 'invalid_json', 'Client message must be valid JSON.')
+        return
+      }
+      const validation = validateVoiceEventClientMessage(msg)
+      if (!validation.ok) {
+        sendVoiceEventProtocolError(ws, validation.code, validation.message, { requestId: validation.requestId, receivedType: validation.receivedType })
+        return
+      }
+      if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
+        handleVoiceEventTTSSpeak(ws, msg).catch(err => sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', error: err.message }))
+        return
+      }
+      if (msg?.type === 'tts:cancel' || msg?.type === 'cancel') {
+        cancelVoiceEventTTSSpeak(ws, msg.reason || 'client_cancelled', msg.requestId || msg.id || null)
+        return
+      }
+      handleVoiceEventClientMessage(ws, msg)
     })
   })
 
