@@ -21,6 +21,15 @@ function mapToXiaozhi(event) {
   const detail = event?.detail || {}
   if (type === 'tts:start') return { type: 'tts', state: 'start', sessionId: detail.sessionId, segmentCount: detail.segmentCount }
   if (type === 'tts:sentence_start') return { type: 'tts', state: 'sentence_start', sessionId: detail.sessionId, index: detail.index, text: detail.text }
+  if (type === 'tts:audio_ready') return {
+    type: 'tts',
+    state: 'audio_ready',
+    sessionId: detail.sessionId,
+    index: detail.index,
+    text: detail.text,
+    url: detail.url,
+    contentType: detail.contentType || 'audio/mpeg',
+  }
   if (type === 'tts:sentence_end') return { type: 'tts', state: 'sentence_end', sessionId: detail.sessionId, index: detail.index, text: detail.text }
   if (type === 'tts:stop') return { type: 'tts', state: 'stop', reason: detail.reason }
   if (type === 'asr:partial') return { type: 'stt', state: 'partial', text: detail.text }

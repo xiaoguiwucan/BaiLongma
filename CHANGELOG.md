@@ -4,6 +4,40 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.219 - 2026-05-26
+
+### 更新内容
+
+- 新增语音事件类型 `tts:audio_ready`，在每个 TTS 分句即将请求音频时广播。
+- Brain UI 分句 TTS 播放队列现在会为每个音频段生成稳定的 HTTP URL：`/tts/session/:id/audio/:index`。
+- `/voice/events` WebSocket 会把 `tts:audio_ready` 映射为小智式 JSON：`{ "type": "tts", "state": "audio_ready", "sessionId", "index", "text", "url", "contentType" }`。
+- 原始 `voice_event` 仍会保留完整 detail，包括 `absoluteUrl`，方便本机调试工具直接拉取音频。
+
+### 改变原因
+
+- v2.1.218 只暴露了 wake/stt/tts 生命周期 JSON，外部客户端知道“开始说第几句”，但不知道去哪取对应音频。
+- 小智式体验最终需要“事件 + 音频数据”同步；本版本先用低风险的音频 URL/元数据方案，为后续 WebSocket 二进制 Opus 帧、硬件端播放和手机端播放打基础。
+
+### 影响范围
+
+- 不改变现有桌面端 TTS 播放效果。
+- 不改变 TTS Provider，也不新增云端依赖。
+- 新增事件只在分句 TTS 队列播放时产生；旧 `/tts/stream` 试听接口不广播音频段事件。
+
+### 验证结果
+
+- `node --check src/voice/voice-events.js` 通过。
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/api.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端仍连接 `ws://127.0.0.1:3721/voice/events`。
+- 收到 `tts audio_ready` 后，可用同源 HTTP GET 拉取 `url` 字段对应音频；局域网客户端需要把 host 替换为运行白龙马的 Mac 地址，并确认端口暴露策略。
+
 ## v2.1.218 - 2026-05-26
 
 ### 更新内容

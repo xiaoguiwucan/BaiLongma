@@ -7,6 +7,7 @@ export const VOICE_EVENT_TYPES = Object.freeze({
   SPEAKER_REJECTED: 'speaker:rejected',
   TTS_START: 'tts:start',
   TTS_SENTENCE_START: 'tts:sentence_start',
+  TTS_AUDIO_READY: 'tts:audio_ready',
   TTS_SENTENCE_END: 'tts:sentence_end',
   TTS_STOP: 'tts:stop',
   INTERRUPT: 'interrupt',

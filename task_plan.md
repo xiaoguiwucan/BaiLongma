@@ -1,41 +1,50 @@
-# Task Plan: v2.1.218 Experimental Voice WebSocket Channel
+# Task Plan: v2.1.219 TTS Audio Segment Events
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.218 with an experimental WebSocket voice event channel that broadcasts Xiaozhi-style JSON lifecycle events to external clients, docs, GitHub backup, and Release assets.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.219 with TTS audio segment metadata events over the existing `/voice/events` WebSocket channel, then back it up to GitHub with detailed docs and Release assets.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect current HTTP/WebSocket upgrade structure
-- [x] Identify low-risk bridge from browser voice events to backend WebSocket clients
+- [x] Inspect current v2.1.218 voice event WebSocket channel
+- [x] Inspect current sentence-level TTS playback flow
+- [x] Choose low-risk audio metadata URL event before binary Opus frames
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add backend voice event broadcaster and `/voice/events` WebSocket endpoint
-- [x] Add frontend bridge that forwards `bailongma:voice-event` to backend
-- [x] Map internal events to Xiaozhi-like JSON messages
+- [x] Add `tts:audio_ready` voice event type
+- [x] Emit audio segment URL metadata before each frontend segment fetch
+- [x] Map `tts:audio_ready` to Xiaozhi-style WebSocket JSON
 - **Status:** complete
 
-### Phase 3: Verification
-- [x] Run JS syntax checks and smoke checks
-- [x] Log known blockers
+### Phase 3: Version, Docs, UI Notes
+- [x] Bump package version to 2.1.219
+- [x] Update README, CHANGELOG, BACKUP document, and Brain UI release notes
+- [x] Update progress/final verification log
 - **Status:** complete
 
-### Phase 4: Version, Docs, Release
-- [x] Bump version to 2.1.218
-- [x] Update README / CHANGELOG / BACKUP / in-app release notes
-- [x] Commit, tag, push, create GitHub Release with source/bundle assets
+### Phase 4: Verification
+- [x] Run JS syntax checks for touched files
+- [x] Run `npm run smoke:tools`
 - **Status:** complete
+
+### Phase 5: GitHub Backup and Release
+- [ ] Commit changes
+- [ ] Tag `v2.1.219`
+- [ ] Push main and tag to GitHub
+- [ ] Create source tarball and Git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** pending
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Implement JSON event channel before binary audio frames | Safer experimental step and matches v2.1.217 event bus |
-| Use frontend bridge POST to backend | Existing voice events are browser-side; backend cannot directly observe DOM events |
-| Preserve current ASR/TTS playback | This version only exposes events to external clients |
+| Use `tts:audio_ready` metadata before binary frames | External clients can pull audio now without changing provider/player internals |
+| Use relative `url` plus raw `absoluteUrl` in original event detail | Relative URL is safer for LAN host rewriting; absolute URL is convenient for local debug |
+| Preserve existing `/tts/session/:id/audio/:index` endpoint | Avoid duplicate audio storage or caching complexity |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

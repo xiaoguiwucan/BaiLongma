@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.219</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增 TTS 分句音频就绪事件，让外部客户端能拿到每段音频 URL。</p>
+                <ul class="release-note-points">
+                  <li>新增 tts:audio_ready 语音事件。</li>
+                  <li>/voice/events 会广播小智式 tts audio_ready JSON。</li>
+                  <li>事件包含 sessionId、index、text、url、contentType，为后续 Opus 音频帧做准备。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.218</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

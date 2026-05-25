@@ -1554,9 +1554,19 @@ async function playNextTTSSegment(generation, index) {
     return;
   }
   const segmentText = ttsSegmentQueue[index] || '';
+  const segmentAudioPath = `/tts/session/${encodeURIComponent(ttsSessionId)}/audio/${index}`;
+  const segmentAudioUrl = `${API}${segmentAudioPath}`;
   emitVoiceEvent(VOICE_EVENT_TYPES.TTS_SENTENCE_START, { sessionId: ttsSessionId, index, text: segmentText });
+  emitVoiceEvent(VOICE_EVENT_TYPES.TTS_AUDIO_READY, {
+    sessionId: ttsSessionId,
+    index,
+    text: segmentText,
+    url: segmentAudioPath,
+    absoluteUrl: segmentAudioUrl,
+    contentType: "audio/mpeg",
+  });
   try {
-    const resp = await fetch(`${API}/tts/session/${encodeURIComponent(ttsSessionId)}/audio/${index}`);
+    const resp = await fetch(segmentAudioUrl);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
     const blob = await resp.blob();
     if (generation !== ttsQueueGeneration) return;

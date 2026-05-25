@@ -1,17 +1,13 @@
-# Progress: v2.1.218 Experimental Voice WebSocket Channel
+# Progress: v2.1.219 TTS Audio Segment Events
 
 ## 2026-05-26
-- Started v2.1.218 after completing and releasing v2.1.217.
-- Inspected `src/api.js` WebSocket upgrade paths and browser-side voice event bus.
-- Added backend `src/voice/voice-event-bus.js` for WebSocket clients and Xiaozhi-like event mapping.
-- Added `/voice/events` WebSocket endpoint plus `/voice/events/status` and `/voice/events/publish` HTTP bridge endpoints.
-- Added Brain UI bridge that forwards browser `bailongma:voice-event` objects to backend clients without blocking UI.
+- Resumed from released v2.1.218 baseline.
+- Inspected current voice event WebSocket mapping and frontend sentence-level TTS queue.
+- Added `VOICE_EVENT_TYPES.TTS_AUDIO_READY` as `tts:audio_ready`.
+- Updated Brain UI TTS playback to emit `tts:audio_ready` before fetching each `/tts/session/:id/audio/:index` segment.
+- Updated backend voice event bus to map `tts:audio_ready` to Xiaozhi-style JSON with `type=tts`, `state=audio_ready`, `sessionId`, `index`, `text`, `url`, and `contentType`.
+- Bumped version to 2.1.219 in `package.json` and `package-lock.json`.
+- Updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
 
-- Bumped package version to 2.1.218.
-- Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.218.
-- Verification: JS syntax checks and `npm run smoke:tools` passed.
-
-- Committed v2.1.218 as `27873f8 feat: add voice event websocket channel`.
-- Tagged and pushed `v2.1.218` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.218
-- Uploaded release assets: source tarball and Git bundle under `backups/v2.1.218/`.
+- Verification passed: `node --check src/voice/voice-events.js`, `node --check src/voice/voice-event-bus.js`, `node --check src/ui/brain-ui/app.js`, `node --check src/api.js`.
+- Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
