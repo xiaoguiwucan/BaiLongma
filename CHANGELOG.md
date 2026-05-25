@@ -4,6 +4,47 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.220 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` WebSocket 升级到协议版本 2，hello 消息新增 `capabilities: ["json_events", "tts_audio_chunks"]`。
+- 新增客户端订阅消息：
+  - `{"type":"subscribe","audio":true}`：订阅 TTS 音频块，音频数据以 base64 JSON 发送；
+  - `{"type":"subscribe","audio":true,"binaryAudio":true}`：订阅 TTS 音频块，并在每个 metadata 后发送二进制音频 chunk；
+  - `{"type":"unsubscribe","audio":false,"binaryAudio":false}`：关闭音频块订阅。
+- TTS 分句音频流 `/tts/session/:id/audio/:index` 在 HTTP 播放同时，会向已订阅 WebSocket 客户端广播：
+  - `tts audio_start`
+  - `tts audio_chunk` metadata
+  - `tts audio_chunk_base64` 或二进制 chunk
+  - `tts audio_end` / `tts audio_error`
+- `/voice/events/status` 新增 `audioSubscribers`、`binaryAudioSubscribers` 和 `version` 字段。
+
+### 改变原因
+
+- v2.1.219 已让外部客户端知道“第几句音频在哪里取”，但仍需要客户端再发 HTTP 请求。
+- 小智式协议最终更接近“WebSocket 控制事件 + 音频帧”模式；本版本加入显式订阅的音频块广播，让外部设备可以开始验证单连接收音频的流程。
+- 默认不推送音频块，避免破坏只想看 JSON 生命周期事件的调试客户端。
+
+### 影响范围
+
+- 桌面端原有 TTS 播放逻辑不变，仍通过 HTTP segment 播放。
+- 未发送订阅消息的 WebSocket 客户端行为基本不变，只会看到 hello version/capabilities 增强。
+- 订阅 base64 模式会增加 WebSocket JSON 体积；二进制模式更接近未来 Opus 帧方向。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端仍连接 `ws://127.0.0.1:3721/voice/events`。
+- 示例：连接后发送 `{"type":"subscribe","audio":true,"binaryAudio":true}`，再触发 Brain UI 的 TTS 回复，即可收到音频块 metadata 和二进制 chunk。
+- 本版本广播的是当前 Provider 返回的原始 `audio/mpeg` chunk，还不是 Opus 编码帧。
+
 ## v2.1.219 - 2026-05-26
 
 ### 更新内容

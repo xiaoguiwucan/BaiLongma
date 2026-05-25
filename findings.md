@@ -1,11 +1,16 @@
-# Findings: v2.1.219 TTS Audio Segment Events
+# Findings: v2.1.220 WebSocket TTS Audio Chunk Subscription
 
 ## Current baseline
-- v2.1.218 exposes `/voice/events` WebSocket and maps lifecycle events to Xiaozhi-like JSON.
-- v2.1.216 already provides sentence-level TTS sessions and segment audio URLs at `/tts/session/:id/audio/:index`.
-- The frontend knows exactly when each segment is about to be fetched, making it the lowest-risk place to emit segment metadata.
+- v2.1.219 emits `tts:audio_ready` with the segment URL, index, text, and content type.
+- `/tts/session/:id/audio/:index` already streams provider audio chunks to the browser.
+- `/voice/events` already supports JSON lifecycle events and a lightweight ping handler.
 
 ## Design finding
-- A hardware/mobile client does not need binary frames immediately if it can receive `tts audio_ready` with `sessionId`, `index`, `text`, `url`, and `contentType`.
-- The WebSocket event stays JSON-only for v2.1.219, but now bridges lifecycle events to actual retrievable audio.
-- Future versions can replace or supplement URL metadata with binary Opus frames while keeping the same `sessionId/index` sequencing.
+- The safest next Xiaozhi-style step is an explicit subscription model: clients must opt in before receiving audio chunks.
+- Base64 JSON chunks are useful for simple clients and logging; binary chunks are closer to the eventual Opus frame protocol.
+- Broadcasting from the existing HTTP segment stream keeps desktop behavior unchanged and avoids double TTS synthesis.
+
+## Remaining future direction
+- Convert provider audio to Opus frames or add an Opus-capable provider path.
+- Move from “HTTP playback triggers WebSocket audio mirror” to a first-class WebSocket TTS session request path.
+- Add a small protocol test client in `scripts/` once runtime server tests are introduced.

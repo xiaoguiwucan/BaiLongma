@@ -14,7 +14,7 @@ import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { createTTSSession, cancelTTSSession, streamTTSSegment } from './voice/tts-session.js'
-import { addVoiceEventClient, removeVoiceEventClient, publishVoiceEvent, getVoiceEventBusStatus } from './voice/voice-event-bus.js'
+import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, publishVoiceEvent, getVoiceEventBusStatus, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -1339,16 +1339,28 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         const parts = url.pathname.split('/')
         const sessionId = decodeURIComponent(parts[3] || '')
         const index = Number(parts[5] || 0)
+        const contentType = 'audio/mpeg'
         const audioStream = await streamTTSSegment({ sessionId, index })
         res.writeHead(200, {
-          'Content-Type': 'audio/mpeg',
+          'Content-Type': contentType,
           'Transfer-Encoding': 'chunked',
           'Cache-Control': 'no-cache',
           'Access-Control-Allow-Origin': '*',
         })
-        audioStream.on('data', chunk => res.write(chunk))
-        audioStream.on('end', () => res.end())
-        audioStream.on('error', err => { console.warn('[TTS] Segment stream error:', err.message); try { res.end() } catch {} })
+        publishTTSAudioStart({ sessionId, index, contentType })
+        audioStream.on('data', chunk => {
+          publishTTSAudioChunk({ sessionId, index, chunk, contentType })
+          res.write(chunk)
+        })
+        audioStream.on('end', () => {
+          publishTTSAudioEnd({ sessionId, index })
+          res.end()
+        })
+        audioStream.on('error', err => {
+          console.warn('[TTS] Segment stream error:', err.message)
+          publishTTSAudioError({ sessionId, index, error: err.message })
+          try { res.end() } catch {}
+        })
       } catch (err) {
         if (!res.headersSent) jsonResponse(res, 500, { ok: false, error: err.message })
         else try { res.end() } catch {}
@@ -1500,10 +1512,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     ws.on('close', () => removeVoiceEventClient(ws))
     ws.on('error', () => removeVoiceEventClient(ws))
     ws.on('message', (raw) => {
-      try {
-        const msg = JSON.parse(raw.toString())
-        if (msg?.type === 'ping') ws.send(JSON.stringify({ type: 'pong', at: Date.now() }))
-      } catch {}
+      try { handleVoiceEventClientMessage(ws, raw) } catch {}
     })
   })
 

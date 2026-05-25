@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.220</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增可选 WebSocket TTS 音频块订阅，向小智式音频帧协议继续推进。</p>
+                <ul class="release-note-points">
+                  <li>/voice/events hello 升级到 version 2 并声明 tts_audio_chunks 能力。</li>
+                  <li>客户端可发送 subscribe audio/binaryAudio 显式订阅音频块。</li>
+                  <li>TTS 分句 HTTP 播放时同步广播 audio_start、audio_chunk、audio_end/audio_error。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.219</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
