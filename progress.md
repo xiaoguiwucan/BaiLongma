@@ -1,18 +1,12 @@
-# Progress: v2.1.225 Voice Events Smoke Test
+# Progress: v2.1.226 Voice Events Publish Mapping Smoke
 
 ## 2026-05-26
-- Resumed from released v2.1.224 baseline.
-- Inspected `startAPI` and `/voice/events` protocol paths.
-- Added `scripts/smoke-voice-events.mjs`.
-- The smoke test starts a temporary API server on port `39221` by default, verifies `/voice/events/status`, connects WebSocket clients, validates hello, ping/pong, subscribe audio/binary options, structured `tts:cancel` no-active-session response, and final client count cleanup.
-- Added `npm run smoke:voice-events`.
-- Initial status-after-close assertion saw one remaining client; fixed by resolving after WebSocket close and adding a short cleanup delay.
-- Bumped version to 2.1.225 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
+- Resumed from released v2.1.225 baseline.
+- Inspected `scripts/smoke-voice-events.mjs` and `/voice/events/publish` route.
+- Extended the voice events smoke test to open a WebSocket client, publish an `asr:final` event through HTTP `/voice/events/publish`, and assert that the client receives both raw `voice_event` and Xiaozhi-style `stt final` JSON.
+- `npm run smoke:voice-events` now reports 9/9 checks instead of 7/7.
+- Bumped version to 2.1.226 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
 
 - Verification passed: `node --check scripts/smoke-voice-events.mjs` and `node --check scripts/voice-events-client.mjs`.
-- Verification passed: `npm run smoke:voice-events` 7/7.
+- Verification passed: `npm run smoke:voice-events` 9/9.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.225 as `32618c4 test: add voice events smoke test`.
-- Tagged and pushed `v2.1.225` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.225
-- Uploaded release assets: `backups/v2.1.225/BaiLongma-v2.1.225-source.tar.gz` and `backups/v2.1.225/BaiLongma-v2.1.225.bundle`.

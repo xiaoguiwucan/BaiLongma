@@ -1,16 +1,15 @@
-# Findings: v2.1.225 Voice Events Smoke Test
+# Findings: v2.1.226 Voice Events Publish Mapping Smoke
 
 ## Current baseline
-- `/voice/events` protocol v3 has enough non-TTS-provider behavior to test automatically.
-- `startAPI` returns the HTTP server, so a smoke test can start and stop a temporary API instance.
-- Real `tts:speak` audio generation depends on configured provider credentials, so it is not appropriate for a basic smoke test yet.
+- v2.1.225 smoke validates WebSocket hello, ping, subscribe, cancel, and client cleanup.
+- `/voice/events/publish` is the bridge used by Brain UI to forward browser-side voice events to backend WebSocket clients.
+- The bridge also performs Xiaozhi-style mapping through `publishVoiceEvent`.
 
 ## Design finding
-- Testing hello, ping, subscribe, cancel-without-active-session, and status client cleanup gives useful coverage without external credentials.
-- Client count assertions need to wait until the WebSocket close event has propagated to the server.
-- A later integration test can add mock TTS provider coverage for full `tts:speak` event ordering.
+- `asr:final` is the best first mapping test because it maps cleanly to `{type:"stt", state:"final"}` and requires no model credentials.
+- Testing raw `voice_event` and mapped JSON together protects both debugging clients and Xiaozhi-style clients.
+- This fills the largest gap left by v2.1.225 without adding flaky provider-dependent testing.
 
 ## Remaining future direction
-- Add mock/provider injection for deterministic TTS speak tests.
-- Add CI workflow once dependency/native module setup is stable.
-- Extend smoke test to verify `POST /voice/events/publish` event mapping.
+- Add publish mapping tests for wake accepted/rejected and TTS lifecycle events.
+- Add mock TTS provider coverage for full `tts:speak` audio sequencing.

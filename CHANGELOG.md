@@ -4,6 +4,39 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.226 - 2026-05-26
+
+### 更新内容
+
+- 增强 `scripts/smoke-voice-events.mjs`。
+- `npm run smoke:voice-events` 从 7 项检查扩展到 9 项检查。
+- 新增覆盖 `POST /voice/events/publish`：
+  - smoke 会通过 HTTP 发布 `asr:final` 事件；
+  - 验证 WebSocket 客户端收到原始 `voice_event`；
+  - 验证 WebSocket 客户端收到小智式 `{type:"stt", state:"final"}` 映射。
+
+### 改变原因
+
+- v2.1.225 只验证了 WebSocket 连接、订阅、ping 和 cancel 基础行为，没有覆盖 Brain UI 到后端事件总线的 HTTP bridge。
+- `/voice/events/publish` 是浏览器语音事件转发给外部客户端的关键路径，需要纳入自动 smoke，防止后续改动破坏 raw event 或小智式映射。
+
+### 影响范围
+
+- 不改变运行时协议行为。
+- 只增强 smoke 测试覆盖范围。
+
+### 验证结果
+
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-events` 9/9 通过。
+- `node --check scripts/voice-events-client.mjs` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 开发者可运行 `npm run smoke:voice-events` 验证 WebSocket 协议和 `/voice/events/publish` 桥接映射。
+
 ## v2.1.225 - 2026-05-26
 
 ### 更新内容

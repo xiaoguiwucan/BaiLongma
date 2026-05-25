@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.226</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">增强语音 WebSocket smoke，覆盖事件发布桥接和小智式映射。</p>
+                <ul class="release-note-points">
+                  <li>smoke:voice-events 从 7 项扩展到 9 项检查。</li>
+                  <li>新增 POST /voice/events/publish 覆盖。</li>
+                  <li>验证 raw voice_event 和小智式 stt final 映射。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.225</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

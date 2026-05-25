@@ -78,6 +78,22 @@ try {
   const cancelled = cancelMessages.find(msg => msg.type === 'tts' && msg.state === 'cancelled')
   assert(cancelled?.cancelled === false && cancelled?.reason === 'no_active_session', 'cancel without active speak returns structured no_active_session', JSON.stringify(cancelled))
 
+  const publishMessagesPromise = connectAndCollect({
+    onOpen: async () => {
+      await new Promise(resolve => setTimeout(resolve, 30))
+      await fetch(`${API}/voice/events/publish`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ event: { type: 'asr:final', seq: 77, at: Date.now(), detail: { text: '烟雾测试' } } }),
+      })
+    },
+    until: (msg, messages) => messages.some(item => item.type === 'voice_event' && item.event?.type === 'asr:final')
+      && messages.some(item => item.type === 'stt' && item.state === 'final' && item.text === '烟雾测试'),
+  })
+  const publishMessages = await publishMessagesPromise
+  assert(publishMessages.some(msg => msg.type === 'voice_event' && msg.event?.type === 'asr:final'), 'publish broadcasts raw voice_event', JSON.stringify(publishMessages))
+  assert(publishMessages.some(msg => msg.type === 'stt' && msg.state === 'final' && msg.text === '烟雾测试'), 'publish maps asr:final to Xiaozhi-style stt final', JSON.stringify(publishMessages))
+
   await new Promise(resolve => setTimeout(resolve, 50))
   const statusAfter = await fetch(`${API}/voice/events/status`).then(r => r.json())
   assert(statusAfter.ok === true && statusAfter.clients === 0, 'status returns zero clients after smoke sockets close', JSON.stringify(statusAfter))
