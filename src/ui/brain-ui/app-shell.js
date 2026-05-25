@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.224</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增语音 WebSocket 协议文档，方便外部设备接入。</p>
+                <ul class="release-note-points">
+                  <li>新增 docs/VOICE_EVENTS_PROTOCOL.md。</li>
+                  <li>固化 /voice/events v3、tts:speak、tts:cancel 和音频块说明。</li>
+                  <li>补充 CLI 调试、ESP32/手机端实现建议和已知限制。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.223</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

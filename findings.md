@@ -1,16 +1,16 @@
-# Findings: v2.1.223 Voice Events Debug Client
+# Findings: v2.1.224 Voice Events Protocol Documentation
 
 ## Current baseline
-- `/voice/events` now supports JSON lifecycle events, opt-in audio chunks, `tts:speak`, and `tts:cancel`.
-- Developers currently need ad-hoc `node -e` snippets to test the protocol.
-- Existing project dependency `ws` is already available and suitable for a CLI client.
+- `/voice/events` has evolved into protocol v3 with JSON events, TTS audio chunks, direct `tts:speak`, and `tts:cancel`.
+- v2.1.223 added a CLI debug client, but the protocol itself was scattered across README/CHANGELOG/release notes.
+- External device integration needs a stable, single reference document.
 
 ## Design finding
-- A dedicated CLI client reduces friction for protocol verification and gives ESP32/mobile integration a concrete reference.
-- The script should support both passive listening and active `tts:speak` requests.
-- Saving audio chunks to a file makes it easy to verify that binary/base64 chunks are valid audio.
+- The protocol doc should describe both raw `voice_event` and Xiaozhi-style mapped events because clients may choose either layer.
+- Audio chunk semantics need clear ordering: metadata JSON followed by binary frame when `binaryAudio=true`.
+- Cancellation semantics must be explicit: scoped to the same WebSocket connection's active speak.
 
 ## Remaining future direction
-- Convert this script into automated integration tests once a mock TTS provider exists.
-- Add protocol examples for LAN devices and ESP32 clients.
-- Add optional event-order assertions for CI.
+- Add Opus frame documentation after actual Opus encoding/transcoding exists.
+- Add sequence diagrams once the client/server flows stabilize further.
+- Add SDK snippets for ESP32 and mobile clients.

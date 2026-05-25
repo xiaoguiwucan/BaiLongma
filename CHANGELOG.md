@@ -4,6 +4,47 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.224 - 2026-05-26
+
+### 更新内容
+
+- 新增 `docs/VOICE_EVENTS_PROTOCOL.md`。
+- 文档固化 `/voice/events` WebSocket v3 协议，包括：
+  - 连接端点和状态接口；
+  - hello/version/capabilities；
+  - ping/pong；
+  - subscribe/unsubscribe 音频块订阅；
+  - 原始 `voice_event` 与小智式 JSON 映射；
+  - TTS `audio_start/audio_chunk/audio_end/audio_error`；
+  - WebSocket `tts:speak`；
+  - WebSocket `tts:cancel`；
+  - CLI 调试客户端用法；
+  - ESP32/手机端实现建议；
+  - 当前限制和安全注意事项。
+- README 增加协议文档入口。
+
+### 改变原因
+
+- v2.1.218-v2.1.223 已形成可用的语音 WebSocket 协议和调试客户端，但外部硬件/手机端接入还缺一份稳定说明书。
+- 将协议文档化后，后续才能更稳地做 ESP32/手机端客户端、自动化测试和 Opus 帧升级。
+
+### 影响范围
+
+- 纯文档版本，不改变运行时代码逻辑。
+- 不改变 Brain UI 和服务端协议行为。
+
+### 验证结果
+
+- `node -e` 检查 `docs/VOICE_EVENTS_PROTOCOL.md` 存在且包含 `tts:speak` 通过。
+- `node --check scripts/voice-events-client.mjs` 通过。
+- `node scripts/voice-events-client.mjs --help` 输出正常。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端开发前建议先阅读 `docs/VOICE_EVENTS_PROTOCOL.md`，再用 `npm run voice:events` 验证本机协议。
+
 ## v2.1.223 - 2026-05-26
 
 ### 更新内容
