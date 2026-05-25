@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.230 with a discoverable `/voice/events/protocol` metadata endpoint, shared protocol constants, updated smoke coverage, updated docs/UI release notes, and a GitHub Release with source and bundle assets.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -28,13 +28,13 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 4: GitHub backup and Release
-- [ ] Commit changes
-- [ ] Tag `v2.1.230`
-- [ ] Push main and tag to GitHub
-- [ ] Create `backups/v2.1.230` source tarball and git bundle
-- [ ] Create GitHub Release with detailed notes and upload assets
-- [ ] Finalize release docs if needed, then push/re-tag/re-upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag `v2.1.230`
+- [x] Push main and tag to GitHub
+- [x] Create `backups/v2.1.230` source tarball and git bundle
+- [x] Create GitHub Release with detailed notes and upload assets
+- [x] Finalize release docs if needed, then push/re-tag/re-upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
@@ -46,4 +46,4 @@ Verification complete; release in progress
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| None yet | - | - |
+| `gh release create/upload` appeared to stall while uploading large assets and left a draft release / starter asset | 1 | Used GitHub API directly: deleted starter asset, uploaded source and bundle with `curl`, patched release to `draft=false` and tag `v2.1.230` |
