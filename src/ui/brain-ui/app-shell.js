@@ -356,6 +356,7 @@ const createSettingsModal = () => `
               <span>Round</span><code id="voice-debug-round">—</code>
               <span>ASR Session</span><code id="voice-debug-asr">—</code>
               <span>TTS Session</span><code id="voice-debug-tts">—</code>
+              <span>最近事件</span><code id="voice-debug-event">—</code>
             </div>
           </div>
 
@@ -724,6 +725,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.217</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增小智式语音事件协议，为 WebSocket 语音通道做准备。</p>
+                <ul class="release-note-points">
+                  <li>新增 bailongma:voice-event 统一事件总线。</li>
+                  <li>规范 wake/asr/tts/interrupt/media 事件类型。</li>
+                  <li>语音调试面板新增最近事件显示。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.216</span>

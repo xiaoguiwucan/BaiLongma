@@ -4,6 +4,53 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.217 - 2026-05-26
+
+### 更新内容
+
+- 新增 `src/voice/voice-events.js`，提供浏览器端统一语音事件总线。
+- 新增统一事件 `bailongma:voice-event`，事件对象包含 `type`、`seq`、`at`、`detail`。
+- 规范小智式语音事件类型：
+  - `wake:start`
+  - `wake:accepted`
+  - `wake:rejected`
+  - `asr:partial`
+  - `asr:final`
+  - `speaker:rejected`
+  - `tts:start`
+  - `tts:sentence_start`
+  - `tts:sentence_end`
+  - `tts:stop`
+  - `interrupt`
+  - `media:duck`
+- 前端语音面板接入 wake、ASR、声纹拒绝、打断、视频降音事件。
+- 分句式 TTS 播放队列接入 TTS session 和 sentence 生命周期事件。
+- 设置页语音调试面板新增“最近事件”。
+
+### 改变原因
+
+- 小智协议的关键不是单个功能，而是统一的语音生命周期事件。
+- 后续要做 WebSocket 语音通道、硬件/手机端接入、Opus 音频帧协议，需要先有稳定的事件对象。
+
+### 影响范围
+
+- 本版本不改变 ASR/TTS 模型。
+- 不改变现有 DOM 事件，保留 `bailongma:assistant-wake`、`bailongma:voice-activity` 等旧集成。
+- 新事件总线用于调试和后续协议转发。
+
+### 验证结果
+
+- `node --check src/voice/voice-events.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变。
+- 本版本是浏览器内部事件协议，还不是对外 WebSocket 通道。
+
 ## v2.1.216 - 2026-05-26
 
 ### 更新内容

@@ -5,6 +5,7 @@ import { initChat, friendlyChannelLabel } from "./chat.js";
 import { initPanelCollapse } from "./panel-collapse.js";
 import { ThoughtStream } from "./thought-stream.js";
 import { initVoicePanel } from "./voice-panel.js";
+import { emitVoiceEvent, VOICE_EVENT_TYPES } from "../../voice/voice-events.js";
 import { initHotspot, toggleHotspot, setHotspotMode, moveVoicePanelToBody, restoreVoicePanel } from "./hotspot.js";
 import { enrichVisiblePersonCardFromText, initPersonCard, setPersonCardMode, showPersonCardByName } from "./person-card.js";
 import { initDocPanel, setDocPanelMode } from "./doc.js";
@@ -1461,6 +1462,7 @@ function applyTTSInterruption(spokenUpTo) {
 // Called by voice-panel interruption detection: stop current TTS and record cut point
 window.stopTTS = () => {
   if (!ttsAudioEl && !ttsSessionId) return;
+  emitVoiceEvent(VOICE_EVENT_TYPES.INTERRUPT, { source: "stopTTS", sessionId: ttsSessionId });
   const { remaining, spokenUpTo } = calcRemainingText(
     ttsCurrentText,
     ttsAudioEl?.currentTime || 0,
@@ -1530,6 +1532,7 @@ async function playTTSReply(text) {
     if (generation !== ttsQueueGeneration) return;
     ttsSessionId = session.sessionId;
     ttsSegmentQueue = session.segments.slice();
+    emitVoiceEvent(VOICE_EVENT_TYPES.TTS_START, { sessionId: ttsSessionId, segmentCount: ttsSegmentQueue.length });
     window.bailongmaVoice?.suspendForTTS?.();
     await playNextTTSSegment(generation, 0);
   } catch {
@@ -1546,10 +1549,12 @@ async function playNextTTSSegment(generation, index) {
     ttsSessionId = null;
     ttsCurrentText = '';
     ttsSegmentQueue = [];
+    emitVoiceEvent(VOICE_EVENT_TYPES.TTS_STOP, { reason: 'completed' });
     window.bailongmaVoice?.resumeAfterMedia();
     return;
   }
   const segmentText = ttsSegmentQueue[index] || '';
+  emitVoiceEvent(VOICE_EVENT_TYPES.TTS_SENTENCE_START, { sessionId: ttsSessionId, index, text: segmentText });
   try {
     const resp = await fetch(`${API}/tts/session/${encodeURIComponent(ttsSessionId)}/audio/${index}`);
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
@@ -1562,6 +1567,7 @@ async function playNextTTSSegment(generation, index) {
     ttsAudioEl.onended = () => {
       URL.revokeObjectURL(url);
       ttsPlayedSegments.push(segmentText);
+      emitVoiceEvent(VOICE_EVENT_TYPES.TTS_SENTENCE_END, { sessionId: ttsSessionId, index, text: segmentText });
       ttsAudioEl = null;
       playNextTTSSegment(generation, index + 1);
     };
@@ -2581,6 +2587,7 @@ function initTTSSettings() {
   const voiceDebugRound = document.getElementById("voice-debug-round");
   const voiceDebugAsr = document.getElementById("voice-debug-asr");
   const voiceDebugTts = document.getElementById("voice-debug-tts");
+  const voiceDebugEvent = document.getElementById("voice-debug-event");
 
   function updateVoiceDebugPanel(detail = {}) {
     if (!voiceDebugPanel) return;
@@ -2601,6 +2608,12 @@ function initTTSSettings() {
     });
   }
   window.addEventListener("bailongma:voice-state", (event) => updateVoiceDebugPanel(event.detail || {}));
+  window.addEventListener("bailongma:voice-event", (event) => {
+    if (voiceDebugEvent) {
+      const e = event.detail || {};
+      voiceDebugEvent.textContent = `${e.type || "—"} #${e.seq || ""}`.trim();
+    }
+  });
   updateVoiceDebugPanel(window.bailongmaVoiceState?.getSnapshot?.() || {});
 
   initTTSSettings();
@@ -3182,6 +3195,7 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
   }
 
   function updateMediaDuckStatus(active, detail = {}) {
+    emitVoiceEvent(VOICE_EVENT_TYPES.MEDIA_DUCK, { active, ...detail });
     window.dispatchEvent(new CustomEvent("bailongma:media-duck", { detail: { active, ...detail } }));
     const el = document.getElementById("voice-media-duck-status");
     if (el) el.textContent = active ? `已压低视频音量（${detail.kind || videoKind}）` : "空闲";

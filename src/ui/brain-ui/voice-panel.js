@@ -1,4 +1,5 @@
 import { createVoiceStateMachine, VOICE_STATES } from '../../voice/voice-state-machine.js';
+import { emitVoiceEvent, VOICE_EVENT_TYPES } from '../../voice/voice-events.js';
 
 // 声波点云球 + ASR 语音输入面板
 // 默认本地 Whisper；也可切换云端 ASR（阿里云/腾讯云/讯飞），通过后端 WebSocket 代理
@@ -199,6 +200,7 @@ export function initVoicePanel({
         if (mediaVoiceFrames >= 3 && now - lastMediaVoiceActivityAt > 900) {
           lastMediaVoiceActivityAt = now;
           mediaVoiceFrames = 0;
+          emitVoiceEvent(VOICE_EVENT_TYPES.MEDIA_DUCK, { phase: 'voice_activity', volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3 });
           window.dispatchEvent(new CustomEvent('bailongma:voice-activity', { detail: { volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3 } }));
         }
       }
@@ -231,6 +233,7 @@ export function initVoicePanel({
                 // 声音持续高振幅 → 语音 → 真正打断
                 duckActive = false;
                 duckHighFrames = 0;
+                emitVoiceEvent(VOICE_EVENT_TYPES.INTERRUPT, { source: 'barge-in', volume: vol });
                 window.stopTTS?.();
                 resumeVoiceInputFromMedia(true);
                 bargeinFastCheckActive = true;
@@ -559,6 +562,7 @@ export function initVoicePanel({
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'config_ok') {
+        emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_START, { engine: msg.engine, speaker: msg.speaker });
         setStatus(VOICE_STATES.LISTENING, { reason: 'recognition config ok' });
         if (transcript && transcript.textContent === '正在启动本地语音模型…') transcript.textContent = '';
         return;
@@ -571,6 +575,7 @@ export function initVoicePanel({
           if (text === lastFinalTranscript) return;
           const gated = applyWakeWordGate(text);
           if (!gated.accepted) {
+            emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_REJECTED, { text, reason: gated.reason, wokeOnly: gated.wokeOnly, repeatCount: gated.repeatCount });
             if (gated.wokeOnly) {
               if (transcript) transcript.textContent = `已唤醒，请在 ${gated.windowSeconds || 8} 秒内继续说指令…`;
               setStatus(VOICE_STATES.WAKE_DETECTED, { reason: 'wake word detected, waiting command', word: gated.word, windowSeconds: gated.windowSeconds });
@@ -579,6 +584,7 @@ export function initVoicePanel({
             }
             return;
           }
+          emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_ACCEPTED, { text: gated.text, word: gated.word, reason: gated.reason });
           const acceptedText = gated.text;
           if (!acceptedText || looksLikeAsrHallucination(acceptedText)) return;
           lastFinalTranscript = acceptedText;
@@ -587,20 +593,24 @@ export function initVoicePanel({
           if (transcript) transcript.textContent = accumulatedText;
           const input = getChatInput?.();
           if (input) input.value = accumulatedText;
+          emitVoiceEvent(VOICE_EVENT_TYPES.ASR_FINAL, { text: acceptedText, accumulatedText });
           window.dispatchEvent(new CustomEvent('bailongma:assistant-wake', { detail: { text: acceptedText, wakeReason: gated.reason, wakeWord: gated.word } }));
           triggerDone();
         } else {
+          emitVoiceEvent(VOICE_EVENT_TYPES.ASR_PARTIAL, { text });
           lastTranscriptText = accumulatedText ? accumulatedText + '，' + text : text;
           if (transcript) transcript.textContent = lastTranscriptText;
         }
         scheduleAutoSend();
       } else if (msg.type === 'speaker_rejected') {
+        emitVoiceEvent(VOICE_EVENT_TYPES.SPEAKER_REJECTED, { score: msg.score, threshold: msg.threshold, reason: msg.reason });
         setStatus(VOICE_STATES.LISTENING, { reason: 'speaker rejected' });
         if (transcript) transcript.textContent = msg.reason || `已忽略非本人声音${msg.score != null ? `（声纹 ${msg.score}/${msg.threshold}）` : ''}`;
         return;
       } else if (msg.type === 'sound_event') {
         // 本地语音服务可选返回环境声音事件。这里保持静默，不干扰转写文本。
       } else if (msg.type === 'error') {
+        emitVoiceEvent(VOICE_EVENT_TYPES.ERROR, { service: 'asr', message: msg.message || 'recognition error' });
         setStatus(VOICE_STATES.ERROR, { reason: msg.message || 'recognition error' });
         if (transcript) transcript.textContent = msg.message || '语音识别错误';
       }

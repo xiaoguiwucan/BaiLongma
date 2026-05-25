@@ -1,22 +1,22 @@
-# Task Plan: v2.1.216 Sentence TTS Session
+# Task Plan: v2.1.217 Xiaozhi-style Voice Event Protocol
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.216 with sentence-level TTS: Chinese sentence splitter, TTS session manager, segment audio API, frontend playback queue, cancellation/old-session guard, docs, GitHub backup, and Release assets.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.217 with a unified browser voice event bus and event protocol for wake/asr/tts/interrupt/media, docs, GitHub backup, and Release assets.
 
 ## Current Phase
-Complete
+Phase 4
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect current `/tts/stream` API and frontend `playTTSReply`
-- [x] Identify minimal queue/session design preserving current providers
+- [x] Inspect existing custom voice events and TTS/ASR hooks
+- [x] Identify minimal event bus that preserves existing behavior
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add sentence splitter and TTS session manager
-- [x] Add TTS session API endpoints
-- [x] Replace frontend full-blob single playback with segment queue and cancellation
+- [x] Add browser-safe voice event bus/protocol module
+- [x] Wire wake/ASR/speaker/media events from voice panel
+- [x] Wire TTS session/segment/interrupt events from app playback
 - **Status:** complete
 
 ### Phase 3: Verification
@@ -25,17 +25,17 @@ Complete
 - **Status:** complete
 
 ### Phase 4: Version, Docs, Release
-- [x] Bump version to 2.1.216
+- [x] Bump version to 2.1.217
 - [x] Update README / CHANGELOG / BACKUP / in-app release notes
-- [x] Commit, tag, push, create GitHub Release with source/bundle assets
-- **Status:** complete
+- [ ] Commit, tag, push, create GitHub Release with source/bundle assets
+- **Status:** in_progress
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Keep existing TTS providers | Avoid provider regression; improve orchestration first |
-| Segment on punctuation and play queued blobs | Fastest reliable Electron/browser implementation before MediaSource/Opus |
-| Add session id and cancel guard | Prevent old audio from playing after interruption/new reply |
+| Add browser event bus first | Enables protocol/debugging before WebSocket device channel |
+| Preserve existing DOM events | Avoid breaking current media duck and wake integrations |
+| Use Xiaozhi-like namespaced event types | Makes future WS JSON protocol straightforward |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
