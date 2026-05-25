@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.221</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增 WebSocket tts:speak，外部客户端可直接请求 TTS 并接收音频块。</p>
+                <ul class="release-note-points">
+                  <li>/voice/events 协议升级到 version 3，并声明 tts_speak 能力。</li>
+                  <li>客户端可发送 tts:speak/speak 文本请求。</li>
+                  <li>服务端按句返回 session、sentence、audio_ready、audio_chunk、stop 等事件。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.220</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

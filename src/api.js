@@ -13,8 +13,8 @@ import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
-import { createTTSSession, cancelTTSSession, streamTTSSegment } from './voice/tts-session.js'
-import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, publishVoiceEvent, getVoiceEventBusStatus, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
+import { createTTSSession, cancelTTSSession, streamTTSSegment, getTTSSession } from './voice/tts-session.js'
+import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -1505,14 +1505,83 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     ws.on('error', () => { session?.close(); session = null })
   })
 
-  // Experimental voice event WebSocket channel: JSON lifecycle events for external clients
+  async function streamTTSSegmentToVoiceClient(ws, { sessionId, index, contentType = 'audio/mpeg' }) {
+    publishTTSAudioStart({ sessionId, index, contentType, targetClient: ws })
+    try {
+      const audioStream = await streamTTSSegment({ sessionId, index })
+      await new Promise((resolve, reject) => {
+        audioStream.on('data', chunk => publishTTSAudioChunk({ sessionId, index, chunk, contentType, targetClient: ws }))
+        audioStream.on('end', resolve)
+        audioStream.on('error', reject)
+      })
+      publishTTSAudioEnd({ sessionId, index, targetClient: ws })
+    } catch (err) {
+      publishTTSAudioError({ sessionId, index, error: err.message, targetClient: ws })
+      throw err
+    }
+  }
+
+  async function handleVoiceEventTTSSpeak(ws, msg = {}) {
+    const text = String(msg.text || msg.ttsText || '').trim()
+    const requestId = String(msg.requestId || msg.id || `tts_req_${Date.now()}`)
+    if (!text) {
+      sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', requestId, error: 'Missing text' })
+      return
+    }
+    const previousOptions = getVoiceEventClientOptions(ws)
+    setVoiceEventClientOptions(ws, {
+      audio: true,
+      binaryAudio: msg.binaryAudio === true || msg.binary === true,
+    })
+    const creds = getTTSCredentials()
+    const session = createTTSSession({
+      text,
+      provider: creds.provider,
+      voiceId: msg.voiceId || creds.voiceId || undefined,
+      keys: {
+        doubaoKey: creds.doubaoKey, doubaoAppId: creds.doubaoAppId, doubaoAccessKey: creds.doubaoAccessKey, doubaoResourceId: creds.doubaoResourceId,
+        minimaxKey: creds.minimaxKey, openaiKey: creds.openaiKey, openaiBaseURL: creds.openaiBaseURL,
+        elevenLabsKey: creds.elevenLabsKey, volcanoAppId: creds.volcanoAppId, volcanoToken: creds.volcanoToken,
+      },
+    })
+    sendVoiceEventClientJson(ws, { type: 'tts', state: 'session', requestId, sessionId: session.id, segments: session.segments })
+    sendVoiceEventToClient(ws, { type: 'tts:start', detail: { requestId, sessionId: session.id, segmentCount: session.segments.length } })
+    const contentType = 'audio/mpeg'
+    try {
+      for (let index = 0; index < session.segments.length; index += 1) {
+        if (ws.readyState !== 1) break
+        const current = getTTSSession(session.id)
+        if (!current || current.status === 'cancelled') break
+        const segmentText = session.segments[index]
+        sendVoiceEventToClient(ws, { type: 'tts:sentence_start', detail: { requestId, sessionId: session.id, index, text: segmentText } })
+        sendVoiceEventToClient(ws, { type: 'tts:audio_ready', detail: { requestId, sessionId: session.id, index, text: segmentText, contentType } })
+        await streamTTSSegmentToVoiceClient(ws, { sessionId: session.id, index, contentType })
+        sendVoiceEventToClient(ws, { type: 'tts:sentence_end', detail: { requestId, sessionId: session.id, index, text: segmentText } })
+      }
+      sendVoiceEventToClient(ws, { type: 'tts:stop', detail: { requestId, sessionId: session.id, reason: 'completed' } })
+    } catch (err) {
+      sendVoiceEventToClient(ws, { type: 'error', detail: { requestId, sessionId: session.id, service: 'tts', error: err.message } })
+      sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', requestId, sessionId: session.id, error: err.message })
+    } finally {
+      setVoiceEventClientOptions(ws, previousOptions)
+    }
+  }
+
+  // Experimental voice event WebSocket channel: JSON lifecycle events and opt-in TTS audio for external clients
   const voiceEventWss = new WebSocketServer({ noServer: true })
   voiceEventWss.on('connection', (ws) => {
     addVoiceEventClient(ws)
     ws.on('close', () => removeVoiceEventClient(ws))
     ws.on('error', () => removeVoiceEventClient(ws))
     ws.on('message', (raw) => {
-      try { handleVoiceEventClientMessage(ws, raw) } catch {}
+      try {
+        const msg = JSON.parse(raw.toString())
+        if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
+          handleVoiceEventTTSSpeak(ws, msg).catch(err => sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', error: err.message }))
+          return
+        }
+        handleVoiceEventClientMessage(ws, msg)
+      } catch {}
     })
   })
 

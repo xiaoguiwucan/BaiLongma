@@ -4,6 +4,53 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.221 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` WebSocket 协议升级到 version 3，hello 能力新增 `tts_speak`。
+- 新增 WebSocket 直接 TTS 请求：
+  - `{"type":"tts:speak","text":"你好","binaryAudio":true}`
+  - 也兼容 `{"type":"speak","text":"你好"}`。
+- 外部客户端不再必须依赖 Brain UI 先播放 TTS；可以在同一个 WebSocket 上发送文本，并收到：
+  - `tts session`
+  - `tts start`
+  - `tts sentence_start`
+  - `tts audio_ready`
+  - `tts audio_start`
+  - `tts audio_chunk` metadata
+  - base64 JSON 或二进制音频 chunk
+  - `tts audio_end`
+  - `tts sentence_end`
+  - `tts stop`
+- `tts:speak` 会复用现有 TTS Provider 配置和分句器，按句生成音频并回传到发起请求的客户端。
+
+### 改变原因
+
+- v2.1.220 的音频块广播仍由桌面端 HTTP segment 播放触发，外部设备只是“旁路监听”。
+- 小智式服务端需要外部设备能主动请求 TTS 并接收事件/音频，本版本开始提供单连接 `tts:speak` 流程。
+- 这为后续 ESP32/手机端直接接入白龙马语音服务端打基础。
+
+### 影响范围
+
+- 不改变 Brain UI 桌面端播放路径。
+- 不改变 TTS Provider 凭证配置方式。
+- 新功能只影响连接 `/voice/events` 并发送 `tts:speak` 的外部客户端。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端连接 `ws://127.0.0.1:3721/voice/events`。
+- 示例：发送 `{"type":"tts:speak","text":"测试白龙马语音服务端","binaryAudio":true}` 即可开始接收分句事件和音频 chunk。
+- 当前音频仍是 Provider 返回的 `audio/mpeg` chunk，还不是 Opus 编码帧。
+
 ## v2.1.220 - 2026-05-26
 
 ### 更新内容

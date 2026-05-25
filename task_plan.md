@@ -1,29 +1,29 @@
-# Task Plan: v2.1.220 WebSocket TTS Audio Chunk Subscription
+# Task Plan: v2.1.221 WebSocket TTS Speak Request
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.220 with optional WebSocket TTS audio chunk subscription on top of the existing `/voice/events` JSON lifecycle channel, then back it up to GitHub with detailed docs and Release assets.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.221 with direct WebSocket `tts:speak` requests over `/voice/events`, allowing external clients to send text and receive sentence lifecycle events plus audio chunks without depending on Brain UI playback.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect current v2.1.219 audio_ready URL metadata flow
-- [x] Inspect `/voice/events` WebSocket client message handling
-- [x] Choose explicit opt-in audio chunk subscription to avoid breaking JSON-only clients
+- [x] Inspect v2.1.220 opt-in audio chunk broadcast path
+- [x] Identify limitation: audio chunks are mirrored only when HTTP segment playback is triggered
+- [x] Choose single-client `tts:speak` path that reuses existing TTS provider config and sentence splitter
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add per-client WebSocket subscription options
-- [x] Add `subscribe` / `unsubscribe` handling for TTS audio chunks
-- [x] Broadcast `audio_start`, `audio_chunk`, `audio_end`, and `audio_error` around TTS segment streaming
-- [x] Support base64 JSON chunks by default and binary chunks when `binaryAudio=true`
-- [x] Expose subscriber counts in `/voice/events/status`
+- [x] Upgrade voice event WebSocket hello to version 3 and add `tts_speak` capability
+- [x] Add helpers for per-client JSON events and per-client audio chunks
+- [x] Add `tts:speak` / `speak` WebSocket message handling
+- [x] Create TTS session from WebSocket text request and stream each segment back to the requester
+- [x] Preserve Brain UI and HTTP TTS paths
 - **Status:** complete
 
 ### Phase 3: Version, Docs, UI Notes
-- [x] Bump package version to 2.1.220
+- [x] Bump package version to 2.1.221
 - [x] Update README, CHANGELOG, BACKUP document, and Brain UI release notes
 - [x] Update progress/final verification log
 - **Status:** complete
@@ -34,20 +34,20 @@ Complete
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [x] Commit changes
-- [x] Tag `v2.1.220`
-- [x] Push main and tag to GitHub
-- [x] Create source tarball and Git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag `v2.1.221`
+- [ ] Push main and tag to GitHub
+- [ ] Create source tarball and Git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** pending
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Audio chunks are opt-in | Preserve existing JSON-only debug clients and avoid unexpected bandwidth use |
-| Base64 JSON default, binary optional | Base64 is easiest to debug; binary is closer to future Opus/audio-frame protocol |
-| Broadcast chunks while serving existing HTTP segment | Reuses provider stream without adding a new synthesis path |
-| Keep contentType as `audio/mpeg` | Current TTS providers return MP3-style audio; Opus can be a later protocol version |
+| Reuse `createTTSSession` and `streamTTSSegment` | Avoid duplicating provider logic and keep Brain UI/WS behavior consistent |
+| Send `tts:speak` audio only to the requester | Prevent one client request from unexpectedly broadcasting private audio to all subscribed clients |
+| Temporarily force requester audio on during speak and restore previous options afterward | Ensures speak always returns audio while preserving client preferences |
+| Keep output as `audio/mpeg` for now | Current providers return MP3-like streams; Opus conversion is future work |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

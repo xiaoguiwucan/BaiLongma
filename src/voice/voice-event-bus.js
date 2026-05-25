@@ -2,6 +2,10 @@ const clients = new Set()
 const clientOptions = new WeakMap()
 const history = []
 
+export function sendVoiceEventClientJson(ws, payload) {
+  safeSend(ws, payload)
+}
+
 function safeSend(ws, payload) {
   try {
     if (ws.readyState === 1) ws.send(JSON.stringify(payload))
@@ -28,10 +32,18 @@ function setOptions(ws, next = {}) {
   return options
 }
 
+export function setVoiceEventClientOptions(ws, next = {}) {
+  return setOptions(ws, next)
+}
+
+export function getVoiceEventClientOptions(ws) {
+  return { ...getOptions(ws) }
+}
+
 export function addVoiceEventClient(ws) {
   clients.add(ws)
   clientOptions.set(ws, { audio: false, binaryAudio: false })
-  safeSend(ws, { type: 'hello', service: 'bailongma.voice.events', version: 2, capabilities: ['json_events', 'tts_audio_chunks'], history: history.slice(-20) })
+  safeSend(ws, { type: 'hello', service: 'bailongma.voice.events', version: 3, capabilities: ['json_events', 'tts_audio_chunks', 'tts_speak'], history: history.slice(-20) })
 }
 
 export function removeVoiceEventClient(ws) {
@@ -39,8 +51,13 @@ export function removeVoiceEventClient(ws) {
   clientOptions.delete(ws)
 }
 
+function parseClientMessage(raw) {
+  if (raw && typeof raw === 'object' && !Buffer.isBuffer(raw)) return raw
+  return JSON.parse(raw.toString())
+}
+
 export function handleVoiceEventClientMessage(ws, raw) {
-  const msg = JSON.parse(raw.toString())
+  const msg = parseClientMessage(raw)
   if (msg?.type === 'ping') {
     safeSend(ws, { type: 'pong', at: Date.now() })
     return { handled: true }
@@ -106,21 +123,36 @@ export function publishVoiceEvent(event) {
   return { delivered: clients.size, xiaozhi }
 }
 
+export function sendVoiceEventToClient(ws, event) {
+  const normalized = {
+    type: event?.type || 'unknown',
+    seq: Number(event?.seq || 0),
+    at: Number(event?.at || Date.now()),
+    detail: event?.detail || {},
+  }
+  const payload = { type: 'voice_event', event: normalized }
+  const xiaozhi = mapToXiaozhi(normalized)
+  safeSend(ws, payload)
+  if (xiaozhi) safeSend(ws, xiaozhi)
+  return { delivered: ws?.readyState === 1 ? 1 : 0, xiaozhi }
+}
+
 function audioSubscribers() {
   return [...clients].filter(ws => getOptions(ws).audio)
 }
 
-export function publishTTSAudioStart({ sessionId, index, contentType = 'audio/mpeg' } = {}) {
+export function publishTTSAudioStart({ sessionId, index, contentType = 'audio/mpeg', targetClient = null } = {}) {
   const payload = { type: 'tts', state: 'audio_start', sessionId, index, contentType, at: Date.now() }
-  const subscribers = audioSubscribers()
+  const subscribers = targetClient ? [targetClient] : audioSubscribers()
   for (const ws of subscribers) safeSend(ws, payload)
   return { delivered: subscribers.length }
 }
 
-export function publishTTSAudioChunk({ sessionId, index, chunk, contentType = 'audio/mpeg' } = {}) {
+export function publishTTSAudioChunk({ sessionId, index, chunk, contentType = 'audio/mpeg', targetClient = null } = {}) {
   if (!chunk?.length) return { delivered: 0 }
   let delivered = 0
-  for (const ws of audioSubscribers()) {
+  const subscribers = targetClient ? [targetClient] : audioSubscribers()
+  for (const ws of subscribers) {
     const options = getOptions(ws)
     safeSend(ws, { type: 'tts', state: 'audio_chunk', sessionId, index, contentType, bytes: chunk.length, binary: options.binaryAudio, at: Date.now() })
     if (options.binaryAudio) safeSendBinary(ws, chunk)
@@ -130,16 +162,16 @@ export function publishTTSAudioChunk({ sessionId, index, chunk, contentType = 'a
   return { delivered }
 }
 
-export function publishTTSAudioEnd({ sessionId, index } = {}) {
+export function publishTTSAudioEnd({ sessionId, index, targetClient = null } = {}) {
   const payload = { type: 'tts', state: 'audio_end', sessionId, index, at: Date.now() }
-  const subscribers = audioSubscribers()
+  const subscribers = targetClient ? [targetClient] : audioSubscribers()
   for (const ws of subscribers) safeSend(ws, payload)
   return { delivered: subscribers.length }
 }
 
-export function publishTTSAudioError({ sessionId, index, error } = {}) {
+export function publishTTSAudioError({ sessionId, index, error, targetClient = null } = {}) {
   const payload = { type: 'tts', state: 'audio_error', sessionId, index, error: String(error || 'unknown'), at: Date.now() }
-  const subscribers = audioSubscribers()
+  const subscribers = targetClient ? [targetClient] : audioSubscribers()
   for (const ws of subscribers) safeSend(ws, payload)
   return { delivered: subscribers.length }
 }
@@ -152,5 +184,5 @@ export function getVoiceEventBusStatus() {
     if (options.audio) audioSubscribers += 1
     if (options.audio && options.binaryAudio) binaryAudioSubscribers += 1
   }
-  return { clients: clients.size, history: history.length, audioSubscribers, binaryAudioSubscribers, version: 2 }
+  return { clients: clients.size, history: history.length, audioSubscribers, binaryAudioSubscribers, version: 3 }
 }

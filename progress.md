@@ -1,21 +1,13 @@
-# Progress: v2.1.220 WebSocket TTS Audio Chunk Subscription
+# Progress: v2.1.221 WebSocket TTS Speak Request
 
 ## 2026-05-26
-- Resumed from released v2.1.219 baseline.
-- Inspected voice event bus and TTS segment streaming route.
-- Upgraded `/voice/events` hello to protocol version 2 with `json_events` and `tts_audio_chunks` capabilities.
-- Added per-client subscription options for audio chunk delivery.
-- Added WebSocket client messages:
-  - `{"type":"subscribe","audio":true}` for base64 JSON audio chunks.
-  - `{"type":"subscribe","audio":true,"binaryAudio":true}` for metadata plus binary audio chunks.
-  - `{"type":"unsubscribe","audio":false,"binaryAudio":false}` to disable audio delivery.
-- Added TTS audio stream broadcasts: `audio_start`, `audio_chunk`, `audio_chunk_base64` or binary chunk, `audio_end`, and `audio_error`.
-- Updated `/voice/events/status` with `audioSubscribers`, `binaryAudioSubscribers`, and `version`.
-- Bumped version to 2.1.220 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
+- Resumed from released v2.1.220 baseline.
+- Inspected TTS session manager and voice event WebSocket bus.
+- Upgraded `/voice/events` hello to protocol version 3 with `tts_speak` capability.
+- Added voice event bus helpers for single-client JSON delivery, client option snapshots, and target-client audio chunk delivery.
+- Added WebSocket `tts:speak` / `speak` handling in `src/api.js`.
+- `tts:speak` now creates a TTS session from text, emits session/start/sentence/audio_ready events, streams audio chunks to the requester, and emits sentence_end/stop.
+- Bumped version to 2.1.221 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
 
 - Verification passed: `node --check src/voice/voice-event-bus.js`, `node --check src/api.js`, and `node --check src/ui/brain-ui/app-shell.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.220 as `3ac0ca9 feat: add websocket tts audio chunks`.
-- Tagged and pushed `v2.1.220` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.220
-- Uploaded release assets: `backups/v2.1.220/BaiLongma-v2.1.220-source.tar.gz` and `backups/v2.1.220/BaiLongma-v2.1.220.bundle`.
