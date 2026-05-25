@@ -1,11 +1,11 @@
-# Findings: v2.1.217 Xiaozhi-style Voice Event Protocol
+# Findings: v2.1.218 Experimental Voice WebSocket Channel
 
 ## Current baseline
-- Existing events are scattered: `bailongma:voice-state`, `bailongma:assistant-wake`, `bailongma:voice-activity`, `bailongma:media-duck`.
-- TTS session playback has sessionId and segment indexes but no standardized lifecycle events.
-- Voice state machine already dispatches state transitions, but ASR/TTS lifecycle is not normalized.
+- `src/api.js` already hosts WebSocket upgrades for `/voice/cloud` and `/acui`.
+- v2.1.217 emits browser-side `bailongma:voice-event` objects.
+- Backend cannot see browser DOM events unless the frontend forwards them.
 
-## Needed event protocol
-- A unified bus event, e.g. `bailongma:voice-event`.
-- Namespaced types: `wake:start`, `wake:accepted`, `wake:rejected`, `asr:partial`, `asr:final`, `speaker:rejected`, `tts:start`, `tts:sentence_start`, `tts:sentence_end`, `tts:stop`, `interrupt`, `media:duck`.
-- Keep browser-only for this release; later WebSocket can forward the same event objects.
+## Planned channel
+- Add `/voice/events` WebSocket for external clients.
+- Add `POST /voice/events/publish` for Brain UI to forward internal voice events.
+- Broadcast both raw event and Xiaozhi-like mapped messages, e.g. `tts start`, `sentence_start`, `stop`.

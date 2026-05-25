@@ -2616,6 +2616,21 @@ function initTTSSettings() {
   });
   updateVoiceDebugPanel(window.bailongmaVoiceState?.getSnapshot?.() || {});
 
+  let lastVoiceEventPublishAt = 0;
+  window.addEventListener("bailongma:voice-event", (event) => {
+    const voiceEvent = event.detail;
+    if (!voiceEvent?.type) return;
+    // Keep bridge lightweight; do not block UI or voice playback.
+    const now = Date.now();
+    if (voiceEvent.type === "asr:partial" && now - lastVoiceEventPublishAt < 250) return;
+    lastVoiceEventPublishAt = now;
+    fetch(`${API}/voice/events/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ event: voiceEvent }),
+    }).catch(() => {});
+  });
+
   initTTSSettings();
 
   const memoryGraphToggle = document.getElementById("settings-memory-graph-toggle");

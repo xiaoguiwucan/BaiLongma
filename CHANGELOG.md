@@ -4,6 +4,44 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.218 - 2026-05-26
+
+### 更新内容
+
+- 新增 `src/voice/voice-event-bus.js`，提供后端语音事件广播能力。
+- 新增实验性 WebSocket 端点：`ws://127.0.0.1:3721/voice/events`。
+- 新增 HTTP 状态/桥接端点：
+  - `GET /voice/events/status`
+  - `POST /voice/events/publish`
+- Brain UI 会把浏览器端 `bailongma:voice-event` 转发给后端事件通道。
+- WebSocket 客户端会收到两类消息：
+  - 原始 `voice_event`；
+  - 映射后的小智式 JSON，例如 `tts start`、`tts sentence_start`、`tts stop`、`stt final`、`wake accepted`。
+
+### 改变原因
+
+- v2.1.217 已经统一了浏览器内部语音事件；v2.1.218 把这些事件暴露给外部客户端，为手机端、硬件端或局域网调试工具接入做准备。
+- 这一步先做 JSON 生命周期事件，不直接做二进制 Opus 音频帧，风险更低。
+
+### 影响范围
+
+- 不改变现有 Electron 语音交互。
+- 不改变 ASR/TTS Provider。
+- 新通道是实验性的，只广播事件，不传输音频帧。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变。
+- 外部客户端可以连接 `ws://127.0.0.1:3721/voice/events` 观察事件。
+- 若要局域网访问，需要按现有 LAN 启动方式暴露后端端口，并自行注意安全。
+
 ## v2.1.217 - 2026-05-26
 
 ### 更新内容

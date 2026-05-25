@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.218</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增实验性语音 WebSocket 事件通道，支持外部客户端观察小智式生命周期事件。</p>
+                <ul class="release-note-points">
+                  <li>新增 ws://127.0.0.1:3721/voice/events。</li>
+                  <li>新增 /voice/events/status 和 /voice/events/publish。</li>
+                  <li>广播原始 voice_event 和小智式 wake/stt/tts/interrupt JSON 消息。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.217</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

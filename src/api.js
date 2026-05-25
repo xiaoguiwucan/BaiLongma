@@ -14,6 +14,7 @@ import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { createTTSSession, cancelTTSSession, streamTTSSegment } from './voice/tts-session.js'
+import { addVoiceEventClient, removeVoiceEventClient, publishVoiceEvent, getVoiceEventBusStatus } from './voice/voice-event-bus.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -1083,6 +1084,29 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return
     }
 
+
+    // GET /voice/events/status — experimental voice event WebSocket status
+    if (req.method === 'GET' && url.pathname === '/voice/events/status') {
+      jsonResponse(res, 200, { ok: true, ...getVoiceEventBusStatus() })
+      return
+    }
+
+    // POST /voice/events/publish — browser voice-event bridge to backend WebSocket clients
+    if (req.method === 'POST' && url.pathname === '/voice/events/publish') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const result = publishVoiceEvent(body.event || body)
+          jsonResponse(res, 200, { ok: true, ...result })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
     // GET /voice/local/status — local ASR server status
     if (req.method === 'GET' && url.pathname === '/voice/local/status') {
       jsonResponse(res, 200, { ok: true, ...getVoiceStatus() })
@@ -1469,6 +1493,20 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     ws.on('error', () => { session?.close(); session = null })
   })
 
+  // Experimental voice event WebSocket channel: JSON lifecycle events for external clients
+  const voiceEventWss = new WebSocketServer({ noServer: true })
+  voiceEventWss.on('connection', (ws) => {
+    addVoiceEventClient(ws)
+    ws.on('close', () => removeVoiceEventClient(ws))
+    ws.on('error', () => removeVoiceEventClient(ws))
+    ws.on('message', (raw) => {
+      try {
+        const msg = JSON.parse(raw.toString())
+        if (msg?.type === 'ping') ws.send(JSON.stringify({ type: 'pong', at: Date.now() }))
+      } catch {}
+    })
+  })
+
   // ACUI WebSocket channel: bidirectional control + perception
   const acuiWss = new WebSocketServer({ noServer: true })
   acuiWss.on('connection', (ws) => {
@@ -1549,6 +1587,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         return
       }
       acuiWss.handleUpgrade(req, socket, head, (ws) => acuiWss.emit('connection', ws, req))
+    } else if (url.pathname === '/voice/events') {
+      voiceEventWss.handleUpgrade(req, socket, head, (ws) => voiceEventWss.emit('connection', ws, req))
     } else if (url.pathname === '/voice/cloud') {
       cloudWss.handleUpgrade(req, socket, head, (ws) => cloudWss.emit('connection', ws, req))
     } else {

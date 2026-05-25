@@ -1,22 +1,22 @@
-# Task Plan: v2.1.217 Xiaozhi-style Voice Event Protocol
+# Task Plan: v2.1.218 Experimental Voice WebSocket Channel
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.217 with a unified browser voice event bus and event protocol for wake/asr/tts/interrupt/media, docs, GitHub backup, and Release assets.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.218 with an experimental WebSocket voice event channel that broadcasts Xiaozhi-style JSON lifecycle events to external clients, docs, GitHub backup, and Release assets.
 
 ## Current Phase
-Complete
+Phase 4
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect existing custom voice events and TTS/ASR hooks
-- [x] Identify minimal event bus that preserves existing behavior
+- [x] Inspect current HTTP/WebSocket upgrade structure
+- [x] Identify low-risk bridge from browser voice events to backend WebSocket clients
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add browser-safe voice event bus/protocol module
-- [x] Wire wake/ASR/speaker/media events from voice panel
-- [x] Wire TTS session/segment/interrupt events from app playback
+- [x] Add backend voice event broadcaster and `/voice/events` WebSocket endpoint
+- [x] Add frontend bridge that forwards `bailongma:voice-event` to backend
+- [x] Map internal events to Xiaozhi-like JSON messages
 - **Status:** complete
 
 ### Phase 3: Verification
@@ -25,17 +25,17 @@ Complete
 - **Status:** complete
 
 ### Phase 4: Version, Docs, Release
-- [x] Bump version to 2.1.217
+- [x] Bump version to 2.1.218
 - [x] Update README / CHANGELOG / BACKUP / in-app release notes
-- [x] Commit, tag, push, create GitHub Release with source/bundle assets
-- **Status:** complete
+- [ ] Commit, tag, push, create GitHub Release with source/bundle assets
+- **Status:** in_progress
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Add browser event bus first | Enables protocol/debugging before WebSocket device channel |
-| Preserve existing DOM events | Avoid breaking current media duck and wake integrations |
-| Use Xiaozhi-like namespaced event types | Makes future WS JSON protocol straightforward |
+| Implement JSON event channel before binary audio frames | Safer experimental step and matches v2.1.217 event bus |
+| Use frontend bridge POST to backend | Existing voice events are browser-side; backend cannot directly observe DOM events |
+| Preserve current ASR/TTS playback | This version only exposes events to external clients |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
