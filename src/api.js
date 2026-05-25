@@ -13,6 +13,7 @@ import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
+import { createTTSSession, cancelTTSSession, streamTTSSegment } from './voice/tts-session.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -1268,6 +1269,65 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         jsonResponse(res, 200, { ok: true, cancelled: true })
       } catch (err) {
         jsonResponse(res, 500, { ok: false, error: err.message })
+      }
+      return
+    }
+
+
+    // POST /tts/session — create sentence-level TTS session
+    if (req.method === 'POST' && url.pathname === '/tts/session') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const text = String(body.text || '').trim()
+          if (!text) { jsonResponse(res, 400, { ok: false, error: 'Missing text parameter' }); return }
+          const creds = getTTSCredentials()
+          const session = createTTSSession({
+            text,
+            provider: creds.provider,
+            voiceId: body.voiceId || creds.voiceId || undefined,
+            keys: {
+              doubaoKey: creds.doubaoKey, doubaoAppId: creds.doubaoAppId, doubaoAccessKey: creds.doubaoAccessKey, doubaoResourceId: creds.doubaoResourceId,
+              minimaxKey: creds.minimaxKey, openaiKey: creds.openaiKey, openaiBaseURL: creds.openaiBaseURL,
+              elevenLabsKey: creds.elevenLabsKey, volcanoAppId: creds.volcanoAppId, volcanoToken: creds.volcanoToken,
+            },
+          })
+          jsonResponse(res, 200, { ok: true, sessionId: session.id, segments: session.segments })
+        } catch (err) {
+          jsonResponse(res, 500, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+    // POST /tts/session/:id/cancel — cancel a sentence-level TTS session
+    if (req.method === 'POST' && /^\/tts\/session\/[^/]+\/cancel$/.test(url.pathname)) {
+      const sessionId = decodeURIComponent(url.pathname.split('/')[3] || '')
+      jsonResponse(res, 200, { ok: true, cancelled: cancelTTSSession(sessionId) })
+      return
+    }
+
+    // GET /tts/session/:id/audio/:index — stream one TTS segment
+    if (req.method === 'GET' && /^\/tts\/session\/[^/]+\/audio\/\d+$/.test(url.pathname)) {
+      try {
+        const parts = url.pathname.split('/')
+        const sessionId = decodeURIComponent(parts[3] || '')
+        const index = Number(parts[5] || 0)
+        const audioStream = await streamTTSSegment({ sessionId, index })
+        res.writeHead(200, {
+          'Content-Type': 'audio/mpeg',
+          'Transfer-Encoding': 'chunked',
+          'Cache-Control': 'no-cache',
+          'Access-Control-Allow-Origin': '*',
+        })
+        audioStream.on('data', chunk => res.write(chunk))
+        audioStream.on('end', () => res.end())
+        audioStream.on('error', err => { console.warn('[TTS] Segment stream error:', err.message); try { res.end() } catch {} })
+      } catch (err) {
+        if (!res.headersSent) jsonResponse(res, 500, { ok: false, error: err.message })
+        else try { res.end() } catch {}
       }
       return
     }

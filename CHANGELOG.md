@@ -4,6 +4,46 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.216 - 2026-05-26
+
+### 更新内容
+
+- 新增 `src/voice/sentence-splitter.js`，按中文/英文标点和长度把 AI 回复切成适合 TTS 的短句。
+- 新增 `src/voice/tts-session.js`，提供 TTS sessionId、segment 列表、取消状态和单句音频流。
+- 后端新增分句式 TTS API：
+  - `POST /tts/session` 创建分句 TTS 会话；
+  - `GET /tts/session/:id/audio/:index` 获取指定句子的音频；
+  - `POST /tts/session/:id/cancel` 取消旧会话。
+- 前端 `playTTSReply` 从“整段请求、整段 blob 完成后播放”改为“创建 session、按句请求、队列播放”。
+- 用户打断、新回复开始时会取消旧 TTS session，避免旧音频串到新对话。
+- 保留旧 `/tts/stream` 接口，兼容设置页试听和外部调用。
+
+### 改变原因
+
+- 小智的低延迟体验来自 LLM 流式输出 + 分句 TTS + 音频队列。
+- 白龙马旧版虽然后端返回 stream，但前端等待完整 `blob()` 后才播放，用户感知延迟较高。
+- 本版本先落地可靠的句子级队列播放，为后续真正流式 TTS、MediaSource 或 Opus/WebSocket 音频帧打基础。
+
+### 影响范围
+
+- 不替换现有 TTS Provider。
+- 豆包、MiniMax、OpenAI、ElevenLabs、火山引擎仍走原 `streamTTS` 适配层。
+- 长回复会被分句播放；短回复体验基本不变。
+
+### 验证结果
+
+- `node --check src/voice/sentence-splitter.js` 通过。
+- `node --check src/voice/tts-session.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变。
+- 如果 TTS Provider 凭证未配置，分句会话创建成功但请求音频时仍会返回对应 Provider 的凭证错误。
+- 本版本是句子级队列，不是最终的 Opus/WebSocket 帧级协议。
+
 ## v2.1.215 - 2026-05-26
 
 ### 更新内容

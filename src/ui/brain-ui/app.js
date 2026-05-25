@@ -1389,6 +1389,10 @@ function playJarvisStartupSound() {
 
 // ── TTS reply playback ────────────────────────────────────────────────────────
 let ttsAudioEl = null;
+let ttsSessionId = null;
+let ttsQueueGeneration = 0;
+let ttsSegmentQueue = [];
+let ttsPlayedSegments = [];
 let ttsCurrentText = '';
 let ttsInterruptedRemaining = '';
 let lastJarvisContent = '';
@@ -1456,18 +1460,25 @@ function applyTTSInterruption(spokenUpTo) {
 
 // Called by voice-panel interruption detection: stop current TTS and record cut point
 window.stopTTS = () => {
-  if (!ttsAudioEl) return;
+  if (!ttsAudioEl && !ttsSessionId) return;
   const { remaining, spokenUpTo } = calcRemainingText(
     ttsCurrentText,
-    ttsAudioEl.currentTime,
-    ttsAudioEl.duration,
+    ttsAudioEl?.currentTime || 0,
+    ttsAudioEl?.duration || 0,
   );
-  // When duration is not yet loaded (NaN): spokenUpTo=0, remaining='', falls back to full text
-  ttsInterruptedRemaining = remaining || ttsCurrentText;
+  ttsInterruptedRemaining = remaining || ttsSegmentQueue.join('') || ttsCurrentText;
   applyTTSInterruption(spokenUpTo);
-  ttsAudioEl.pause();
-  try { URL.revokeObjectURL(ttsAudioEl.src); } catch {}
-  ttsAudioEl = null;
+  ttsQueueGeneration += 1;
+  if (ttsSessionId) {
+    fetch(`${API}/tts/session/${encodeURIComponent(ttsSessionId)}/cancel`, { method: "POST" }).catch(() => {});
+  }
+  ttsSessionId = null;
+  ttsSegmentQueue = [];
+  if (ttsAudioEl) {
+    ttsAudioEl.pause();
+    try { URL.revokeObjectURL(ttsAudioEl.src); } catch {}
+    ttsAudioEl = null;
+  }
 };
 
 // Called by voice-panel on impact noise: duck TTS volume without stopping
@@ -1496,45 +1507,72 @@ window.resumeTTSIfNoSpeech = () => {
 };
 
 async function playTTSReply(text) {
+  ttsQueueGeneration += 1;
+  const generation = ttsQueueGeneration;
   ttsCurrentText = text;
   ttsInterruptedRemaining = '';
   ttsInterruptionApplied = false;
   ttsInterruptedOriginalContent = '';
+  ttsPlayedSegments = [];
+  ttsSegmentQueue = [];
+  if (ttsAudioEl) { try { ttsAudioEl.pause(); URL.revokeObjectURL(ttsAudioEl.src); } catch {} ttsAudioEl = null; }
+  if (ttsSessionId) fetch(`${API}/tts/session/${encodeURIComponent(ttsSessionId)}/cancel`, { method: "POST" }).catch(() => {});
+
   try {
-    const resp = await fetch(`${API}/tts/stream`, {
+    const sessionResp = await fetch(`${API}/tts/session`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
     });
-    if (!resp.ok) {
-      let errMsg = `HTTP ${resp.status}`;
-      try { const j = await resp.json(); errMsg = j.error || errMsg; } catch {}
-      throw new Error(errMsg);
-    }
-    const blob = await resp.blob();
-    const url = URL.createObjectURL(blob);
-    if (ttsAudioEl) { ttsAudioEl.pause(); URL.revokeObjectURL(ttsAudioEl.src); }
-    ttsAudioEl = new Audio(url);
-    ttsAudioEl.volume = 1.0; // ensure full volume (avoid residual duck state from previous play)
-    // Suspend cloud ASR but keep the mic hardware open for interruption detection
+    if (!sessionResp.ok) throw new Error(`HTTP ${sessionResp.status}`);
+    const session = await sessionResp.json();
+    if (!session.ok || !session.sessionId || !Array.isArray(session.segments)) throw new Error(session.error || "TTS session failed");
+    if (generation !== ttsQueueGeneration) return;
+    ttsSessionId = session.sessionId;
+    ttsSegmentQueue = session.segments.slice();
     window.bailongmaVoice?.suspendForTTS?.();
-    ttsAudioEl.onended = () => {
-      URL.revokeObjectURL(url);
-      ttsAudioEl = null;
-      ttsCurrentText = '';
-      window.bailongmaVoice?.resumeAfterMedia();
-    };
-    ttsAudioEl.onerror = () => {
-      ttsAudioEl = null;
-      ttsCurrentText = '';
-      window.bailongmaVoice?.resumeAfterMedia();
-    };
-    ttsAudioEl.play().catch(() => {
-      window.bailongmaVoice?.resumeAfterMedia();
-    });
+    await playNextTTSSegment(generation, 0);
   } catch {
     ttsCurrentText = '';
+    ttsSessionId = null;
+    ttsSegmentQueue = [];
     window.bailongmaVoice?.resumeAfterMedia();
+  }
+}
+
+async function playNextTTSSegment(generation, index) {
+  if (generation !== ttsQueueGeneration || !ttsSessionId) return;
+  if (index >= ttsSegmentQueue.length) {
+    ttsSessionId = null;
+    ttsCurrentText = '';
+    ttsSegmentQueue = [];
+    window.bailongmaVoice?.resumeAfterMedia();
+    return;
+  }
+  const segmentText = ttsSegmentQueue[index] || '';
+  try {
+    const resp = await fetch(`${API}/tts/session/${encodeURIComponent(ttsSessionId)}/audio/${index}`);
+    if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+    const blob = await resp.blob();
+    if (generation !== ttsQueueGeneration) return;
+    const url = URL.createObjectURL(blob);
+    if (ttsAudioEl) { try { ttsAudioEl.pause(); URL.revokeObjectURL(ttsAudioEl.src); } catch {} }
+    ttsAudioEl = new Audio(url);
+    ttsAudioEl.volume = 1.0;
+    ttsAudioEl.onended = () => {
+      URL.revokeObjectURL(url);
+      ttsPlayedSegments.push(segmentText);
+      ttsAudioEl = null;
+      playNextTTSSegment(generation, index + 1);
+    };
+    ttsAudioEl.onerror = () => {
+      try { URL.revokeObjectURL(url); } catch {}
+      ttsAudioEl = null;
+      playNextTTSSegment(generation, index + 1);
+    };
+    await ttsAudioEl.play();
+  } catch {
+    if (generation === ttsQueueGeneration) playNextTTSSegment(generation, index + 1);
   }
 }
 

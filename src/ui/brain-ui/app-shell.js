@@ -726,6 +726,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.216</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增分句式 TTS Session，让 AI 回复按句生成和播放。</p>
+                <ul class="release-note-points">
+                  <li>新增中文分句器和 TTS Session Manager。</li>
+                  <li>新增 `/tts/session`、单句音频和取消接口。</li>
+                  <li>前端 TTS 改为播放队列，用户打断或新回复会取消旧会话。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.215</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
