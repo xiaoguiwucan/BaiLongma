@@ -11,3 +11,7 @@
 
 - Verification passed: `node --check src/voice/voice-events.js`, `node --check src/voice/voice-event-bus.js`, `node --check src/ui/brain-ui/app.js`, `node --check src/api.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.219 as `a9a02cc feat: expose tts audio segment events`.
+- Tagged and pushed `v2.1.219` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.219
+- Uploaded release assets: `backups/v2.1.219/BaiLongma-v2.1.219-source.tar.gz` and `backups/v2.1.219/BaiLongma-v2.1.219.bundle`.
