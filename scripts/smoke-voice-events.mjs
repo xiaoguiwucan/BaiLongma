@@ -81,18 +81,29 @@ try {
   const publishMessagesPromise = connectAndCollect({
     onOpen: async () => {
       await new Promise(resolve => setTimeout(resolve, 30))
-      await fetch(`${API}/voice/events/publish`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ event: { type: 'asr:final', seq: 77, at: Date.now(), detail: { text: '烟雾测试' } } }),
-      })
+      const events = [
+        { type: 'asr:final', seq: 77, at: Date.now(), detail: { text: '烟雾测试' } },
+        { type: 'wake:accepted', seq: 78, at: Date.now(), detail: { text: '小白龙', word: '小白龙' } },
+        { type: 'tts:audio_ready', seq: 79, at: Date.now(), detail: { sessionId: 'tts_smoke', index: 0, text: '你好', url: '/tts/session/tts_smoke/audio/0', contentType: 'audio/mpeg' } },
+      ]
+      for (const event of events) {
+        await fetch(`${API}/voice/events/publish`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ event }),
+        })
+      }
     },
     until: (msg, messages) => messages.some(item => item.type === 'voice_event' && item.event?.type === 'asr:final')
-      && messages.some(item => item.type === 'stt' && item.state === 'final' && item.text === '烟雾测试'),
+      && messages.some(item => item.type === 'stt' && item.state === 'final' && item.text === '烟雾测试')
+      && messages.some(item => item.type === 'wake' && item.state === 'accepted' && item.word === '小白龙')
+      && messages.some(item => item.type === 'tts' && item.state === 'audio_ready' && item.sessionId === 'tts_smoke' && item.url === '/tts/session/tts_smoke/audio/0'),
   })
   const publishMessages = await publishMessagesPromise
   assert(publishMessages.some(msg => msg.type === 'voice_event' && msg.event?.type === 'asr:final'), 'publish broadcasts raw voice_event', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'stt' && msg.state === 'final' && msg.text === '烟雾测试'), 'publish maps asr:final to Xiaozhi-style stt final', JSON.stringify(publishMessages))
+  assert(publishMessages.some(msg => msg.type === 'wake' && msg.state === 'accepted' && msg.word === '小白龙'), 'publish maps wake:accepted to Xiaozhi-style wake accepted', JSON.stringify(publishMessages))
+  assert(publishMessages.some(msg => msg.type === 'tts' && msg.state === 'audio_ready' && msg.sessionId === 'tts_smoke' && msg.url === '/tts/session/tts_smoke/audio/0'), 'publish maps tts:audio_ready to Xiaozhi-style audio_ready', JSON.stringify(publishMessages))
 
   await new Promise(resolve => setTimeout(resolve, 50))
   const statusAfter = await fetch(`${API}/voice/events/status`).then(r => r.json())

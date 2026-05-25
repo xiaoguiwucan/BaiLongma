@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.227</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">继续增强语音协议 smoke，覆盖 wake 和 TTS 音频就绪映射。</p>
+                <ul class="release-note-points">
+                  <li>smoke:voice-events 从 9 项扩展到 11 项检查。</li>
+                  <li>新增 wake:accepted 小智式映射断言。</li>
+                  <li>新增 tts:audio_ready 小智式映射断言。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.226</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

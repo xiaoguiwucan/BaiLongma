@@ -1,15 +1,15 @@
-# Findings: v2.1.226 Voice Events Publish Mapping Smoke
+# Findings: v2.1.227 Voice Events Wake/TTS Mapping Smoke
 
 ## Current baseline
-- v2.1.225 smoke validates WebSocket hello, ping, subscribe, cancel, and client cleanup.
-- `/voice/events/publish` is the bridge used by Brain UI to forward browser-side voice events to backend WebSocket clients.
-- The bridge also performs Xiaozhi-style mapping through `publishVoiceEvent`.
+- v2.1.226 smoke verifies `asr:final` raw event and `stt final` mapping.
+- `wake:accepted` and `tts:audio_ready` are equally important for external hardware clients.
+- These mappings are deterministic and can be tested without live microphone or TTS credentials.
 
 ## Design finding
-- `asr:final` is the best first mapping test because it maps cleanly to `{type:"stt", state:"final"}` and requires no model credentials.
-- Testing raw `voice_event` and mapped JSON together protects both debugging clients and Xiaozhi-style clients.
-- This fills the largest gap left by v2.1.225 without adding flaky provider-dependent testing.
+- `wake:accepted` protects the wake lifecycle contract external clients use to enter an active interaction.
+- `tts:audio_ready` protects the bridge from sentence lifecycle to retrievable audio URL metadata.
+- Synthetic events are sufficient for mapping smoke because the goal is to test the event bus and WebSocket broadcast, not ASR/TTS model quality.
 
 ## Remaining future direction
-- Add publish mapping tests for wake accepted/rejected and TTS lifecycle events.
-- Add mock TTS provider coverage for full `tts:speak` audio sequencing.
+- Add mapping tests for `wake:rejected`, `tts:start`, `tts:sentence_start`, `tts:sentence_end`, and `tts:stop`.
+- Add event-order tests around direct `tts:speak` with a mock provider.

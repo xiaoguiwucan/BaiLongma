@@ -1,16 +1,13 @@
-# Progress: v2.1.226 Voice Events Publish Mapping Smoke
+# Progress: v2.1.227 Voice Events Wake/TTS Mapping Smoke
 
 ## 2026-05-26
-- Resumed from released v2.1.225 baseline.
-- Inspected `scripts/smoke-voice-events.mjs` and `/voice/events/publish` route.
-- Extended the voice events smoke test to open a WebSocket client, publish an `asr:final` event through HTTP `/voice/events/publish`, and assert that the client receives both raw `voice_event` and Xiaozhi-style `stt final` JSON.
-- `npm run smoke:voice-events` now reports 9/9 checks instead of 7/7.
-- Bumped version to 2.1.226 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
+- Resumed from released v2.1.226 baseline.
+- Inspected `scripts/smoke-voice-events.mjs` and `src/voice/voice-event-bus.js` mappings.
+- Extended the publish mapping smoke to publish `wake:accepted` and `tts:audio_ready` in addition to `asr:final`.
+- Added assertions for Xiaozhi-style `wake accepted` and `tts audio_ready` mapping, including `sessionId` and audio URL preservation.
+- `npm run smoke:voice-events` now reports 11/11 checks instead of 9/9.
+- Bumped version to 2.1.227 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
 
 - Verification passed: `node --check scripts/smoke-voice-events.mjs` and `node --check scripts/voice-events-client.mjs`.
-- Verification passed: `npm run smoke:voice-events` 9/9.
+- Verification passed: `npm run smoke:voice-events` 11/11.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.226 as `3f87e5e test: cover voice event publish mapping`.
-- Tagged and pushed `v2.1.226` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.226
-- Uploaded release assets: `backups/v2.1.226/BaiLongma-v2.1.226-source.tar.gz` and `backups/v2.1.226/BaiLongma-v2.1.226.bundle`.

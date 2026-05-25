@@ -4,6 +4,41 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.227 - 2026-05-26
+
+### 更新内容
+
+- 继续增强 `scripts/smoke-voice-events.mjs`。
+- `npm run smoke:voice-events` 从 9 项检查扩展到 11 项检查。
+- 在 `POST /voice/events/publish` smoke 中新增事件：
+  - `wake:accepted`；
+  - `tts:audio_ready`。
+- 新增断言：
+  - `wake:accepted` 能映射为小智式 `{type:"wake", state:"accepted"}`；
+  - `tts:audio_ready` 能映射为小智式 `{type:"tts", state:"audio_ready"}`，并保留 `sessionId/url/contentType`。
+
+### 改变原因
+
+- v2.1.226 只覆盖 `asr:final -> stt final`，还不足以保护唤醒和 TTS 音频段这两条关键外部协议。
+- 唤醒成功和音频就绪是外部硬件端最依赖的事件之一，需要纳入自动 smoke。
+
+### 影响范围
+
+- 不改变运行时协议行为。
+- 只增强 smoke 测试覆盖范围。
+
+### 验证结果
+
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-events` 11/11 通过。
+- `node --check scripts/voice-events-client.mjs` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 开发者可运行 `npm run smoke:voice-events` 验证 WebSocket 协议和核心小智式映射。
+
 ## v2.1.226 - 2026-05-26
 
 ### 更新内容
