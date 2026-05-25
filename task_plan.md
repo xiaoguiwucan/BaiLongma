@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.229 with an exported pure `mapVoiceEventToXiaozhi` function and a fast mapping smoke test that does not need to start the API server.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -36,12 +36,12 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [ ] Commit changes
-- [ ] Tag `v2.1.229`
-- [ ] Push main and tag to GitHub
-- [ ] Create source tarball and Git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag `v2.1.229`
+- [x] Push main and tag to GitHub
+- [x] Create source tarball and Git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
