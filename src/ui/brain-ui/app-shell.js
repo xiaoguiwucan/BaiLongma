@@ -656,6 +656,37 @@ const createSettingsModal = () => `
             </div>
           </div>
           <div class="settings-section">
+            <div class="settings-section-label">更新说明</div>
+            <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.209</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">补齐版本更新记录机制，在文档和设置页加入更新说明。</p>
+                <ul class="release-note-points">
+                  <li>新增 CHANGELOG.md，集中记录每个版本的更新内容、改变原因和部署注意事项。</li>
+                  <li>README 增加版本更新记录入口，备份文档增加每次备份必须更新的清单。</li>
+                  <li>设置页更新 tab 增加最近版本摘要，打开软件就能看到当前版本改了什么。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.208</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">本地语音助手大版本：中文优先 ASR、唤醒词、声纹和视频抗干扰。</p>
+                <ul class="release-note-points">
+                  <li>默认本地 ASR 改为 SenseVoiceSmall，Whisper 保留为备用模型。</li>
+                  <li>新增唤醒词开关、自定义唤醒词、本地声纹录入和声纹严格度设置。</li>
+                  <li>新增视频播放场景的自动降音/暂停、空格按住说话和系统 AEC 开关。</li>
+                  <li>本地 ASR 增加静音门控、低置信度过滤和重复幻觉文本过滤。</li>
+                  <li>新增 Mac 自部署与备份文档，说明模型、虚拟环境和个人数据如何恢复。</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+          <div class="settings-section">
             <div class="settings-section-label">通知偏好</div>
             <div class="settings-row">
               <label class="settings-label" for="settings-suppress-updates">不再提醒更新</label>
