@@ -4,6 +4,46 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.223 - 2026-05-26
+
+### 更新内容
+
+- 新增 `scripts/voice-events-client.mjs` 语音 WebSocket 协议调试客户端。
+- 新增 npm script：`npm run voice:events`。
+- 调试客户端支持：
+  - `status`：读取 `/voice/events/status`；
+  - `listen`：连接 `ws://127.0.0.1:3721/voice/events` 并打印 JSON 事件；
+  - `listen --audio --binary --save out.mp3`：订阅音频块并保存二进制音频；
+  - `speak "文本" --binary --save out.mp3`：发送 `tts:speak` 并保存返回音频；
+  - `cancel`：发送 `tts:cancel`。
+- README 增加语音 WebSocket 调试命令示例，方便后续 ESP32/手机端接入前先在 Mac 上验证协议。
+
+### 改变原因
+
+- v2.1.218-v2.1.222 已连续增强 `/voice/events` 协议，但缺少稳定的本地调试入口。
+- 外部硬件/手机端接入前，需要一个可复用命令来确认 hello、事件、speak、cancel、base64/binary 音频块是否正常。
+- 这个脚本也能作为后续自动化集成测试的基础。
+
+### 影响范围
+
+- 不改变服务端协议行为。
+- 不改变 Brain UI。
+- 新增脚本只用于开发、调试和外部设备接入验证。
+
+### 验证结果
+
+- `node --check scripts/voice-events-client.mjs` 通过。
+- `node scripts/voice-events-client.mjs --help` 输出正常（并修正 --help 退出码为 0）。
+- `node --check src/api.js` 通过。
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 需要先启动白龙马后端或 Electron，再运行 `npm run voice:events -- status/listen/speak/cancel`。
+- 若要连接局域网机器，可通过 `--url ws://<MacIP>:3721/voice/events` 或环境变量 `BAILONGMA_VOICE_WS` 指定。
+
 ## v2.1.222 - 2026-05-26
 
 ### 更新内容

@@ -1,16 +1,16 @@
-# Findings: v2.1.222 WebSocket TTS Cancel and Speak Guards
+# Findings: v2.1.223 Voice Events Debug Client
 
 ## Current baseline
-- v2.1.221 allows external clients to call `tts:speak` and receive sentence events plus audio chunks.
-- Speak sessions are created through the existing TTS session manager.
-- Without cancellation, old TTS could continue after user interruption, new request, or disconnect.
+- `/voice/events` now supports JSON lifecycle events, opt-in audio chunks, `tts:speak`, and `tts:cancel`.
+- Developers currently need ad-hoc `node -e` snippets to test the protocol.
+- Existing project dependency `ws` is already available and suitable for a CLI client.
 
 ## Design finding
-- The correct unit of cancellation is the WebSocket connection’s active speak, not a global session, because multiple clients may speak independently.
-- New speak replacing old speak is important for real voice UX; the user expects the latest assistant utterance to win.
-- Disconnect cancellation prevents wasted provider calls and avoids stale chunks being emitted to a dead socket.
+- A dedicated CLI client reduces friction for protocol verification and gives ESP32/mobile integration a concrete reference.
+- The script should support both passive listening and active `tts:speak` requests.
+- Saving audio chunks to a file makes it easy to verify that binary/base64 chunks are valid audio.
 
 ## Remaining future direction
-- Add explicit `sessionId`-targeted cancel if multi-session-per-connection becomes necessary.
-- Add server-side timeout limits for very long TTS requests.
-- Add integration tests with a mock TTS provider to verify event order under cancel/replacement.
+- Convert this script into automated integration tests once a mock TTS provider exists.
+- Add protocol examples for LAN devices and ESP32 clients.
+- Add optional event-order assertions for CI.

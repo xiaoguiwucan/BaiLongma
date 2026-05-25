@@ -1,18 +1,17 @@
-# Progress: v2.1.222 WebSocket TTS Cancel and Speak Guards
+# Progress: v2.1.223 Voice Events Debug Client
 
 ## 2026-05-26
-- Resumed from released v2.1.221 baseline.
-- Inspected WebSocket `tts:speak` implementation and TTS session lifecycle.
-- Added per-connection active speak tracking with `requestId` and `sessionId`.
-- Added `tts:cancel` / `cancel` WebSocket message handling.
-- Same-client new `tts:speak` now cancels the previous speak with reason `replaced_by_new_speak`.
-- WebSocket close/error now cancels the active speak with reason `client_disconnected`.
-- Segment streaming now checks cancellation, request replacement, and socket readiness before emitting chunks; cancellation attempts to destroy the provider audio stream.
-- Bumped version to 2.1.222 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
+- Resumed from released v2.1.222 baseline.
+- Inspected existing scripts and `/voice/events` protocol capabilities.
+- Added `scripts/voice-events-client.mjs`, a CLI debug client for the voice WebSocket protocol.
+- Supported commands:
+  - `status` for `/voice/events/status`.
+  - `listen` for passive JSON event listening.
+  - `listen --audio --binary --save out.mp3` for audio chunk subscription and saving.
+  - `speak "text" --binary --save out.mp3` for direct WebSocket `tts:speak` verification.
+  - `cancel` for `tts:cancel` verification.
+- Added `npm run voice:events`.
+- Bumped version to 2.1.223 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
 
-- Verification passed: `node --check src/api.js`, `node --check src/voice/voice-event-bus.js`, and `node --check src/ui/brain-ui/app-shell.js`.
+- Verification passed: `node --check scripts/voice-events-client.mjs`, CLI `--help` output/exit code check, `node --check src/api.js`, `node --check src/voice/voice-event-bus.js`, and `node --check src/ui/brain-ui/app-shell.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.222 as `7284160 feat: add websocket tts cancel guards`.
-- Tagged and pushed `v2.1.222` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.222
-- Uploaded release assets: `backups/v2.1.222/BaiLongma-v2.1.222-source.tar.gz` and `backups/v2.1.222/BaiLongma-v2.1.222.bundle`.

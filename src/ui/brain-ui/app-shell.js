@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.223</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增语音 WebSocket 调试客户端，方便验证小智式协议。</p>
+                <ul class="release-note-points">
+                  <li>新增 scripts/voice-events-client.mjs。</li>
+                  <li>新增 npm run voice:events。</li>
+                  <li>支持 status、listen、speak、cancel，以及音频保存到文件。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.222</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
