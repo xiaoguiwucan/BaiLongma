@@ -90,6 +90,7 @@ const VOICE_THRESHOLD_KEY = 'bailongma-voice-threshold';
 const VOICE_PROVIDER_KEY = 'bailongma-voice-provider';
 const VOICE_WHISPER_MODEL_KEY = 'bailongma-voice-whisper-model'; // 兼容旧版本
 const VOICE_LOCAL_ASR_MODEL_KEY = 'bailongma-voice-local-asr-model';
+const VOICE_ASR_PROFILE_KEY = 'bailongma-voice-asr-profile';
 const VOICE_WAKE_ENABLED_KEY = 'bailongma-voice-wake-enabled';
 const VOICE_WAKE_WORDS_KEY = 'bailongma-voice-wake-words';
 const VOICE_WAKE_MODE_KEY = 'bailongma-voice-wake-mode';
@@ -521,7 +522,7 @@ export function initVoicePanel({
     const resp = await fetch(LOCAL_START_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model, localAsrModel: model }),
+      body: JSON.stringify({ model, localAsrModel: model, asrProfile: localStorage.getItem(VOICE_ASR_PROFILE_KEY) || 'balanced' }),
     });
     if (!resp.ok) throw new Error(`本地语音识别启动失败: HTTP ${resp.status}`);
     const data = await resp.json().catch(() => ({}));

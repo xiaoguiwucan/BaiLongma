@@ -1,12 +1,12 @@
-# Findings: v2.1.214 Video Voice Robustness Upgrade
+# Findings: v2.1.215 ASR Provider Refactor
 
 ## Current baseline
-- `voice-panel.js` dispatches `bailongma:voice-activity` while video mode is active if mic volume exceeds `BARGEIN_THRESHOLD`.
-- `app.js` listens for `bailongma:voice-activity` and calls `startMediaVoiceDuck({ holdMs: 1800, pause: false })`.
-- Local video is ducked to volume 0.10; YouTube receives setVolume 10; Bilibili/cross-origin fallback pauses.
-- Existing settings: auto duck/pause, Space PTT, system AEC.
+- `src/voice/manager.js` maps `sensevoice-small` to engine `sensevoice`; Whisper model IDs map to engine `whisper`.
+- `/voice/local/start` and `/voice/local/restart` accept `localAsrModel` / `model` / `whisperModel`.
+- Settings UI exposes service provider and local model, but no recognition profile such as speed/balanced/accuracy.
+- `src/config.js` stores `asrProvider`, `localAsrModel`, `whisperModel`, wake fields, and speaker settings.
 
-## Gaps
-- Duck volume and hold duration are hardcoded.
-- A single high-volume frame can trigger media duck.
-- Settings UI does not expose current duck status/tuning.
+## Needed refactor
+- A provider metadata module so UI/API can describe local engines and future candidates without hardcoding everything in settings markup.
+- A config field `asrProfile` for speed/balanced/accuracy.
+- Manager status should expose engine label/profile metadata for debugging.

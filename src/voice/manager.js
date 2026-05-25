@@ -4,20 +4,22 @@ import { spawn } from 'child_process'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import { LOCAL_ASR_PROVIDERS, ASR_PROFILES, normalizeAsrProfile, getAsrProviderSummaries } from './asr-providers.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 export const VOICE_WS_PORT = 3723
 
 const DEFAULT_LOCAL_MODEL = 'sensevoice-small'
-const SENSEVOICE_MODELS = new Set(['sensevoice-small'])
-const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
+const SENSEVOICE_MODELS = new Set(LOCAL_ASR_PROVIDERS.sensevoice.models)
+const WHISPER_MODELS = new Set(LOCAL_ASR_PROVIDERS.whisper.models)
 
 let proc = null
 let status = 'stopped'  // 'stopped' | 'starting' | 'running' | 'error'
 let statusMessage = ''
 let currentModel = null
 let currentEngine = null
+let currentProfile = null
 
 export function normalizeLocalAsrModel(model = DEFAULT_LOCAL_MODEL) {
   const value = String(model || '').trim().toLowerCase()
@@ -87,16 +89,20 @@ export function getVoiceStatus() {
     pid: proc?.pid ?? null,
     engine: currentEngine,
     model: currentModel,
+    profile: currentProfile,
+    engineLabel: currentEngine ? LOCAL_ASR_PROVIDERS[currentEngine]?.label || currentEngine : null,
+    providerSummaries: getAsrProviderSummaries(),
   }
 }
 
-export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel } = {}) {
-  const requestedModel = normalizeLocalAsrModel(localAsrModel || model)
+export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel, profile = 'balanced' } = {}) {
+  const requestedProfile = normalizeAsrProfile(profile)
+  const requestedModel = normalizeLocalAsrModel(localAsrModel || model || ASR_PROFILES[requestedProfile]?.recommendedLocalModel)
   const requestedEngine = engineForModel(requestedModel)
 
   if (proc) {
-    if (currentModel === requestedModel && currentEngine === requestedEngine) return getVoiceStatus()
-    return restartVoiceServer(requestedModel)
+    if (currentModel === requestedModel && currentEngine === requestedEngine && currentProfile === requestedProfile) return getVoiceStatus()
+    return restartVoiceServer(requestedModel, requestedProfile)
   }
 
   const server = resolveServer(requestedEngine)
@@ -111,6 +117,7 @@ export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel } 
   status = 'starting'
   currentModel = requestedModel
   currentEngine = requestedEngine
+  currentProfile = requestedProfile
   statusMessage = requestedEngine === 'sensevoice'
     ? '正在加载 SenseVoiceSmall（中文优先）…'
     : `正在加载 Whisper (${requestedModel})…`
@@ -152,6 +159,7 @@ export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel } 
     if (code === 0) {
       currentModel = null
       currentEngine = null
+      currentProfile = null
     }
   })
 
@@ -162,6 +170,7 @@ export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel } 
     statusMessage = `语音服务启动失败: ${err.message}`
     currentModel = null
     currentEngine = null
+    currentProfile = null
   })
 
   return getVoiceStatus()
@@ -175,12 +184,14 @@ export function stopVoiceServer() {
   statusMessage = '已停止'
   currentModel = null
   currentEngine = null
+  currentProfile = null
   return getVoiceStatus()
 }
 
-export function restartVoiceServer(model = DEFAULT_LOCAL_MODEL) {
+export function restartVoiceServer(model = DEFAULT_LOCAL_MODEL, profile = 'balanced') {
   stopVoiceServer()
-  const nextModel = normalizeLocalAsrModel(model)
-  setTimeout(() => startVoiceServer({ model: nextModel }), 500)
+  const nextProfile = normalizeAsrProfile(profile)
+  const nextModel = normalizeLocalAsrModel(model || ASR_PROFILES[nextProfile]?.recommendedLocalModel)
+  setTimeout(() => startVoiceServer({ model: nextModel, profile: nextProfile }), 500)
   return getVoiceStatus()
 }

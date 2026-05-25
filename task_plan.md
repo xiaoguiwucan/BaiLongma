@@ -1,22 +1,22 @@
-# Task Plan: v2.1.214 Video Voice Robustness Upgrade
+# Task Plan: v2.1.215 ASR Provider Refactor
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.214 with better video playback anti-interference: configurable duck volume/hold time, stronger near-field confirmation, visible media-duck status, docs, GitHub backup, and Release assets.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.215 with clearer ASR provider abstraction and recognition profiles: provider metadata, local engine/model normalization, speed/balanced/accuracy profiles, settings UI, docs, GitHub backup, and Release assets.
 
 ## Current Phase
-Complete
+Phase 4
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect current video duck/PTT/AEC implementation
-- [x] Identify settings and media-layer changes
+- [x] Inspect current ASR manager/config/API/UI structure
+- [x] Identify minimal provider abstraction that preserves existing behavior
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add configurable media duck level and hold time
-- [x] Strengthen near-field voice confirmation before media duck
-- [x] Surface media-duck status in UI/debug events
+- [x] Add ASR provider metadata module
+- [x] Update manager/config/API to expose profiles and engines
+- [x] Add settings controls for recognition profile and clearer provider labels
 - **Status:** complete
 
 ### Phase 3: Verification
@@ -25,17 +25,17 @@ Complete
 - **Status:** complete
 
 ### Phase 4: Version, Docs, Release
-- [x] Bump version to 2.1.214
+- [x] Bump version to 2.1.215
 - [x] Update README / CHANGELOG / BACKUP / in-app release notes
-- [x] Commit, tag, push, create GitHub Release with source/bundle assets
-- **Status:** complete
+- [ ] Commit, tag, push, create GitHub Release with source/bundle assets
+- **Status:** in_progress
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Keep current AEC/PTT toggles | Already useful and user wanted features can be combined |
-| Add tuning controls before platform-specific system audio control | Safer for Electron and works for local video/YouTube/Bilibili fallback |
-| Confirm near-field across multiple frames | Avoid ducking video for one-frame spikes or explosions |
+| Keep SenseVoiceSmall default | Existing user preference: Chinese-first, fast, local |
+| Add profiles without swapping model automatically | Safer than changing runtime model unexpectedly; profile prepares future tuning |
+| Expose provider metadata via status/config | Helps future Sherpa/FunASR provider additions and UI clarity |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

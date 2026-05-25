@@ -2118,6 +2118,7 @@ function initTTSSettings() {
   const VOICE_PROVIDER_KEY   = "bailongma-voice-provider";
   const VOICE_WHISPER_MODEL_KEY = "bailongma-voice-whisper-model"; // 兼容旧版本
   const VOICE_LOCAL_ASR_MODEL_KEY = "bailongma-voice-local-asr-model";
+  const VOICE_ASR_PROFILE_KEY = "bailongma-voice-asr-profile";
   const VOICE_WAKE_ENABLED_KEY = "bailongma-voice-wake-enabled";
   const VOICE_WAKE_WORDS_KEY = "bailongma-voice-wake-words";
   const VOICE_WAKE_MODE_KEY = "bailongma-voice-wake-mode";
@@ -2173,10 +2174,14 @@ function initTTSSettings() {
     if (!["local", "aliyun", "tencent", "xunfei"].includes(savedProvider)) savedProvider = "local";
     if (voiceProviderSelect) voiceProviderSelect.value = savedProvider;
     const localAsrModelSelect = document.getElementById("voice-local-asr-model");
+    const asrProfileSelect = document.getElementById("voice-asr-profile");
     const savedLocalModel = serverVoice?.localAsrModel || localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
     if (localAsrModelSelect) localAsrModelSelect.value = savedLocalModel;
+    const savedAsrProfile = ["speed", "balanced", "accuracy"].includes(serverVoice?.asrProfile) ? serverVoice.asrProfile : (localStorage.getItem(VOICE_ASR_PROFILE_KEY) || "balanced");
+    if (asrProfileSelect) asrProfileSelect.value = savedAsrProfile;
     localStorage.setItem(VOICE_PROVIDER_KEY, savedProvider);
     localStorage.setItem(VOICE_LOCAL_ASR_MODEL_KEY, savedLocalModel);
+    localStorage.setItem(VOICE_ASR_PROFILE_KEY, savedAsrProfile);
     const wakeEnabled = document.getElementById("voice-wake-enabled");
     const wakeWords = document.getElementById("voice-wake-words");
     const wakeMode = document.getElementById("voice-wake-mode");
@@ -2254,10 +2259,11 @@ function initTTSSettings() {
 
   async function ensureLocalAsrForEnrollment() {
     const model = localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
+    const asrProfile = localStorage.getItem(VOICE_ASR_PROFILE_KEY) || "balanced";
     await fetch(`${API}/voice/local/start`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ localAsrModel: model, model }),
+      body: JSON.stringify({ localAsrModel: model, model, asrProfile }),
     });
   }
 
@@ -2440,6 +2446,7 @@ function initTTSSettings() {
       const threshold = parseFloat(voiceThreshSlider?.value ?? "0.008");
       const provider  = voiceProviderSelect?.value || "local";
       const localAsrModel = document.getElementById("voice-local-asr-model")?.value || "sensevoice-small";
+      const asrProfile = document.getElementById("voice-asr-profile")?.value || "balanced";
       const whisperModel = localAsrModel === "sensevoice-small" ? (localStorage.getItem(VOICE_WHISPER_MODEL_KEY) || "small") : localAsrModel;
       const wakeEnabled = document.getElementById("voice-wake-enabled")?.checked ?? true;
       const wakeWords = document.getElementById("voice-wake-words")?.value?.trim() || "小龙马，龙马，白龙马";
@@ -2462,6 +2469,7 @@ function initTTSSettings() {
       localStorage.setItem(VOICE_THRESHOLD_KEY,  String(threshold));
       localStorage.setItem(VOICE_PROVIDER_KEY,   provider);
       localStorage.setItem(VOICE_LOCAL_ASR_MODEL_KEY, localAsrModel);
+      localStorage.setItem(VOICE_ASR_PROFILE_KEY, asrProfile);
       localStorage.setItem(VOICE_WHISPER_MODEL_KEY, whisperModel);
       localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(wakeEnabled));
       localStorage.setItem(VOICE_WAKE_WORDS_KEY, wakeWords);
@@ -2485,6 +2493,7 @@ function initTTSSettings() {
         asrProvider: provider,
         localAsrModel,
         whisperModel,
+        asrProfile,
         wakeWordEnabled: wakeEnabled,
         wakeWords: wakeWords.split(/[,，、\s]+/).map(w => w.trim()).filter(Boolean),
         wakeMode,

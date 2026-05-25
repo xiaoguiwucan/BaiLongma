@@ -629,7 +629,7 @@ export function setSocialConfig(updates) {
 }
 
 const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
-const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', ...VOICE_SECRET_KEYS]
+const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', ...VOICE_SECRET_KEYS]
 const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
 const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
 const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
@@ -645,6 +645,7 @@ export function getVoiceConfig() {
     asrProvider: ASR_PROVIDERS.has(stored.asrProvider) ? stored.asrProvider : 'local',
     whisperModel: WHISPER_MODELS.has(stored.whisperModel) ? stored.whisperModel : 'small',
     localAsrModel: LOCAL_ASR_MODELS.has(stored.localAsrModel) ? stored.localAsrModel : 'sensevoice-small',
+    asrProfile: ['speed', 'balanced', 'accuracy'].includes(stored.asrProfile) ? stored.asrProfile : 'balanced',
     wakeWordEnabled: typeof stored.wakeWordEnabled === 'boolean' ? stored.wakeWordEnabled : true,
     wakeWords: Array.isArray(stored.wakeWords) && stored.wakeWords.length ? stored.wakeWords : ['小龙马', '龙马', '白龙马'],
     wakeMode: ['loose', 'strict'].includes(stored.wakeMode) ? stored.wakeMode : 'strict',
@@ -682,6 +683,10 @@ export function setVoiceConfig(updates) {
     }
     if (key === 'localAsrModel') {
       if (LOCAL_ASR_MODELS.has(trimmed)) next.localAsrModel = trimmed
+      continue
+    }
+    if (key === 'asrProfile') {
+      if (['speed', 'balanced', 'accuracy'].includes(trimmed)) next.asrProfile = trimmed
       continue
     }
     if (key === 'wakeWordEnabled') {

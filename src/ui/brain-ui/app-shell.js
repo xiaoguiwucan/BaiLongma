@@ -382,6 +382,15 @@ const createSettingsModal = () => `
                   <option value="turbo">Whisper turbo（较快且较准）</option>
                 </select>
               </div>
+              <div class="settings-row">
+                <label class="settings-label" for="voice-asr-profile">识别模式</label>
+                <select class="settings-select" id="voice-asr-profile">
+                  <option value="speed">极速：优先低延迟</option>
+                  <option value="balanced">平衡：推荐默认</option>
+                  <option value="accuracy">高精度：优先准确率</option>
+                </select>
+              </div>
+              <p class="settings-hint">v2.1.215 起 ASR 被抽象为 Provider + Profile。当前默认仍是本地 SenseVoiceSmall；识别模式会随本地服务状态一起记录，后续可接 Sherpa/FunASR/更多中文模型。</p>
             </div>
             <div id="voice-cred-aliyun">
               <div class="settings-row">
@@ -715,6 +724,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.215</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">重构 ASR Provider 基础，新增极速/平衡/高精度识别模式。</p>
+                <ul class="release-note-points">
+                  <li>新增 ASR Provider 元数据模块，集中描述本地/云端 ASR 能力。</li>
+                  <li>设置页新增识别模式：极速、平衡、高精度。</li>
+                  <li>本地语音服务状态现在会返回 engine/profile/provider summaries，便于后续扩展 Sherpa/FunASR。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.214</span>

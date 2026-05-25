@@ -4,6 +4,48 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.215 - 2026-05-26
+
+### 更新内容
+
+- 新增 `src/voice/asr-providers.js`，集中描述本地/云端 ASR Provider、模型列表和识别 Profile。
+- 本地 ASR manager 状态新增 `profile`、`engineLabel`、`providerSummaries`，方便设置页和调试面板读取。
+- 语音配置新增 `asrProfile`，支持 `speed / balanced / accuracy` 三种识别模式。
+- `/voice/local/start` 和 `/voice/local/restart` 支持传入 `asrProfile`。
+- Brain UI 设置页新增“识别模式”：
+  - 极速：优先低延迟；
+  - 平衡：推荐默认；
+  - 高精度：优先准确率。
+- 现有默认仍保持本地 SenseVoiceSmall，不改变用户当前中文优先本地 ASR 体验。
+
+### 改变原因
+
+- 用户要求中文优先、速度快、精准，并希望后续可以替换 Whisper。
+- 在继续接 Sherpa、FunASR 其他模型或更强中文 ASR 之前，需要先把 ASR 从“硬编码模型选择”整理为 Provider + Profile 架构。
+
+### 影响范围
+
+- 不强制替换当前模型。
+- 不改变本地 SenseVoiceSmall 默认行为。
+- 为后续 v2.1.216 分句 TTS 以及后续 ASR 模型扩展提供更清晰的配置基础。
+
+### 验证结果
+
+- `node --check src/voice/asr-providers.js` 通过。
+- `node --check src/voice/manager.js` 通过。
+- `node --check src/config.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变。
+- 已有配置会自动使用 `asrProfile=balanced`。
+- 本版本没有新增大型模型文件。
+
 ## v2.1.214 - 2026-05-26
 
 ### 更新内容
