@@ -4,6 +4,15 @@ export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
 })
+
+export function normalizeVoiceEventsTTSSpeakLimits(limits = {}) {
+  const maxTextChars = Number(limits.maxTextChars ?? limits.voiceEventsTtsSpeakMaxTextChars ?? VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars)
+  const cooldownMs = Number(limits.cooldownMs ?? limits.voiceEventsTtsSpeakCooldownMs ?? VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs)
+  return {
+    maxTextChars: Number.isFinite(maxTextChars) ? Math.max(40, Math.min(3000, Math.round(maxTextChars))) : VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars,
+    cooldownMs: Number.isFinite(cooldownMs) ? Math.max(0, Math.min(10000, Math.round(cooldownMs))) : VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs,
+  }
+}
 export const VOICE_EVENTS_PROTOCOL_STATES = Object.freeze({
   wake: ['accepted', 'rejected'],
   stt: ['partial', 'final'],
@@ -11,7 +20,8 @@ export const VOICE_EVENTS_PROTOCOL_STATES = Object.freeze({
   interrupt: ['interrupt'],
 })
 
-export function getVoiceEventsProtocolMetadata() {
+export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits } = {}) {
+  const activeTTSSpeakLimits = normalizeVoiceEventsTTSSpeakLimits(ttsSpeakLimits)
   return {
     service: 'bailongma.voice.events',
     version: VOICE_EVENTS_PROTOCOL_VERSION,
@@ -26,7 +36,7 @@ export function getVoiceEventsProtocolMetadata() {
     errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text', 'text_too_long', 'rate_limited'],
     mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
     limits: {
-      ttsSpeak: { ...VOICE_EVENTS_TTS_SPEAK_LIMITS },
+      ttsSpeak: activeTTSSpeakLimits,
     },
     audio: {
       defaultContentType: 'audio/mpeg',
@@ -120,10 +130,11 @@ export function validateVoiceEventClientMessage(msg, { limits = VOICE_EVENTS_TTS
   return { ok: true, type, requestId }
 }
 
-export function addVoiceEventClient(ws) {
+export function addVoiceEventClient(ws, { ttsSpeakLimits } = {}) {
   clients.add(ws)
   clientOptions.set(ws, { audio: false, binaryAudio: false })
-  safeSend(ws, { type: 'hello', ...getVoiceEventsProtocolMetadata(), history: history.slice(-20) })
+  ws.voiceEventsTTSSpeakLimits = normalizeVoiceEventsTTSSpeakLimits(ttsSpeakLimits)
+  safeSend(ws, { type: 'hello', ...getVoiceEventsProtocolMetadata({ ttsSpeakLimits: ws.voiceEventsTTSSpeakLimits }), history: history.slice(-20) })
 }
 
 export function removeVoiceEventClient(ws) {

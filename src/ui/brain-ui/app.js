@@ -1739,6 +1739,10 @@ function initTTSSettings() {
     if (appidEl && tts?.volcanoAppId?.value) appidEl.value = tts.volcanoAppId.value;
     const baseurlEl = document.getElementById("tts-openai-baseurl");
     if (baseurlEl && tts?.openaiTtsBaseURL) baseurlEl.value = tts.openaiTtsBaseURL;
+    const maxCharsEl = document.getElementById("tts-speak-max-chars");
+    if (maxCharsEl && Number.isFinite(Number(tts?.voiceEventsTtsSpeakMaxTextChars))) maxCharsEl.value = String(tts.voiceEventsTtsSpeakMaxTextChars);
+    const cooldownEl = document.getElementById("tts-speak-cooldown-ms");
+    if (cooldownEl && Number.isFinite(Number(tts?.voiceEventsTtsSpeakCooldownMs))) cooldownEl.value = String(tts.voiceEventsTtsSpeakCooldownMs);
     showCredSection(provider);
   }).catch(() => {});
 
@@ -1764,6 +1768,10 @@ function initTTSSettings() {
       if (volcanoAppId) ttsBody.volcanoAppId = volcanoAppId;
       const volcanoToken = document.getElementById("tts-volcano-token")?.value?.trim();
       if (volcanoToken) ttsBody.volcanoToken = volcanoToken;
+      const maxChars = Number(document.getElementById("tts-speak-max-chars")?.value);
+      if (Number.isFinite(maxChars)) ttsBody.voiceEventsTtsSpeakMaxTextChars = maxChars;
+      const cooldownMs = Number(document.getElementById("tts-speak-cooldown-ms")?.value);
+      if (Number.isFinite(cooldownMs)) ttsBody.voiceEventsTtsSpeakCooldownMs = cooldownMs;
 
       fetch(`${API}/settings/tts`, {
         method: "POST",
@@ -1798,6 +1806,10 @@ function initTTSSettings() {
         if (volcanoAppId) preBody.volcanoAppId = volcanoAppId;
         const volcanoToken = document.getElementById("tts-volcano-token")?.value?.trim();
         if (volcanoToken) preBody.volcanoToken = volcanoToken;
+        const maxChars = Number(document.getElementById("tts-speak-max-chars")?.value);
+        if (Number.isFinite(maxChars)) preBody.voiceEventsTtsSpeakMaxTextChars = maxChars;
+        const cooldownMs = Number(document.getElementById("tts-speak-cooldown-ms")?.value);
+        if (Number.isFinite(cooldownMs)) preBody.voiceEventsTtsSpeakCooldownMs = cooldownMs;
         await fetch(`${API}/settings/tts`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },

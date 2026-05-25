@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.232 更新：tts:speak 安全限制）
+版本：v3（BaiLongma v2.1.233 更新：tts:speak 限制可配置）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -229,6 +229,7 @@ GET http://127.0.0.1:3721/voice/events/protocol
 - 默认最长 800 字符。
 - 同一个 WebSocket 连接默认 1200ms 内只能发起一次 `tts:speak`。
 - 当前限制可通过 `/voice/events/protocol` 的 `limits.ttsSpeak` 读取。
+- 限制可在 Brain UI 的“设置 -> 语音 -> 语音合成（TTS）-> 外部语音客户端限制”中调整，也可通过 `POST /settings/tts` 设置 `voiceEventsTtsSpeakMaxTextChars` 和 `voiceEventsTtsSpeakCooldownMs`。
 
 典型返回顺序：
 
@@ -396,4 +397,4 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 - 当前协议未做鉴权，局域网暴露时请自行控制访问范围。
 - 当前 `tts:cancel` 只取消同连接 active speak，不支持跨连接 session 管理。
 - 当前调试客户端是参考实现，不是正式 SDK。
-- 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本和单连接 speak 冷却，但还没有鉴权或全局/IP 级限流。
+- 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本和单连接 speak 冷却；文本长度和冷却可配置，但还没有鉴权或全局/IP 级限流。

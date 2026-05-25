@@ -1,24 +1,21 @@
-# Findings: v2.1.232 Voice Event TTS Speak Safety Limits
+# Findings: v2.1.233 Configurable Voice Event TTS Speak Limits
 
 ## Current baseline
-- v2.1.231 added structured `protocol_error` responses and validation for malformed WebSocket messages.
-- `tts:speak` still accepts arbitrary text length as long as it is non-empty.
-- Repeated `tts:speak` messages are allowed immediately; the newer speak cancels the previous one.
+- v2.1.232 added fixed `tts:speak` limits: 800 chars and 1200ms per WebSocket connection.
+- `/settings/tts` already exists and is used by Brain UI for TTS provider, voice, and credentials.
+- `/voice/events/protocol` and WebSocket hello currently use fixed protocol metadata from `voice-event-bus.js`.
+- Validation and cooldown currently read fixed `VOICE_EVENTS_TTS_SPEAK_LIMITS`.
 
 ## Design finding
-- For hardware/LAN clients, accidental repeated `tts:speak` can cause constant cancellation/recreation of TTS sessions.
-- Very long text can create slow or expensive TTS jobs, large audio streams, or poor UX.
-- Protocol metadata should advertise safety limits so clients can enforce them before sending.
-- A minimal per-WebSocket cooldown is enough for now and does not require global identity/auth.
+- Users may need a shorter limit for hardware buttons or a longer limit for desktop debugging.
+- The external client should not need separate docs to know active limits; `/voice/events/protocol` and hello should report the configured values.
+- A settings-backed override must preserve safe defaults and clamp values.
 
-## Chosen limits
-- `maxTextChars`: 800 characters.
-- `cooldownMs`: 1200 ms per WebSocket connection.
-- New error codes:
-  - `text_too_long`
-  - `rate_limited`
+## Chosen config keys
+- `voiceEventsTtsSpeakMaxTextChars`: default 800, clamp 40-3000.
+- `voiceEventsTtsSpeakCooldownMs`: default 1200, clamp 0-10000.
 
 ## Remaining future direction
-- Add configurable limits in settings.
-- Add global/IP-level rate limiting before exposing beyond localhost/LAN.
-- Add authentication or pairing for non-local clients.
+- Add global/IP-level rate limiting.
+- Add authentication/pairing for LAN devices.
+- Move voice protocol settings to a dedicated external-device settings panel if the list grows.

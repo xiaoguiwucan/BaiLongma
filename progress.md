@@ -1,21 +1,17 @@
-# Progress: v2.1.232 Voice Event TTS Speak Safety Limits
+# Progress: v2.1.233 Configurable Voice Event TTS Speak Limits
 
 ## 2026-05-26
-- Resumed after v2.1.231 release; git worktree was clean on `main`.
-- Inspected voice event protocol files and found `tts:speak` lacks max length/rate limiting.
-- Started v2.1.232 plan to add explicit safety limits and protocol metadata for external clients.
-- Added `VOICE_EVENTS_TTS_SPEAK_LIMITS` with `maxTextChars=800` and `cooldownMs=1200`.
-- Exposed `tts_speak_limits`, `limits.ttsSpeak`, `text_too_long`, and `rate_limited` in protocol metadata.
-- Extended `validateVoiceEventClientMessage` to reject overlong `tts:speak` text.
-- Added per-WebSocket `tts:speak` cooldown guard returning `protocol_error` with `retryAfterMs`.
-- Extended mapping smoke to 22 checks and voice-events smoke to 23 checks.
-- Bumped version to 2.1.232 and updated README, CHANGELOG, BACKUP, protocol docs, and Brain UI release notes.
-- Verification passed: JS syntax checks for touched protocol/API/smoke files.
-- Verification passed: `npm run smoke:voice-mapping` 22/22.
-- Verification passed: `npm run smoke:voice-events` 23/23.
+- Resumed after v2.1.232 release; git worktree was clean on `main`.
+- Inspected `src/config.js`, `src/api.js`, `src/voice/voice-event-bus.js`, Brain UI TTS settings, and smoke tests.
+- Found TTS settings are the right place to persist voice event `tts:speak` safety limits.
+- Started v2.1.233 plan to make fixed v2.1.232 limits configurable while preserving defaults.
+- Added settings-backed TTS speak limits: `voiceEventsTtsSpeakMaxTextChars` and `voiceEventsTtsSpeakCooldownMs`.
+- Added `normalizeVoiceEventsTTSSpeakLimits` and made protocol metadata/hello accept active configured limits.
+- Updated `/voice/events/protocol`, WebSocket hello, validation, and cooldown to use configured limits from `/settings/tts`.
+- Added Brain UI inputs for external voice client max text chars and cooldown ms.
+- Extended mapping smoke to 25 checks and voice-events smoke to 26 checks.
+- Bumped version to 2.1.233 and updated README, CHANGELOG, BACKUP, protocol docs, and Brain UI release notes.
+- Verification passed: JS syntax checks for touched protocol/config/API/UI/smoke files.
+- Verification passed: `npm run smoke:voice-mapping` 25/25.
+- Verification passed: `npm run smoke:voice-events` 26/26.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.232 as `bb383b4 feat: add voice event tts speak limits`.
-- Tagged and pushed `v2.1.232` to origin.
-- Created local release assets: `backups/v2.1.232/BaiLongma-v2.1.232-source.tar.gz` and `backups/v2.1.232/BaiLongma-v2.1.232.bundle`.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.232
-- Uploaded release assets via GitHub API: source tarball and git bundle.

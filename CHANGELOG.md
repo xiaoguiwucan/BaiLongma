@@ -4,6 +4,56 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.233 - 2026-05-26
+
+### 更新内容
+
+- v2.1.232 的固定 `tts:speak` 安全限制改为可配置。
+- `/settings/tts` 新增并返回：
+  - `voiceEventsTtsSpeakMaxTextChars`，默认 800，范围 40-3000；
+  - `voiceEventsTtsSpeakCooldownMs`，默认 1200，范围 0-10000。
+- Brain UI 设置页“语音合成（TTS）”新增“外部语音客户端限制”：
+  - 最大文本字符；
+  - 单连接冷却 ms。
+- `/voice/events/protocol` 会读取当前配置并返回 active `limits.ttsSpeak`。
+- `/voice/events` WebSocket hello 会携带当前配置后的 `limits.ttsSpeak`。
+- `validateVoiceEventClientMessage()` 支持传入配置化 limits。
+- WebSocket `tts:speak` 的超长文本校验和 per-connection 冷却都改为使用当前 TTS 设置。
+- `scripts/smoke-voice-mapping.mjs` 从 22 项扩展到 25 项。
+- `scripts/smoke-voice-events.mjs` 从 23 项扩展到 26 项，覆盖 `/settings/tts` 持久化、protocol 动态反映配置、hello 动态反映配置。
+
+### 改变原因
+
+- 不同设备和场景对 `tts:speak` 限制要求不同：硬件按钮适合更短文本，桌面调试可能需要更长文本。
+- 外部客户端应该从协议元数据中获取当前 active limits，而不是写死 800/1200。
+- 用户需要能在设置页调整限制，不必改代码。
+
+### 影响范围
+
+- 默认行为保持 v2.1.232：800 字符、1200ms 冷却。
+- 用户可以在设置页或 `POST /settings/tts` 调整限制。
+- 设置会影响新连接的 hello、`/voice/events/protocol`、文本长度校验和限流回执。
+- 仍然是单连接冷却，不是全局/IP 级限流。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/config.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 25/25 通过。
+- `npm run smoke:voice-events` 26/26 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 设置页保存后，新连接的 `/voice/events` hello 会使用新限制。
+- 外部客户端应每次连接前读取 `/voice/events/protocol`，不要缓存旧 limits。
+
 ## v2.1.232 - 2026-05-26
 
 ### 更新内容

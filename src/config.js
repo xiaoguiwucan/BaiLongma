@@ -726,8 +726,20 @@ export function setVoiceConfig(updates) {
 }
 
 // TTS config
+const TTS_LIMIT_DEFAULTS = Object.freeze({
+  voiceEventsTtsSpeakMaxTextChars: 800,
+  voiceEventsTtsSpeakCooldownMs: 1200,
+})
+
+function normalizeTTSLimit(value, fallback, min, max) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return fallback
+  return Math.max(min, Math.min(max, Math.round(num)))
+}
+
 const TTS_CONFIG_KEYS = [
   'ttsProvider', 'ttsVoiceId',
+  'voiceEventsTtsSpeakMaxTextChars', 'voiceEventsTtsSpeakCooldownMs',
   'minimaxKey',
   'doubaoKey', 'doubaoAppId', 'doubaoAccessKey', 'doubaoResourceId',
   'openaiTtsKey', 'openaiTtsBaseURL',
@@ -741,6 +753,8 @@ export function getTTSConfig() {
   return {
     ttsProvider:     stored.ttsProvider  || 'doubao',
     ttsVoiceId:      stored.ttsVoiceId   || 'zh_female_xiaohe_uranus_bigtts',
+    voiceEventsTtsSpeakMaxTextChars: normalizeTTSLimit(stored.voiceEventsTtsSpeakMaxTextChars, TTS_LIMIT_DEFAULTS.voiceEventsTtsSpeakMaxTextChars, 40, 3000),
+    voiceEventsTtsSpeakCooldownMs: normalizeTTSLimit(stored.voiceEventsTtsSpeakCooldownMs, TTS_LIMIT_DEFAULTS.voiceEventsTtsSpeakCooldownMs, 0, 10000),
     minimaxKey:      { configured: !!(stored.minimaxKey || process.env.MINIMAX_API_KEY || getMinimaxKey()) },
     doubaoKey:       { configured: !!(stored.doubaoKey) },
     doubaoAppId:     { configured: !!(stored.doubaoAppId), value: stored.doubaoAppId || '' },
@@ -782,6 +796,14 @@ export function setTTSConfig(updates) {
   for (const [key, val] of Object.entries(updates)) {
     if (!TTS_CONFIG_KEYS.includes(key)) continue
     const trimmed = String(val || '').trim()
+    if (key === 'voiceEventsTtsSpeakMaxTextChars') {
+      next[key] = normalizeTTSLimit(val, TTS_LIMIT_DEFAULTS.voiceEventsTtsSpeakMaxTextChars, 40, 3000)
+      continue
+    }
+    if (key === 'voiceEventsTtsSpeakCooldownMs') {
+      next[key] = normalizeTTSLimit(val, TTS_LIMIT_DEFAULTS.voiceEventsTtsSpeakCooldownMs, 0, 10000)
+      continue
+    }
     if (trimmed) next[key] = trimmed
     else delete next[key]
   }

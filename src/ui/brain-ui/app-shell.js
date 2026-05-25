@@ -603,6 +603,17 @@ const createSettingsModal = () => `
               <p class="settings-hint">可用声音：BV001_streaming（通用女声）· BV002_streaming（通用男声）等，在火山引擎控制台查看全部。</p>
             </div>
 
+            <div class="settings-section-label" style="margin-top:12px;">外部语音客户端限制</div>
+            <p class="settings-hint">用于 /voice/events WebSocket 的 tts:speak。外部设备或调试客户端会在 /voice/events/protocol 里读取这些限制，避免误发过长文本或高频请求。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="tts-speak-max-chars">最大文本字符</label>
+              <input class="settings-input" type="number" id="tts-speak-max-chars" min="40" max="3000" step="10" value="800">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="tts-speak-cooldown-ms">单连接冷却 ms</label>
+              <input class="settings-input" type="number" id="tts-speak-cooldown-ms" min="0" max="10000" step="100" value="1200">
+            </div>
+
             <div class="settings-row" style="margin-top:8px;">
               <button class="settings-save-btn" id="tts-test-btn" type="button" style="padding:4px 12px;font-size:12px;">试听</button>
               <span id="tts-test-status" style="color:var(--ink2);font-size:12px;margin-left:8px;"></span>
@@ -725,6 +736,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.233</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">把外部语音客户端 tts:speak 限制改为可配置。</p>
+                <ul class="release-note-points">
+                  <li>设置页新增最大文本字符和单连接冷却 ms。</li>
+                  <li>/settings/tts、/voice/events/protocol 和 WebSocket hello 同步 active limits。</li>
+                  <li>smoke:voice-mapping 增至 25 项，smoke:voice-events 增至 26 项。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.232</span>

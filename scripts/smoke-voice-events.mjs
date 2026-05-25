@@ -57,12 +57,23 @@ try {
   assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
   assert(protocolMeta.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocolMeta.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol endpoint exposes tts speak limits', JSON.stringify(protocolMeta.limits))
 
+  await fetch(`${API}/settings/tts`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ voiceEventsTtsSpeakMaxTextChars: 120, voiceEventsTtsSpeakCooldownMs: 250 }),
+  })
+  const configuredTTS = await fetch(`${API}/settings/tts`).then(r => r.json())
+  assert(configuredTTS.tts?.voiceEventsTtsSpeakMaxTextChars === 120 && configuredTTS.tts?.voiceEventsTtsSpeakCooldownMs === 250, 'settings/tts persists voice event speak limits', JSON.stringify(configuredTTS.tts))
+  const configuredProtocol = await fetch(`${API}/voice/events/protocol`).then(r => r.json())
+  assert(configuredProtocol.limits?.ttsSpeak?.maxTextChars === 120 && configuredProtocol.limits?.ttsSpeak?.cooldownMs === 250, 'protocol endpoint reflects configured tts speak limits', JSON.stringify(configuredProtocol.limits))
+
   const helloMessages = await connectAndCollect({
     until: msg => msg.type === 'hello',
   })
   const hello = helloMessages.find(msg => msg.type === 'hello')
   assert(hello?.service === 'bailongma.voice.events', 'websocket sends hello service', JSON.stringify(hello))
   assert(hello?.version >= 3 && hello?.capabilities?.includes('tts_speak'), 'hello advertises v3 tts_speak capability', JSON.stringify(hello))
+  assert(hello?.limits?.ttsSpeak?.maxTextChars === 120 && hello?.limits?.ttsSpeak?.cooldownMs === 250, 'hello reflects configured tts speak limits', JSON.stringify(hello?.limits))
 
   const pingMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'ping' })),
@@ -98,11 +109,11 @@ try {
   assert(invalidSpeak?.requestId === 'empty-speak', 'empty tts:speak receives missing_text protocol_error', JSON.stringify(invalidSpeak))
 
   const tooLongMessages = await connectAndCollect({
-    onOpen: ws => ws.send(JSON.stringify({ type: 'tts:speak', requestId: 'too-long-speak', text: 'x'.repeat(VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars + 1) })),
+    onOpen: ws => ws.send(JSON.stringify({ type: 'tts:speak', requestId: 'too-long-speak', text: 'x'.repeat(121) })),
     until: msg => msg.type === 'protocol_error' && msg.code === 'text_too_long',
   })
   const tooLong = tooLongMessages.find(msg => msg.type === 'protocol_error' && msg.code === 'text_too_long')
-  assert(tooLong?.requestId === 'too-long-speak' && tooLong?.limit === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars, 'overlong tts:speak receives text_too_long protocol_error', JSON.stringify(tooLong))
+  assert(tooLong?.requestId === 'too-long-speak' && tooLong?.limit === 120, 'overlong tts:speak receives text_too_long protocol_error', JSON.stringify(tooLong))
 
   const rateLimitMessages = await connectAndCollect({
     onOpen: ws => {
@@ -112,7 +123,7 @@ try {
     until: msg => msg.type === 'protocol_error' && msg.code === 'rate_limited',
   })
   const rateLimited = rateLimitMessages.find(msg => msg.type === 'protocol_error' && msg.code === 'rate_limited')
-  assert(rateLimited?.requestId === 'rate-2' && rateLimited?.retryAfterMs > 0, 'rapid tts:speak receives rate_limited protocol_error', JSON.stringify(rateLimited))
+  assert(rateLimited?.requestId === 'rate-2' && rateLimited?.retryAfterMs > 0 && rateLimited?.limitMs === 250, 'rapid tts:speak receives rate_limited protocol_error', JSON.stringify(rateLimited))
 
   const cancelMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'tts:cancel', requestId: 'smoke-no-active' })),

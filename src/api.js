@@ -14,7 +14,7 @@ import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { createTTSSession, cancelTTSSession, streamTTSSegment, getTTSSession } from './voice/tts-session.js'
-import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, VOICE_EVENTS_TTS_SPEAK_LIMITS, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
+import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, normalizeVoiceEventsTTSSpeakLimits, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -1093,7 +1093,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /voice/events/protocol — current voice event protocol metadata
     if (req.method === 'GET' && url.pathname === '/voice/events/protocol') {
-      jsonResponse(res, 200, { ok: true, ...getVoiceEventsProtocolMetadata() })
+      jsonResponse(res, 200, { ok: true, ...getVoiceEventsProtocolMetadata({ ttsSpeakLimits: getConfiguredVoiceEventsTTSSpeakLimits() }) })
       return
     }
 
@@ -1511,6 +1511,14 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     ws.on('error', () => { session?.close(); session = null })
   })
 
+  function getConfiguredVoiceEventsTTSSpeakLimits() {
+    const ttsConfig = getTTSConfig()
+    return normalizeVoiceEventsTTSSpeakLimits({
+      maxTextChars: ttsConfig.voiceEventsTtsSpeakMaxTextChars,
+      cooldownMs: ttsConfig.voiceEventsTtsSpeakCooldownMs,
+    })
+  }
+
   async function streamTTSSegmentToVoiceClient(ws, { sessionId, index, requestId, contentType = 'audio/mpeg' }) {
     publishTTSAudioStart({ sessionId, index, contentType, targetClient: ws })
     try {
@@ -1606,7 +1614,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
   // Experimental voice event WebSocket channel: JSON lifecycle events and opt-in TTS audio for external clients
   const voiceEventWss = new WebSocketServer({ noServer: true })
   voiceEventWss.on('connection', (ws) => {
-    addVoiceEventClient(ws)
+    addVoiceEventClient(ws, { ttsSpeakLimits: getConfiguredVoiceEventsTTSSpeakLimits() })
     const cleanupVoiceClient = () => {
       cancelVoiceEventTTSSpeak(ws, 'client_disconnected')
       removeVoiceEventClient(ws)
@@ -1621,7 +1629,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         sendVoiceEventProtocolError(ws, 'invalid_json', 'Client message must be valid JSON.')
         return
       }
-      const validation = validateVoiceEventClientMessage(msg)
+      const activeTTSSpeakLimits = getConfiguredVoiceEventsTTSSpeakLimits()
+      const validation = validateVoiceEventClientMessage(msg, { limits: activeTTSSpeakLimits })
       if (!validation.ok) {
         sendVoiceEventProtocolError(ws, validation.code, validation.message, { requestId: validation.requestId, receivedType: validation.receivedType, limit: validation.limit, actual: validation.actual })
         return
@@ -1629,12 +1638,12 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
         const now = Date.now()
         const lastAt = Number(ws.lastTTSSpeakAt || 0)
-        const retryAfterMs = Math.max(0, VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs - (now - lastAt))
+        const retryAfterMs = Math.max(0, activeTTSSpeakLimits.cooldownMs - (now - lastAt))
         if (retryAfterMs > 0) {
-          sendVoiceEventProtocolError(ws, 'rate_limited', `tts:speak is limited to one request every ${VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs} ms.`, {
+          sendVoiceEventProtocolError(ws, 'rate_limited', `tts:speak is limited to one request every ${activeTTSSpeakLimits.cooldownMs} ms.`, {
             requestId: msg.requestId || msg.id || undefined,
             receivedType: msg.type,
-            limitMs: VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs,
+            limitMs: activeTTSSpeakLimits.cooldownMs,
             retryAfterMs,
           })
           return
