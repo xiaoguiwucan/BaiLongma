@@ -1114,7 +1114,7 @@ body {
 
 /* ── Video mode button ── */
 .video-btn {
-  display: none;
+  display: flex;
   flex-shrink: 0;
   width: 28px;
   height: 28px;
@@ -1676,6 +1676,55 @@ body.image-mode .image-panel {
   font-family: "JetBrains Mono", ui-monospace, monospace;
   letter-spacing: 0.08em;
   pointer-events: none;
+}
+
+.video-empty {
+  flex-direction: column;
+  gap: 14px;
+  padding: 24px;
+  pointer-events: auto;
+}
+
+.video-empty-title {
+  opacity: 0.72;
+}
+
+.video-open-row {
+  display: flex;
+  width: min(680px, 86%);
+  gap: 8px;
+}
+
+.video-url-input {
+  flex: 1;
+  height: 36px;
+  border: 1px solid rgba(138,168,200,0.22);
+  border-radius: 10px;
+  background: rgba(8, 12, 18, 0.78);
+  color: var(--ink);
+  outline: none;
+  padding: 0 12px;
+  font-size: 12px;
+  letter-spacing: 0;
+}
+
+.video-url-input:focus {
+  border-color: rgba(211,152,114,0.62);
+  box-shadow: 0 0 0 2px rgba(211,152,114,0.12);
+}
+
+.video-open-btn {
+  height: 36px;
+  border: 1px solid rgba(211,152,114,0.46);
+  border-radius: 10px;
+  background: rgba(211,152,114,0.12);
+  color: var(--warm);
+  padding: 0 16px;
+  cursor: pointer;
+}
+
+.video-open-btn:hover {
+  background: rgba(211,152,114,0.2);
 }
 
 .video-surface.has-media .video-empty,

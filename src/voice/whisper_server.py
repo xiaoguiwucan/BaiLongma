@@ -37,10 +37,11 @@ SAMPLE_RATE = 16000
 # ── VAD 阈值 ──
 # 笔记本风扇 / 空调等环境噪音 RMS 通常在 0.002~0.006；
 # 正常说话峰值 RMS 在 0.02~0.1，因此阈值设在两者之间。
-SILENCE_RMS_THRESHOLD     = 0.005   # 低于此 = 静默（原 0.003）
-NEAR_SPEECH_RMS_THRESHOLD = 0.010   # 超过此才计入有声 chunk（原 0.004）
-MIN_UTTERANCE_PEAK_RMS    = 0.015   # 整段utterance 的峰值必须达到此值才送转录（原 0.004）
-MIN_UTTERANCE_VOICED_CHUNKS = 2     # 至少需要 2 个有声 chunk（原 1）
+SILENCE_RMS_THRESHOLD     = 0.007   # 低于此 = 静默；调高以减少空调/键盘/系统回声触发
+NEAR_SPEECH_RMS_THRESHOLD = 0.016   # 超过此才计入近场说话 chunk
+MIN_UTTERANCE_PEAK_RMS    = 0.024   # 整段 utterance 的峰值必须达到此值才送转录
+MIN_UTTERANCE_VOICED_CHUNKS = 3     # 至少需要 3 个近场有声 chunk（约 750ms）
+MIN_UTTERANCE_SECONDS = 0.70        # 太短的片段更容易产生 Whisper 幻觉
 
 # ── Whisper 幻觉输出过滤 ──
 _HALLUCINATION_FRAGMENTS = [
@@ -52,6 +53,12 @@ _HALLUCINATION_FRAGMENTS = [
     # 英文常见幻觉
     "subtitles by", "thank you for watching", "please subscribe",
     "amara.org", "translated by", "music:", "♪", "♫", "♬", "🎵", "🎶",
+]
+
+_HALLUCINATION_REGEXES = [
+    r"(我不想说了|我只想说了|我想说了)[,，。.\s]*(\\1[,，。.\s]*){2,}",
+    r"(这[种个]话[,，。.\s]*)?(我不想说了|我只想说了)[,，。.\s]*(.*?)(我不想说了|我只想说了)",
+    r"(嗨|嘿|喂)[,，。.\s]*(三毛|三猫)[,，。.\s]*",
 ]
 
 import re as _re
@@ -74,6 +81,9 @@ def is_hallucination(text: str) -> bool:
     for frag in _HALLUCINATION_FRAGMENTS:
         if frag.lower() in tl:
             return True
+    for pat in _HALLUCINATION_REGEXES:
+        if _re.search(pat, t, flags=_re.I):
+            return True
     # 单字符重复（如"啊啊啊啊"、"嗯嗯嗯嗯"）
     unique_chars = set(c for c in t if c.strip())
     if len(unique_chars) <= 2 and len(t) >= 5:
@@ -86,6 +96,23 @@ def is_hallucination(text: str) -> bool:
     segs = [s.strip() for s in _re.split(r'[,，、。.！!？?\s]+', t) if s.strip()]
     if len(segs) >= 4 and len(set(segs)) <= 2:
         return True
+    # 大段文本里某个短句反复占比过高，也视为幻觉。
+    if len(segs) >= 6:
+        counts = {}
+        for s in segs:
+            if len(s) >= 2:
+                counts[s] = counts.get(s, 0) + 1
+        if counts and max(counts.values()) / len(segs) >= 0.45:
+            return True
+    # 连续重复 2~8 字符片段，例如「我只想说了我只想说了」
+    compact = _re.sub(r'[\s,，、。.！!？?]+', '', t)
+    for n in range(2, 9):
+        for i in range(0, max(0, len(compact) - n * 3 + 1)):
+            unit = compact[i:i+n]
+            if len(set(unit)) <= 1:
+                continue
+            if unit * 3 in compact:
+                return True
     return False
 AMBIENT_VOICE_CHUNKS_TO_REPORT = 4
 # 连续多少个 chunk 静默后触发识别（每个 chunk = CHUNK_SAMPLES 样本）
@@ -211,6 +238,14 @@ class VoiceServer:
                 initial_prompt=prompt if prompt else None,
             )
             text = (result.get("text") or "").strip()
+            segments = result.get("segments") or []
+            if segments:
+                avg_logprob = min(float(s.get("avg_logprob", 0.0)) for s in segments)
+                no_speech_prob = max(float(s.get("no_speech_prob", 0.0)) for s in segments)
+                # 噪音/回声片段常见：no_speech 高，同时解码置信度低。
+                if no_speech_prob >= 0.55 and avg_logprob <= -0.55:
+                    print(f"[语音] 过滤低置信度片段: no_speech={no_speech_prob:.2f} avg_logprob={avg_logprob:.2f} text={repr(text[:50])}", flush=True)
+                    return ""
             # 过滤 Whisper 幻觉输出：无声/噪声时常见的固定幻觉文本
             if is_hallucination(text):
                 print(f"[语音] 过滤幻觉输出: {repr(text[:60])}", flush=True)
@@ -254,9 +289,9 @@ class VoiceServer:
                         elif msg.get("type") == "flush":
                             # 强制识别当前缓冲
                             if (
-                                len(buf) > SAMPLE_RATE // 4
-                                and voiced_chunks >= MIN_UTTERANCE_VOICED_CHUNKS
-                                and utterance_peak_rms >= MIN_UTTERANCE_PEAK_RMS
+                        len(buf) >= int(SAMPLE_RATE * MIN_UTTERANCE_SECONDS)
+                        and voiced_chunks >= MIN_UTTERANCE_VOICED_CHUNKS
+                        and utterance_peak_rms >= MIN_UTTERANCE_PEAK_RMS
                             ):
                                 text = await self.transcribe_async(buf, lang)
                                 if text:
@@ -312,7 +347,7 @@ class VoiceServer:
 
                 if should_flush_speech or should_flush_max:
                     if (
-                        len(buf) > SAMPLE_RATE // 8
+                        len(buf) >= int(SAMPLE_RATE * MIN_UTTERANCE_SECONDS)
                         and voiced_chunks >= MIN_UTTERANCE_VOICED_CHUNKS
                         and utterance_peak_rms >= MIN_UTTERANCE_PEAK_RMS
                     ):

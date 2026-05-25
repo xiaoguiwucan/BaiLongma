@@ -18,6 +18,7 @@ pids
 
 sandbox
 data
+backups/
 
 # PyInstaller 打包产物（由 npm run build:voice 生成）
 voice-dist/
@@ -143,3 +144,12 @@ dist
 .yarn/build-state.yml
 .yarn/install-state.gz
 .pnp.*
+
+# Local Whisper Python environment
+.venv-whisper/
+
+# Python cache
+__pycache__/
+*.pyc
+
+models/SenseVoiceSmall/

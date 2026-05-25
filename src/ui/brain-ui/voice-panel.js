@@ -1,5 +1,5 @@
-// 声波点云球 + 云端 ASR 语音输入面板
-// 云端 ASR（阿里云/腾讯云/讯飞），通过后端 WebSocket 代理
+// 声波点云球 + ASR 语音输入面板
+// 默认本地 Whisper；也可切换云端 ASR（阿里云/腾讯云/讯飞），通过后端 WebSocket 代理
 //
 // 点云算法移植自 ACUI (Remix)/Voice Component.html
 
@@ -82,8 +82,18 @@ const SOUND_EVENT_ICONS = {
 };
 
 const CLOUD_WS_URL  = 'ws://127.0.0.1:3721/voice/cloud';
+const LOCAL_WS_URL  = 'ws://127.0.0.1:3723';
+const LOCAL_START_URL = 'http://127.0.0.1:3721/voice/local/start';
 const VOICE_THRESHOLD_KEY = 'bailongma-voice-threshold';
 const VOICE_PROVIDER_KEY = 'bailongma-voice-provider';
+const VOICE_WHISPER_MODEL_KEY = 'bailongma-voice-whisper-model'; // 兼容旧版本
+const VOICE_LOCAL_ASR_MODEL_KEY = 'bailongma-voice-local-asr-model';
+const VOICE_WAKE_ENABLED_KEY = 'bailongma-voice-wake-enabled';
+const VOICE_WAKE_WORDS_KEY = 'bailongma-voice-wake-words';
+const VOICE_SPEAKER_VERIFY_KEY = 'bailongma-voice-speaker-verify';
+const VOICE_SPEAKER_THRESHOLD_KEY = 'bailongma-voice-speaker-threshold';
+const VOICE_VIDEO_DUCK_KEY = 'bailongma-voice-video-duck';
+const VOICE_VIDEO_AEC_KEY = 'bailongma-voice-video-aec';
 
 // 从 localStorage 读取灵敏度阈值，支持运行时动态修改
 function getVoiceThreshold() {
@@ -160,6 +170,15 @@ export function initVoicePanel({
       micData.analyser.getByteFrequencyData(micData.dataArray);
       const sum = micData.dataArray.reduce((a, b) => a + b, 0);
       const vol = (sum / micData.dataArray.length) / 255;
+
+      // 视频播放中：检测到近场人声时通知媒体层先降音量/暂停，让唤醒词和声纹有机会听清。
+      if (mediaModeActive && localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== 'false' && vol > BARGEIN_THRESHOLD) {
+        const now = Date.now();
+        if (now - lastMediaVoiceActivityAt > 900) {
+          lastMediaVoiceActivityAt = now;
+          window.dispatchEvent(new CustomEvent('bailongma:voice-activity', { detail: { volume: vol } }));
+        }
+      }
 
       // 打断检测：TTS 播放中持续检测用户声音（两阶段：duck → 判断语音/噪音）
       if (suspendedByMedia) {
@@ -294,6 +313,9 @@ export function initVoicePanel({
   let micActive = false;
   let userWantedMic = false;
   let suspendedByMedia = false;
+  let mediaModeActive = false;
+  let mediaStartedMic = false;
+  let lastMediaVoiceActivityAt = 0;
   let ttsStartTime = 0;
   let bargeinFrames = 0;
   let nearFieldGate = {
@@ -324,16 +346,19 @@ export function initVoicePanel({
   // 自动发送防抖
   let lastTranscriptText = '';
   let autoSendTimer = null;
+  let lastFinalTranscript = '';
   // PTT 按住期间禁用自动发送（由 pttEnd 在松手时统一发送）
   let pttHolding = false;
   // 多句累积：Paraformer 按句回调，需拼接完整段落
   let accumulatedText = '';
+  let wakeActiveUntil = 0;
 
   async function startMic() {
     try {
+      const useAec = localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== 'false';
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
-          echoCancellation: true,
+          echoCancellation: useAec,
           noiseSuppression: true,
           autoGainControl: false,
           channelCount: 1,
@@ -364,9 +389,72 @@ export function initVoicePanel({
   // ─── 语音识别结果发送 ───
   function sendRecognizedVoiceText() {
     if (!lastTranscriptText) return;
+    if (looksLikeAsrHallucination(lastTranscriptText)) {
+      lastTranscriptText = '';
+      accumulatedText = '';
+      if (transcript) transcript.textContent = '';
+      setStatus('listening');
+      return;
+    }
     const input = getChatInput?.();
     if (input) input.value = lastTranscriptText;
     getSendMessage?.({ channel: '语音识别', label: 'You · 语音识别' });
+  }
+
+  function getWakeConfig() {
+    const enabled = localStorage.getItem(VOICE_WAKE_ENABLED_KEY) !== 'false';
+    const words = (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || '小龙马，龙马，白龙马')
+      .split(/[,，、\s]+/)
+      .map(w => w.trim())
+      .filter(Boolean);
+    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'] };
+  }
+
+  function normalizeWakeText(text = '') {
+    return String(text || '').replace(/[\s,，、。.！!？?：:；;"“”'‘’]/g, '').toLowerCase();
+  }
+
+  function applyWakeWordGate(text = '') {
+    const raw = String(text || '').trim();
+    const cfg = getWakeConfig();
+    if (!cfg.enabled) return { accepted: true, text: raw, wokeOnly: false };
+
+    const now = Date.now();
+    if (wakeActiveUntil > now) return { accepted: true, text: raw, wokeOnly: false };
+
+    const normalized = normalizeWakeText(raw);
+    for (const word of cfg.words) {
+      const nw = normalizeWakeText(word);
+      if (!nw) continue;
+      const idx = normalized.indexOf(nw);
+      if (idx < 0) continue;
+
+      // 从原文里按未归一化唤醒词尽量切掉前缀；切不准时再做宽松替换。
+      let remainder = raw;
+      const directIdx = raw.indexOf(word);
+      if (directIdx >= 0) remainder = raw.slice(directIdx + word.length);
+      else remainder = raw.replace(new RegExp(word.split('').map(ch => ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s,，、。.！!？?：:；;]*'), 'i'), '');
+      remainder = remainder.replace(/^[\s,，、。.！!？?：:；;]+/, '').trim();
+      wakeActiveUntil = Date.now() + 8000;
+      if (!remainder) return { accepted: false, text: '', wokeOnly: true };
+      return { accepted: true, text: remainder, wokeOnly: false };
+    }
+    return { accepted: false, text: '', wokeOnly: false };
+  }
+
+  function looksLikeAsrHallucination(text = '') {
+    const t = String(text || '').trim();
+    if (!t) return true;
+    if (/(我不想说了|我只想说了|我想说了).*(我不想说了|我只想说了|我想说了)/.test(t)) return true;
+    if (/(嗨|嘿|喂)[,，。\s]*(三毛|三猫)/.test(t)) return true;
+    const segs = t.split(/[,，、。.！!？?\s]+/).map(s => s.trim()).filter(Boolean);
+    if (segs.length >= 4 && new Set(segs).size <= 2) return true;
+    if (segs.length >= 6) {
+      const counts = new Map();
+      for (const s of segs) counts.set(s, (counts.get(s) || 0) + 1);
+      if (Math.max(...counts.values()) / segs.length >= 0.45) return true;
+    }
+    return false;
   }
 
   // 防抖自动发送：收到任意转录文字就重置 2s 计时器，停说 2s 后自动发
@@ -380,49 +468,123 @@ export function initVoicePanel({
     }, 2000);
   }
 
-  // ─── Cloud ASR 模式（后端代理） ───
+  // ─── ASR 模式：本地 SenseVoice/Whisper 或云端代理 ───
   let cloudWsIntentional = false; // stopCloudStream 主动关闭时置 true，避免触发重连
 
-  function connectCloudWs() {
+  function getAsrProvider() {
+    const provider = localStorage.getItem(VOICE_PROVIDER_KEY) || 'local';
+    return ['local', 'aliyun', 'tencent', 'xunfei'].includes(provider) ? provider : 'local';
+  }
+
+  async function ensureLocalAsrServer() {
+    const model = localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || 'sensevoice-small';
+    const resp = await fetch(LOCAL_START_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ model, localAsrModel: model }),
+    });
+    if (!resp.ok) throw new Error(`本地语音识别启动失败: HTTP ${resp.status}`);
+    const data = await resp.json().catch(() => ({}));
+    if (data.ok === false) throw new Error(data.error || '本地语音识别启动失败');
+    return data;
+  }
+
+  async function createRecognitionWs() {
+    const provider = getAsrProvider();
+    if (provider === 'local') {
+      setStatus('recognizing');
+      if (transcript) transcript.textContent = '正在启动本地语音模型…';
+      await ensureLocalAsrServer();
+      return { ws: new WebSocket(LOCAL_WS_URL), provider };
+    }
+    return { ws: new WebSocket(CLOUD_WS_URL), provider };
+  }
+
+  function sendRecognitionConfig(ws, provider) {
+    const lang = getLang?.()?.split('-')[0] || 'zh';
+    const payload = provider === 'local'
+      ? {
+          type: 'config',
+          lang,
+          speakerVerification: localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === 'true',
+          speakerThreshold: parseFloat(localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) || '0.55'),
+        }
+      : { type: 'config', provider, lang };
+    ws.send(JSON.stringify(payload));
+  }
+
+  function handleRecognitionMessage(ev, ws) {
+    if (cloudWs !== ws) return;
+    try {
+      const msg = JSON.parse(ev.data);
+      if (msg.type === 'config_ok') {
+        setStatus('listening');
+        if (transcript && transcript.textContent === '正在启动本地语音模型…') transcript.textContent = '';
+        return;
+      }
+      if (msg.type === 'transcript') {
+        const text = (msg.text || '').trim();
+        if (!text) return;
+        if (looksLikeAsrHallucination(text)) return;
+        if (msg.is_final) {
+          if (text === lastFinalTranscript) return;
+          const gated = applyWakeWordGate(text);
+          if (!gated.accepted) {
+            if (gated.wokeOnly) {
+              if (transcript) transcript.textContent = '已唤醒，请继续说指令…';
+              setStatus('listening');
+            }
+            return;
+          }
+          const acceptedText = gated.text;
+          if (!acceptedText || looksLikeAsrHallucination(acceptedText)) return;
+          lastFinalTranscript = acceptedText;
+          accumulatedText = accumulatedText ? accumulatedText + '，' + acceptedText : acceptedText;
+          lastTranscriptText = accumulatedText;
+          if (transcript) transcript.textContent = accumulatedText;
+          const input = getChatInput?.();
+          if (input) input.value = accumulatedText;
+          window.dispatchEvent(new CustomEvent('bailongma:assistant-wake', { detail: { text: acceptedText } }));
+          triggerDone();
+        } else {
+          lastTranscriptText = accumulatedText ? accumulatedText + '，' + text : text;
+          if (transcript) transcript.textContent = lastTranscriptText;
+        }
+        scheduleAutoSend();
+      } else if (msg.type === 'speaker_rejected') {
+        setStatus('listening');
+        if (transcript) transcript.textContent = msg.reason || `已忽略非本人声音${msg.score != null ? `（声纹 ${msg.score}/${msg.threshold}）` : ''}`;
+        return;
+      } else if (msg.type === 'sound_event') {
+        // 本地语音服务可选返回环境声音事件。这里保持静默，不干扰转写文本。
+      } else if (msg.type === 'error') {
+        setStatus('error');
+        if (transcript) transcript.textContent = msg.message || '语音识别错误';
+      }
+    } catch {}
+  }
+
+  async function connectCloudWs() {
     cloudWsIntentional = false; // 新连接建立时清除上一次主动关闭的标记
-    const ws = new WebSocket(CLOUD_WS_URL);
+    let ws, provider;
+    try {
+      ({ ws, provider } = await createRecognitionWs());
+    } catch (err) {
+      setStatus('error');
+      if (transcript) transcript.textContent = err?.message || '本地语音识别启动失败';
+      return;
+    }
     ws.binaryType = 'arraybuffer';
     cloudWs = ws;
 
     ws.onopen = () => {
       if (cloudWs !== ws) return;
-      const provider = localStorage.getItem(VOICE_PROVIDER_KEY) || 'aliyun';
-      const lang = getLang?.()?.split('-')[0] || 'zh';
-      ws.send(JSON.stringify({ type: 'config', provider, lang }));
+      sendRecognitionConfig(ws, provider);
       setStatus('listening');
       // 注意：此处不重置 accumulatedText，由调用方在首次启动时负责清空
     };
 
-    ws.onmessage = (ev) => {
-      if (cloudWs !== ws) return;
-      try {
-        const msg = JSON.parse(ev.data);
-        if (msg.type === 'transcript') {
-          const text = (msg.text || '').trim();
-          if (!text) return;
-          if (msg.is_final) {
-            accumulatedText = accumulatedText ? accumulatedText + '，' + text : text;
-            lastTranscriptText = accumulatedText;
-            if (transcript) transcript.textContent = accumulatedText;
-            const input = getChatInput?.();
-            if (input) input.value = accumulatedText;
-            triggerDone();
-          } else {
-            lastTranscriptText = accumulatedText ? accumulatedText + '，' + text : text;
-            if (transcript) transcript.textContent = lastTranscriptText;
-          }
-          scheduleAutoSend();
-        } else if (msg.type === 'error') {
-          setStatus('error');
-          if (transcript) transcript.textContent = msg.message || '云端识别错误';
-        }
-      } catch {}
-    };
+    ws.onmessage = (ev) => handleRecognitionMessage(ev, ws);
 
     ws.onerror = () => { if (cloudWs === ws) setStatus('error'); };
 
@@ -570,47 +732,35 @@ export function initVoicePanel({
 
       accumulatedText = '';
       if (transcript) transcript.textContent = '';
-      const bargeinWs = new WebSocket(CLOUD_WS_URL);
+      let bargeinWs, bargeinProvider;
+      try {
+        ({ ws: bargeinWs, provider: bargeinProvider } = await createRecognitionWs());
+      } catch (err) {
+        setStatus('error');
+        if (transcript) transcript.textContent = err?.message || '语音识别启动失败';
+        return;
+      }
       bargeinWs.binaryType = 'arraybuffer';
       cloudWs = bargeinWs;
       bargeinWs.onopen = () => {
         if (cloudWs !== bargeinWs) return;
-        const provider = localStorage.getItem(VOICE_PROVIDER_KEY) || 'aliyun';
-        const lang = getLang?.()?.split('-')[0] || 'zh';
-        bargeinWs.send(JSON.stringify({ type: 'config', provider, lang }));
+        sendRecognitionConfig(bargeinWs, bargeinProvider);
         // 先把预缓冲的历史音频一次性发出，补回打断前说的内容
         for (const chunk of bufferedChunks) {
           if (bargeinWs.readyState === WebSocket.OPEN) bargeinWs.send(chunk.buffer);
         }
       };
       bargeinWs.onmessage = (ev) => {
-        if (cloudWs !== bargeinWs) return;
+        // 收到真实语音 → 取消所有误触发恢复机制
         try {
           const msg = JSON.parse(ev.data);
-          if (msg.type === 'transcript') {
-            const text = (msg.text || '').trim();
-            if (!text) return;
-            // 收到真实语音 → 取消所有误触发恢复机制
+          if (msg.type === 'transcript' && (msg.text || '').trim()) {
             bargeinFastCheckActive = false;
             bargeinFastSilentFrames = 0;
             clearBargeinNoSpeechTimer();
-            if (msg.is_final) {
-              accumulatedText = accumulatedText ? accumulatedText + '，' + text : text;
-              lastTranscriptText = accumulatedText;
-              if (transcript) transcript.textContent = accumulatedText;
-              const input = getChatInput?.();
-              if (input) input.value = accumulatedText;
-              triggerDone();
-            } else {
-              lastTranscriptText = accumulatedText ? accumulatedText + '，' + text : text;
-              if (transcript) transcript.textContent = lastTranscriptText;
-            }
-            scheduleAutoSend();
-          } else if (msg.type === 'error') {
-            setStatus('error');
-            if (transcript) transcript.textContent = msg.message || '云端识别错误';
           }
         } catch {}
+        handleRecognitionMessage(ev, bargeinWs);
       };
       bargeinWs.onerror = () => { if (cloudWs === bargeinWs) setStatus('error'); };
       bargeinWs.onclose = () => {
@@ -698,6 +848,35 @@ export function initVoicePanel({
     tick();
   }
 
+  function shouldKeepMicDuringMedia() {
+    return localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== 'false'
+      || localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== 'false';
+  }
+
+  async function handleMediaModeActive() {
+    mediaModeActive = true;
+    if (shouldKeepMicDuringMedia()) {
+      suspendedByMedia = false;
+      if (!micActive) {
+        mediaStartedMic = true;
+        userWantedMic = true;
+        await toggleVoice();
+      }
+      return;
+    }
+    window.bailongmaVoice.suspendForMedia();
+  }
+
+  function handleMediaModeInactive() {
+    mediaModeActive = false;
+    if (mediaStartedMic) {
+      mediaStartedMic = false;
+      stopVoiceInput({ keepIntent: false, reason: '视频结束，关闭自动监听' });
+      return;
+    }
+    window.bailongmaVoice.resumeAfterMedia();
+  }
+
   window.bailongmaVoice = {
     isActive: () => micActive,
     // 视频/音乐模式：完全停止 mic（不需要打断能力）
@@ -732,17 +911,17 @@ export function initVoicePanel({
 
   window.addEventListener('bailongma:video-mode', (event) => {
     if (event.detail?.active) {
-      window.bailongmaVoice.suspendForMedia();
+      handleMediaModeActive();
     } else {
-      window.bailongmaVoice.resumeAfterMedia();
+      handleMediaModeInactive();
     }
   });
 
   window.addEventListener('bailongma:music-mode', (event) => {
     if (event.detail?.active) {
-      window.bailongmaVoice.suspendForMedia();
+      handleMediaModeActive();
     } else {
-      window.bailongmaVoice.resumeAfterMedia();
+      handleMediaModeInactive();
     }
   });
 

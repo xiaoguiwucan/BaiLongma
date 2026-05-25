@@ -2116,9 +2116,19 @@ function initTTSSettings() {
   const VOICE_AUTO_MIC_KEY   = "bailongma-voice-auto-mic";
   const VOICE_THRESHOLD_KEY  = "bailongma-voice-threshold";
   const VOICE_PROVIDER_KEY   = "bailongma-voice-provider";
+  const VOICE_WHISPER_MODEL_KEY = "bailongma-voice-whisper-model"; // 兼容旧版本
+  const VOICE_LOCAL_ASR_MODEL_KEY = "bailongma-voice-local-asr-model";
+  const VOICE_WAKE_ENABLED_KEY = "bailongma-voice-wake-enabled";
+  const VOICE_WAKE_WORDS_KEY = "bailongma-voice-wake-words";
+  const VOICE_SPEAKER_VERIFY_KEY = "bailongma-voice-speaker-verify";
+  const VOICE_SPEAKER_THRESHOLD_KEY = "bailongma-voice-speaker-threshold";
+  const VOICE_VIDEO_DUCK_KEY = "bailongma-voice-video-duck";
+  const VOICE_VIDEO_PTT_KEY = "bailongma-voice-video-ptt";
+  const VOICE_VIDEO_AEC_KEY = "bailongma-voice-video-aec";
+  const VOICE_LOCAL_DEFAULT_MIGRATION_KEY = "bailongma-voice-local-default-v1";
 
   function applyVoiceProviderUI(provider) {
-    const panels = { aliyun: "voice-cred-aliyun", tencent: "voice-cred-tencent", xunfei: "voice-cred-xunfei" };
+    const panels = { local: "voice-cred-local", aliyun: "voice-cred-aliyun", tencent: "voice-cred-tencent", xunfei: "voice-cred-xunfei" };
     for (const [key, id] of Object.entries(panels)) {
       const el = document.getElementById(id);
       if (el) el.style.display = key === provider ? "" : "none";
@@ -2131,6 +2141,13 @@ function initTTSSettings() {
   }
 
   async function loadVoiceSettings() {
+    let serverVoice = null;
+    try {
+      const resp = await fetch(`${API}/settings/voice`);
+      const data = await resp.json();
+      if (data?.ok && data.voice) serverVoice = data.voice;
+    } catch {}
+
     const langSelect = document.getElementById("voice-lang-select");
     const autoSend   = document.getElementById("voice-auto-send");
     if (langSelect) langSelect.value = localStorage.getItem(VOICE_LANG_KEY) || "zh-CN";
@@ -2141,8 +2158,41 @@ function initTTSSettings() {
     if (voiceThreshSlider) voiceThreshSlider.value = String(savedThresh);
     if (voiceThreshVal)    voiceThreshVal.textContent = savedThresh.toFixed(3);
 
-    const savedProvider = localStorage.getItem(VOICE_PROVIDER_KEY) || "aliyun";
+    if (!localStorage.getItem(VOICE_LOCAL_DEFAULT_MIGRATION_KEY)) {
+      localStorage.setItem(VOICE_PROVIDER_KEY, "local");
+      localStorage.setItem(VOICE_LOCAL_DEFAULT_MIGRATION_KEY, "1");
+    }
+    let savedProvider = serverVoice?.asrProvider || localStorage.getItem(VOICE_PROVIDER_KEY) || "local";
+    if (!["local", "aliyun", "tencent", "xunfei"].includes(savedProvider)) savedProvider = "local";
     if (voiceProviderSelect) voiceProviderSelect.value = savedProvider;
+    const localAsrModelSelect = document.getElementById("voice-local-asr-model");
+    const savedLocalModel = serverVoice?.localAsrModel || localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
+    if (localAsrModelSelect) localAsrModelSelect.value = savedLocalModel;
+    localStorage.setItem(VOICE_PROVIDER_KEY, savedProvider);
+    localStorage.setItem(VOICE_LOCAL_ASR_MODEL_KEY, savedLocalModel);
+    const wakeEnabled = document.getElementById("voice-wake-enabled");
+    const wakeWords = document.getElementById("voice-wake-words");
+    const speakerVerify = document.getElementById("voice-speaker-verify");
+    const speakerThreshold = document.getElementById("voice-speaker-threshold");
+    const speakerThresholdVal = document.getElementById("voice-speaker-threshold-val");
+    const videoDuck = document.getElementById("voice-video-duck");
+    const videoPtt = document.getElementById("voice-video-ptt");
+    const videoAec = document.getElementById("voice-video-aec");
+    const savedWakeEnabled = typeof serverVoice?.wakeWordEnabled === "boolean" ? serverVoice.wakeWordEnabled : localStorage.getItem(VOICE_WAKE_ENABLED_KEY) !== "false";
+    const savedWakeWords = Array.isArray(serverVoice?.wakeWords) ? serverVoice.wakeWords.join("，") : (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || "小龙马，龙马，白龙马");
+    if (wakeEnabled) wakeEnabled.checked = savedWakeEnabled;
+    if (wakeWords) wakeWords.value = savedWakeWords;
+    const savedSpeakerVerify = typeof serverVoice?.speakerVerificationEnabled === "boolean" ? serverVoice.speakerVerificationEnabled : localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === "true";
+    if (speakerVerify) speakerVerify.checked = savedSpeakerVerify;
+    localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(savedWakeEnabled));
+    localStorage.setItem(VOICE_WAKE_WORDS_KEY, savedWakeWords);
+    localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(savedSpeakerVerify));
+    const savedSpeakerThreshold = parseFloat(localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) || "0.55");
+    if (speakerThreshold) speakerThreshold.value = String(savedSpeakerThreshold);
+    if (speakerThresholdVal) speakerThresholdVal.textContent = savedSpeakerThreshold.toFixed(2);
+    if (videoDuck) videoDuck.checked = localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== "false";
+    if (videoPtt) videoPtt.checked = localStorage.getItem(VOICE_VIDEO_PTT_KEY) !== "false";
+    if (videoAec) videoAec.checked = localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== "false";
     applyVoiceProviderUI(savedProvider);
   }
 
@@ -2153,23 +2203,138 @@ function initTTSSettings() {
   }
 
 
+  async function ensureLocalAsrForEnrollment() {
+    const model = localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
+    await fetch(`${API}/voice/local/start`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ localAsrModel: model, model }),
+    });
+  }
+
+  async function enrollSpeakerVoice() {
+    const btn = document.getElementById("voice-enroll-speaker");
+    const fb = document.getElementById("voice-speaker-feedback");
+    if (!btn) return;
+    btn.disabled = true;
+    showFeedback(fb, "准备麦克风…");
+    let stream = null;
+    let ws = null;
+    let ctx = null;
+    let processor = null;
+    try {
+      await ensureLocalAsrForEnrollment();
+      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 } });
+      ws = new WebSocket("ws://127.0.0.1:3723");
+      await new Promise((resolve, reject) => {
+        ws.onopen = resolve;
+        ws.onerror = () => reject(new Error("声纹服务连接失败"));
+      });
+      ws.binaryType = "arraybuffer";
+      const done = new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("声纹录入超时")), 15000);
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === "speaker_enroll_ok") { clearTimeout(timer); resolve(msg); }
+            if (msg.type === "error") { clearTimeout(timer); reject(new Error(msg.message || "声纹录入失败")); }
+          } catch {}
+        };
+      });
+      ws.send(JSON.stringify({ type: "speaker_enroll_start" }));
+      ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
+      const src = ctx.createMediaStreamSource(stream);
+      processor = ctx.createScriptProcessor(4096, 1, 1);
+      src.connect(processor);
+      processor.connect(ctx.destination);
+      processor.onaudioprocess = (e) => {
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+        const f32 = e.inputBuffer.getChannelData(0);
+        const i16 = new Int16Array(f32.length);
+        for (let i = 0; i < f32.length; i++) i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
+        ws.send(i16.buffer);
+      };
+      showFeedback(fb, "请连续说 6 秒…");
+      await new Promise(r => setTimeout(r, 6500));
+      processor.onaudioprocess = null;
+      ws.send(JSON.stringify({ type: "speaker_enroll_finish" }));
+      const result = await done;
+      showFeedback(fb, `声纹已录入（${result.seconds || 6}s）`);
+      const speakerVerify = document.getElementById("voice-speaker-verify");
+      if (speakerVerify) speakerVerify.checked = true;
+      localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "true");
+      try {
+        await fetch(`${API}/settings/voice`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ speakerVerificationEnabled: true }),
+        });
+      } catch {}
+    } catch (err) {
+      showFeedback(fb, err?.message || "声纹录入失败", true);
+    } finally {
+      try { processor?.disconnect(); } catch {}
+      try { await ctx?.close(); } catch {}
+      try { stream?.getTracks().forEach(t => t.stop()); } catch {}
+      try { ws?.close(); } catch {}
+      btn.disabled = false;
+    }
+  }
+
+  const enrollSpeakerBtn = document.getElementById("voice-enroll-speaker");
+  if (enrollSpeakerBtn) enrollSpeakerBtn.addEventListener("click", enrollSpeakerVoice);
+
+  const speakerThresholdSlider = document.getElementById("voice-speaker-threshold");
+  const speakerThresholdVal = document.getElementById("voice-speaker-threshold-val");
+  if (speakerThresholdSlider && speakerThresholdVal) {
+    speakerThresholdSlider.addEventListener("input", () => {
+      speakerThresholdVal.textContent = parseFloat(speakerThresholdSlider.value).toFixed(2);
+    });
+  }
+
   if (saveVoiceBtn) {
     saveVoiceBtn.addEventListener("click", async () => {
       const lang      = document.getElementById("voice-lang-select")?.value || "zh-CN";
       const autoSend  = document.getElementById("voice-auto-send")?.checked ?? true;
       const autoMic   = document.getElementById("voice-auto-mic")?.checked ?? false;
       const threshold = parseFloat(voiceThreshSlider?.value ?? "0.008");
-      const provider  = voiceProviderSelect?.value || "aliyun";
+      const provider  = voiceProviderSelect?.value || "local";
+      const localAsrModel = document.getElementById("voice-local-asr-model")?.value || "sensevoice-small";
+      const whisperModel = localAsrModel === "sensevoice-small" ? (localStorage.getItem(VOICE_WHISPER_MODEL_KEY) || "small") : localAsrModel;
+      const wakeEnabled = document.getElementById("voice-wake-enabled")?.checked ?? true;
+      const wakeWords = document.getElementById("voice-wake-words")?.value?.trim() || "小龙马，龙马，白龙马";
+      const speakerVerify = document.getElementById("voice-speaker-verify")?.checked ?? false;
+      const speakerThreshold = parseFloat(document.getElementById("voice-speaker-threshold")?.value || "0.55");
+      const videoDuck = document.getElementById("voice-video-duck")?.checked ?? true;
+      const videoPtt = document.getElementById("voice-video-ptt")?.checked ?? true;
+      const videoAec = document.getElementById("voice-video-aec")?.checked ?? true;
 
       localStorage.setItem(VOICE_LANG_KEY,      lang);
       localStorage.setItem(VOICE_AUTO_SEND_KEY,  String(autoSend));
       localStorage.setItem(VOICE_AUTO_MIC_KEY,   String(autoMic));
       localStorage.setItem(VOICE_THRESHOLD_KEY,  String(threshold));
       localStorage.setItem(VOICE_PROVIDER_KEY,   provider);
+      localStorage.setItem(VOICE_LOCAL_ASR_MODEL_KEY, localAsrModel);
+      localStorage.setItem(VOICE_WHISPER_MODEL_KEY, whisperModel);
+      localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(wakeEnabled));
+      localStorage.setItem(VOICE_WAKE_WORDS_KEY, wakeWords);
+      localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(speakerVerify));
+      localStorage.setItem(VOICE_SPEAKER_THRESHOLD_KEY, String(speakerThreshold));
+      localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(videoDuck));
+      localStorage.setItem(VOICE_VIDEO_PTT_KEY, String(videoPtt));
+      localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(videoAec));
+      localStorage.setItem(VOICE_LOCAL_DEFAULT_MIGRATION_KEY, "1");
 
       window.dispatchEvent(new CustomEvent("bailongma:voice-threshold", { detail: { threshold } }));
 
-      const body = {};
+      const body = {
+        asrProvider: provider,
+        localAsrModel,
+        whisperModel,
+        wakeWordEnabled: wakeEnabled,
+        wakeWords: wakeWords.split(/[,，、\s]+/).map(w => w.trim()).filter(Boolean),
+        speakerVerificationEnabled: speakerVerify,
+      };
       const aliyunKey = document.getElementById("voice-aliyun-key")?.value?.trim();
       if (aliyunKey) body.aliyunApiKey = aliyunKey;
       const tencentSid = document.getElementById("voice-tencent-sid")?.value?.trim();
@@ -2625,6 +2790,8 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
   const videoSurface  = document.getElementById("video-surface");
   const videoBackdrop = document.getElementById("video-backdrop");
   const videoTitle    = document.getElementById("video-title");
+  const videoUrlInput = document.getElementById("video-url-input");
+  const videoOpenBtn  = document.getElementById("video-open-btn");
   const imageExitBtn  = document.getElementById("image-exit-btn");
   const imageDisplay  = document.getElementById("image-display");
   const imageSurface  = document.getElementById("image-surface");
@@ -2634,6 +2801,9 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
   let videoActive = false;
   let imageActive = false;
   let videoKind   = "empty";
+  let mediaVoiceDuck = null;
+  const VOICE_VIDEO_DUCK_KEY = "bailongma-voice-video-duck";
+  const VOICE_VIDEO_PTT_KEY = "bailongma-voice-video-ptt";
   let currentVideoSource = "";
   let currentVideoStart = null;
   // wall-clock ms when current play started/resumed; used to estimate elapsed
@@ -2648,14 +2818,15 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
     const s = String(src || "").trim();
     if (!s) return "";
     if (/^https?:\/\//i.test(s)) return s;
-    // Local path (file:// or absolute) → backend HTTP media endpoint to avoid file:// CORS restriction
+    if (/^(blob:|data:)/i.test(s)) return s;
+    // Local path (file:// or absolute) → backend HTTP media endpoint to avoid file:// CORS restriction.
     let resolved = s;
     if (/^file:\/\//i.test(s)) {
-      resolved = decodeURIComponent(s.replace(/^file:\/\/\//i, "").replace(/^file:\/\//i, ""));
+      try { resolved = decodeURIComponent(new URL(s).pathname); }
+      catch { resolved = decodeURIComponent(s.replace(/^file:\/\/\//i, "/").replace(/^file:\/\//i, "")); }
     }
-    const filename = resolved.split(/[\\/]/).filter(Boolean).pop() || "";
-    if (!filename) return s;
-    return "/media/music/" + encodeURIComponent(filename);
+    if (!/^\/|^[A-Za-z]:[\\/]/.test(resolved)) return s;
+    return "/media/video?path=" + encodeURIComponent(resolved);
   }
 
   function extractYoutubeId(url) {
@@ -2765,7 +2936,69 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
     }
   }
 
+  function isVideoPlayableActive() {
+    return videoActive && videoKind && videoKind !== "empty" && videoKind !== "camera";
+  }
+
+  function startMediaVoiceDuck({ holdMs = 1800, pause = false } = {}) {
+    if (!isVideoPlayableActive()) return;
+    if (localStorage.getItem(VOICE_VIDEO_DUCK_KEY) === "false" && !pause) return;
+    const now = Date.now();
+    const existing = mediaVoiceDuck;
+    if (!existing) {
+      mediaVoiceDuck = {
+        startedAt: now,
+        kind: videoKind,
+        fileVolume: videoFeed ? videoFeed.volume : null,
+        fileMuted: videoFeed ? videoFeed.muted : null,
+        paused: false,
+        timer: null,
+      };
+      if (videoKind === "file" && videoFeed) {
+        videoFeed.dataset.voiceDuck = "1";
+        videoFeed.volume = Math.min(videoFeed.volume || 1, 0.10);
+        videoFeed.muted = false;
+      } else if (videoKind === "youtube") {
+        postFrameCommand("setVolume", [10]);
+      } else if (videoKind === "bilibili") {
+        pauseCurrentVideo();
+        mediaVoiceDuck.paused = true;
+      }
+    }
+    if (pause && mediaVoiceDuck && !mediaVoiceDuck.paused) {
+      pauseCurrentVideo();
+      mediaVoiceDuck.paused = true;
+    }
+    clearTimeout(mediaVoiceDuck.timer);
+    mediaVoiceDuck.timer = setTimeout(() => restoreMediaVoiceDuck(), holdMs);
+  }
+
+  function restoreMediaVoiceDuck() {
+    const duck = mediaVoiceDuck;
+    if (!duck) return;
+    clearTimeout(duck.timer);
+    mediaVoiceDuck = null;
+    if (!videoActive) return;
+    if (duck.kind === "file" && videoFeed) {
+      if (Number.isFinite(Number(duck.fileVolume))) videoFeed.volume = duck.fileVolume;
+      videoFeed.muted = Boolean(duck.fileMuted);
+      delete videoFeed.dataset.voiceDuck;
+      if (duck.paused) videoFeed.play?.().catch(() => {});
+    } else if (duck.kind === "youtube") {
+      postFrameCommand("setVolume", [100]);
+      if (duck.paused) resumeCurrentVideo();
+    } else if (duck.kind === "bilibili") {
+      if (duck.paused) resumeCurrentVideo();
+    }
+  }
+
+  function pauseForAssistantVoice() {
+    if (!isVideoPlayableActive()) return;
+    startMediaVoiceDuck({ holdMs: 12000, pause: true });
+  }
+
   function resetVideoSurface() {
+    restoreMediaVoiceDuck();
     stopCamera();
     if (videoFeed) {
       try { videoFeed.pause(); } catch {}
@@ -2849,11 +3082,12 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
   } = {}) {
     if (camera) { showCamera({ title, autoplay }); return; }
 
-    const source = normalizeUrl(url);
+    const rawSource = normalizeUrl(url);
+    const source = localPathToUrl(rawSource);
     if (musicActive) closeMusicPanel();
     setPanelVisible(true);
     resetVideoSurface();
-    currentVideoSource = source;
+    currentVideoSource = rawSource || source;
     currentVideoStart = Number.isFinite(Number(currentTime)) ? Math.max(0, Number(currentTime)) : null;
     if (videoTitle) videoTitle.textContent = title || "Video";
 
@@ -2890,7 +3124,7 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
       if (Number.isFinite(Number(currentTime))) videoFeed.currentTime = Math.max(0, Number(currentTime));
       videoSurface?.classList.add("has-media");
       videoKind = "file";
-      saveMediaHistory({ url: source, title, kind: "file" });
+      saveMediaHistory({ url: rawSource || source, title, kind: "file" });
       if (autoplay) {
         videoFeed.play?.().catch(() => {});
         playResumeAt = Date.now();
@@ -3210,8 +3444,10 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
     }
   });
 
-  window.bailongmaMedia = { handle: handleMediaCommand, showVideo, controlVideo, showImage, showCamera, showMusic, controlMusic };
+  window.bailongmaMedia = { handle: handleMediaCommand, showVideo, controlVideo, showImage, showCamera, showMusic, controlMusic, startMediaVoiceDuck, restoreMediaVoiceDuck, pauseForAssistantVoice };
   window.addEventListener("bailongma:media", (event) => handleMediaCommand(event.detail || {}));
+  window.addEventListener("bailongma:voice-activity", () => startMediaVoiceDuck({ holdMs: 1800, pause: false }));
+  window.addEventListener("bailongma:assistant-wake", () => pauseForAssistantVoice());
 
   // Push-to-talk：按住空格说话；Agent 正在说话时按下空格直接打断
   (() => {
@@ -3222,14 +3458,16 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
 
     window.addEventListener("keydown", (e) => {
       if (!isSpace(e)) return;
+      if (videoActive && localStorage.getItem(VOICE_VIDEO_PTT_KEY) === "false") return;
       if (isTypingTarget(e.target)) return;
       if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
       e.preventDefault();
       if (e.repeat) return;
       if (pttHeld) return;
       pttHeld = true;
-      // 不论是否在播，stopTTS 内部已做 no-op 守卫
+      // 不论是否在播，stopTTS 内部已做 no-op 守卫；视频中 PTT 先暂停/压低视频，避免盖住人声。
       try { window.stopTTS?.(); } catch {}
+      if (videoActive) startMediaVoiceDuck({ holdMs: 30000, pause: true });
       window.bailongmaVoice?.pttStart?.();
     }, { capture: true });
 
@@ -3239,6 +3477,7 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
       pttHeld = false;
       e.preventDefault();
       window.bailongmaVoice?.pttEnd?.();
+      if (videoActive) setTimeout(() => restoreMediaVoiceDuck(), 500);
     }, { capture: true });
 
     // 切到后台时如果还按着，强制释放，避免 mic 永远不关
@@ -3246,12 +3485,25 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
       if (!pttHeld) return;
       pttHeld = false;
       window.bailongmaVoice?.pttEnd?.();
+      if (videoActive) restoreMediaVoiceDuck();
     });
   })();
 
   videoBtn?.addEventListener("click", toggleVideoPanelVisibility);
   videoExitBtn?.addEventListener("click", closeAndDestroyVideo);
   imageExitBtn?.addEventListener("click", () => setImageModeActive(false));
+  videoOpenBtn?.addEventListener("click", () => {
+    const url = videoUrlInput?.value?.trim();
+    if (!url) return;
+    showVideo({ url, title: "视频", autoplay: true });
+  });
+  videoUrlInput?.addEventListener("keydown", (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    const url = videoUrlInput.value.trim();
+    if (!url) return;
+    showVideo({ url, title: "视频", autoplay: true });
+  });
 
   window.addEventListener("keydown", (e) => {
     if (e.target?.tagName === "INPUT" || e.target?.tagName === "TEXTAREA" || e.target?.isContentEditable) return;

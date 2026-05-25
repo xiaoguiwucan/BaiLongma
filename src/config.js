@@ -628,7 +628,11 @@ export function setSocialConfig(updates) {
   writeStoredConfig({ ...existing, social: next })
 }
 
-const VOICE_CONFIG_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
+const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
+const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'wakeWordEnabled', 'wakeWords', 'speakerVerificationEnabled', ...VOICE_SECRET_KEYS]
+const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
+const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
+const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
 
 function isValidAliyunAsrKey(value) {
   return /^sk-[A-Za-z0-9_\-.]{20,}$/.test(String(value || '').trim())
@@ -637,8 +641,15 @@ function isValidAliyunAsrKey(value) {
 export function getVoiceConfig() {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.voice || {} } catch {}
-  const result = {}
-  for (const key of VOICE_CONFIG_KEYS) {
+  const result = {
+    asrProvider: ASR_PROVIDERS.has(stored.asrProvider) ? stored.asrProvider : 'local',
+    whisperModel: WHISPER_MODELS.has(stored.whisperModel) ? stored.whisperModel : 'small',
+    localAsrModel: LOCAL_ASR_MODELS.has(stored.localAsrModel) ? stored.localAsrModel : 'sensevoice-small',
+    wakeWordEnabled: typeof stored.wakeWordEnabled === 'boolean' ? stored.wakeWordEnabled : true,
+    wakeWords: Array.isArray(stored.wakeWords) && stored.wakeWords.length ? stored.wakeWords : ['小龙马', '龙马', '白龙马'],
+    speakerVerificationEnabled: typeof stored.speakerVerificationEnabled === 'boolean' ? stored.speakerVerificationEnabled : false,
+  }
+  for (const key of VOICE_SECRET_KEYS) {
     result[key] = { configured: !!(stored[key]) }
     if (key === 'aliyunApiKey' && stored[key]) {
       result[key] = {
@@ -658,6 +669,31 @@ export function setVoiceConfig(updates) {
   for (const [key, val] of Object.entries(updates)) {
     if (!VOICE_CONFIG_KEYS.includes(key)) continue
     const trimmed = String(val || '').trim()
+    if (key === 'asrProvider') {
+      if (ASR_PROVIDERS.has(trimmed)) next.asrProvider = trimmed
+      continue
+    }
+    if (key === 'whisperModel') {
+      if (WHISPER_MODELS.has(trimmed)) next.whisperModel = trimmed
+      continue
+    }
+    if (key === 'localAsrModel') {
+      if (LOCAL_ASR_MODELS.has(trimmed)) next.localAsrModel = trimmed
+      continue
+    }
+    if (key === 'wakeWordEnabled') {
+      next.wakeWordEnabled = val === true || trimmed === 'true'
+      continue
+    }
+    if (key === 'wakeWords') {
+      const words = Array.isArray(val) ? val : String(val || '').split(/[,，、\s]+/)
+      next.wakeWords = [...new Set(words.map(w => String(w || '').trim()).filter(Boolean))].slice(0, 12)
+      continue
+    }
+    if (key === 'speakerVerificationEnabled') {
+      next.speakerVerificationEnabled = val === true || trimmed === 'true'
+      continue
+    }
     if (key === 'aliyunApiKey' && trimmed && !isValidAliyunAsrKey(trimmed)) {
       console.warn('[voice-config] Ignoring invalid Aliyun ASR key format; expected DashScope sk-* API key')
       continue

@@ -13,8 +13,8 @@ import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
+import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
-// manager.js (Whisper local server) removed
 import { replaceProvider } from './providers/registry.js'
 import { persistAppState } from './capabilities/executor.js'
 import { MinimaxProvider } from './providers/minimax.js'
@@ -586,6 +586,64 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return
     }
 
+    // GET /media/video?path=/absolute/video.mp4 — serve local video files for the Electron UI.
+    // This avoids file:// playback restrictions while keeping the endpoint video-only.
+    if (req.method === 'GET' && url.pathname === '/media/video') {
+      const rawPath = url.searchParams.get('path') || ''
+      const filePath = path.resolve(rawPath)
+      const ext = path.extname(filePath).toLowerCase()
+      const mimeMap = {
+        '.mp4': 'video/mp4',
+        '.m4v': 'video/mp4',
+        '.webm': 'video/webm',
+        '.mov': 'video/quicktime',
+        '.ogv': 'video/ogg',
+        '.ogg': 'video/ogg',
+      }
+      const contentType = mimeMap[ext]
+      if (!rawPath || !contentType) {
+        res.writeHead(400)
+        res.end('unsupported or missing video path')
+        return
+      }
+      try {
+        const stat = fs.statSync(filePath)
+        if (!stat.isFile()) throw new Error('not a file')
+        const total = stat.size
+        const rangeHeader = req.headers.range
+        if (rangeHeader) {
+          const m = rangeHeader.match(/bytes=(\d*)-(\d*)/)
+          const start = m?.[1] ? parseInt(m[1], 10) : 0
+          const end = m?.[2] ? parseInt(m[2], 10) : total - 1
+          if (start >= total || end >= total || start > end) {
+            res.writeHead(416, { 'Content-Range': `bytes */${total}` })
+            res.end()
+            return
+          }
+          res.writeHead(206, {
+            'Content-Type': contentType,
+            'Content-Range': `bytes ${start}-${end}/${total}`,
+            'Accept-Ranges': 'bytes',
+            'Content-Length': end - start + 1,
+            'Cache-Control': 'no-cache',
+          })
+          fs.createReadStream(filePath, { start, end }).pipe(res)
+        } else {
+          res.writeHead(200, {
+            'Content-Type': contentType,
+            'Content-Length': total,
+            'Accept-Ranges': 'bytes',
+            'Cache-Control': 'no-cache',
+          })
+          fs.createReadStream(filePath).pipe(res)
+        }
+      } catch {
+        res.writeHead(404)
+        res.end('video file not found')
+      }
+      return
+    }
+
     // GET /audio/:filename — serve sandbox audio files
     if (req.method === 'GET' && url.pathname.startsWith('/audio/')) {
       const filename = path.basename(url.pathname)
@@ -1021,6 +1079,52 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           jsonResponse(res, 400, { ok: false, error: err.message })
         }
       })
+      return
+    }
+
+    // GET /voice/local/status — local ASR server status
+    if (req.method === 'GET' && url.pathname === '/voice/local/status') {
+      jsonResponse(res, 200, { ok: true, ...getVoiceStatus() })
+      return
+    }
+
+    // POST /voice/local/start — start local ASR server on ws://127.0.0.1:3723
+    if (req.method === 'POST' && url.pathname === '/voice/local/start') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const model = String(body.localAsrModel || body.model || body.whisperModel || 'sensevoice-small').trim() || 'sensevoice-small'
+          const status = startVoiceServer({ model, localAsrModel: model })
+          jsonResponse(res, 200, { ok: true, ...status })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+    // POST /voice/local/restart — restart local ASR with a selected model
+    if (req.method === 'POST' && url.pathname === '/voice/local/restart') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const model = String(body.localAsrModel || body.model || body.whisperModel || 'sensevoice-small').trim() || 'sensevoice-small'
+          const status = restartVoiceServer(model)
+          jsonResponse(res, 200, { ok: true, ...status })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+    // POST /voice/local/stop — stop local ASR server
+    if (req.method === 'POST' && url.pathname === '/voice/local/stop') {
+      jsonResponse(res, 200, { ok: true, ...stopVoiceServer() })
       return
     }
 

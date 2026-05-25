@@ -16,7 +16,7 @@ const createPrimaryPanel = () => `
       <div class="brand-title" id="agent-brand-name">Longma AI Agent</div>
     </div>
     <button class="voice-btn" id="voice-btn" title="麦克风 开/关" type="button">🎤</button>
-    <button class="video-btn" id="video-btn" title="视频模式 (V)" type="button" hidden>⊞</button>
+    <button class="video-btn" id="video-btn" title="视频模式 (V)" type="button">⊞</button>
     <button class="music-btn" id="music-btn" title="音乐模式 (M)" type="button" hidden>♪</button>
     <button class="settings-btn" id="settings-btn" title="设置" type="button">⚙</button>
   </header>
@@ -343,14 +343,28 @@ const createSettingsModal = () => `
         <!-- ── 语音 tab ── -->
         <div class="settings-tab" data-tab="voice">
           <div class="settings-section">
-            <div class="settings-section-label">云端模式配置</div>
+            <div class="settings-section-label">语音识别模式</div>
             <div class="settings-row">
               <label class="settings-label" for="voice-provider-select">服务商</label>
               <select class="settings-select" id="voice-provider-select">
+                <option value="local">本地模型（默认）</option>
                 <option value="aliyun">阿里云百炼（推荐）</option>
                 <option value="tencent">腾讯云 ASR</option>
                 <option value="xunfei">科大讯飞 RTASR</option>
               </select>
+            </div>
+            <div id="voice-cred-local">
+              <p class="settings-hint">本地模式会在 Mac 上启动离线语音识别服务，麦克风音频不上传云端。推荐 SenseVoiceSmall：中文优先、速度快、比 Whisper 更不容易空音频幻觉。</p>
+              <div class="settings-row">
+                <label class="settings-label" for="voice-local-asr-model">本地模型</label>
+                <select class="settings-select" id="voice-local-asr-model">
+                  <option value="sensevoice-small">SenseVoiceSmall（推荐：中文优先/更快/低幻觉）</option>
+                  <option value="small">Whisper small（备用）</option>
+                  <option value="base">Whisper base（更快，准确率低）</option>
+                  <option value="medium">Whisper medium（更准，更慢）</option>
+                  <option value="turbo">Whisper turbo（较快且较准）</option>
+                </select>
+              </div>
             </div>
             <div id="voice-cred-aliyun">
               <div class="settings-row">
@@ -401,8 +415,51 @@ const createSettingsModal = () => `
               <label class="settings-label" for="voice-auto-mic">启动时自动开启麦克风</label>
               <input id="voice-auto-mic" type="checkbox" style="width:auto;flex:none;">
             </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-enabled">启用唤醒词</label>
+              <input id="voice-wake-enabled" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-words">唤醒词</label>
+              <input class="settings-input" type="text" id="voice-wake-words" placeholder="小龙马，龙马，白龙马">
+            </div>
+            <p class="settings-hint">启用后，普通说话/视频声音会被忽略；只有识别到唤醒词才会把指令发送给助手。可以说“龙马，帮我查天气”，或只说“龙马”后 8 秒内继续说指令。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-speaker-verify">只响应我的声音</label>
+              <input id="voice-speaker-verify" type="checkbox" style="width:auto;flex:none;">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">声纹录入</label>
+              <button class="settings-save-btn" id="voice-enroll-speaker" type="button">录入我的声纹</button>
+              <span class="settings-feedback" id="voice-speaker-feedback"></span>
+            </div>
+            <p class="settings-hint">声纹只保存在本机，用来过滤非你的声音。录入时请在安静环境下连续说 5–8 秒，例如“贾维斯，今天天气怎么样”。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-speaker-threshold">声纹严格度</label>
+              <input type="range" id="voice-speaker-threshold" min="0.45" max="0.80" step="0.01" value="0.55" style="flex:1;cursor:pointer;">
+              <span id="voice-speaker-threshold-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">0.55</span>
+            </div>
+            <p class="settings-hint">越低越不容易误拒绝你，越高越严格。建议先用 0.55；如果别人能唤醒再提高到 0.62–0.70。</p>
           </div>
 
+
+          <div class="settings-section">
+            <div class="settings-section-label">视频播放时的语音唤醒</div>
+            <p class="settings-hint">三个能力可同时开启：自动降噪/降音量负责“听得见你”，按住说话负责兜底，系统回声消除负责减少播放器声音进入麦克风。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-video-duck">检测到人声时自动降低/暂停视频</label>
+              <input id="voice-video-duck" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-video-ptt">视频播放时启用空格按住说话</label>
+              <input id="voice-video-ptt" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-video-aec">启用系统回声消除 AEC</label>
+              <input id="voice-video-aec" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <p class="settings-hint">本地 mp4 可直接降音量；YouTube 会尝试通过播放器 API 降音量；Bilibili 等跨域播放器无法稳定调音量时会短暂停/恢复。</p>
+          </div>
           <div class="settings-section">
             <div class="settings-section-label">语音灵敏度</div>
             <p class="settings-hint">调节麦克风触发阈值。越低越灵敏，越高越需要大声说话。默认 0.008。</p>
@@ -641,7 +698,13 @@ const createVideoPanel = () => `
     <div class="video-backdrop" id="video-backdrop"></div>
     <video id="video-feed" playsinline controls></video>
     <iframe id="video-frame" title="视频播放器" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen hidden></iframe>
-    <div class="video-empty" id="video-empty">无视频源</div>
+    <div class="video-empty" id="video-empty">
+      <div class="video-empty-title">无视频源</div>
+      <div class="video-open-row">
+        <input id="video-url-input" class="video-url-input" type="text" placeholder="粘贴 YouTube / Bilibili / mp4 / webm / 本地视频路径" />
+        <button id="video-open-btn" class="video-open-btn" type="button">播放</button>
+      </div>
+    </div>
   </div>
 </div>
 `;
