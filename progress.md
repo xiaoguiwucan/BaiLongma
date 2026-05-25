@@ -14,3 +14,8 @@
 - Verification passed: `npm run smoke:voice-mapping` 27/27.
 - Verification passed: `npm run smoke:voice-events` 29/29.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.234 as `096e936 feat: secure voice events websocket access`.
+- Tagged and pushed `v2.1.234` to origin.
+- Created local release assets: `backups/v2.1.234/BaiLongma-v2.1.234-source.tar.gz` and `backups/v2.1.234/BaiLongma-v2.1.234.bundle`.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.234
+- Uploaded release assets via GitHub API: source tarball and git bundle.
