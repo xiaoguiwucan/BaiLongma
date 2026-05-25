@@ -10,3 +10,8 @@
 - Bumped package version to 2.1.212.
 - Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.212.
 - Verification: JS syntax checks passed and `npm run smoke:tools` passed 6/6 with the existing better-sqlite3 Node ABI audit warning.
+
+- Committed v2.1.212 as `19a549e feat: strengthen wake word gating`.
+- Tagged and pushed `v2.1.212` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.212
+- Uploaded release assets: source tarball and Git bundle under `backups/v2.1.212/`.
