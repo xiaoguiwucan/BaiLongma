@@ -4,6 +4,44 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.222 - 2026-05-26
+
+### 更新内容
+
+- 新增 WebSocket TTS 取消消息：
+  - `{"type":"tts:cancel"}`
+  - 兼容短写 `{"type":"cancel"}`。
+- 同一个 WebSocket 客户端发起新的 `tts:speak` 时，会自动取消旧的 speak session，并发送 `tts stop` / `tts cancelled`。
+- 客户端断开连接或发生 socket error 时，会自动取消当前 speak session，避免继续生成无人接收的旧音频。
+- TTS segment 流式发送过程中会检查 session 是否已取消、连接是否关闭、当前 requestId 是否仍然有效；取消后会尝试 destroy 当前 provider audio stream。
+- `tts:cancel` 会返回结构化结果：`type=tts`、`state=cancelled`、`cancelled=true/false`、`reason`、`sessionId`。
+
+### 改变原因
+
+- v2.1.221 已支持外部客户端直接发 `tts:speak`，但缺少真实语音助手必须具备的打断/取消能力。
+- 视频播放、用户插话、硬件端断线、新一轮回复都会要求旧 TTS 立即停止；否则会出现旧音频串话或后台浪费生成。
+- 本版本补齐 speak 生命周期守卫，让 WebSocket TTS 更接近可用于外部设备的服务端能力。
+
+### 影响范围
+
+- 不改变 Brain UI 桌面端原有 TTS 播放路径。
+- 不改变 HTTP `/tts/session/:id/audio/:index` 行为。
+- 只增强 `/voice/events` WebSocket 的 speak/cancel 生命周期。
+
+### 验证结果
+
+- `node --check src/api.js` 通过。
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端连接 `ws://127.0.0.1:3721/voice/events`。
+- 发送 `{"type":"tts:cancel"}` 可取消当前连接正在进行的 speak；发送新的 `tts:speak` 会自动替换旧 speak。
+- 当前只能取消同一个 WebSocket 连接发起的 active speak。
+
 ## v2.1.221 - 2026-05-26
 
 ### 更新内容

@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.222</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增 WebSocket TTS 取消与 speak 生命周期守卫。</p>
+                <ul class="release-note-points">
+                  <li>新增 tts:cancel/cancel 消息，可取消当前连接的 active speak。</li>
+                  <li>同连接新的 tts:speak 会自动替换旧 speak。</li>
+                  <li>连接关闭或出错时自动取消当前 speak，避免旧音频继续生成。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.221</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

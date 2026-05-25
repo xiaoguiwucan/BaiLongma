@@ -1,16 +1,16 @@
-# Findings: v2.1.221 WebSocket TTS Speak Request
+# Findings: v2.1.222 WebSocket TTS Cancel and Speak Guards
 
 ## Current baseline
-- v2.1.220 supports opt-in audio chunk delivery over `/voice/events`.
-- That delivery is currently triggered by HTTP segment playback, so external devices are still passive listeners.
-- Existing TTS session code already has the core pieces needed for direct TTS: text splitting, provider credentials, session IDs, and segment streaming.
+- v2.1.221 allows external clients to call `tts:speak` and receive sentence events plus audio chunks.
+- Speak sessions are created through the existing TTS session manager.
+- Without cancellation, old TTS could continue after user interruption, new request, or disconnect.
 
 ## Design finding
-- `tts:speak` should be scoped to the requesting WebSocket client to avoid privacy and bandwidth surprises.
-- Reusing the same session/segment events keeps the protocol compatible with v2.1.219/220 clients.
-- The server can emit both raw `voice_event` and Xiaozhi-style JSON for each sentence, then stream audio chunks over the same connection.
+- The correct unit of cancellation is the WebSocket connection’s active speak, not a global session, because multiple clients may speak independently.
+- New speak replacing old speak is important for real voice UX; the user expects the latest assistant utterance to win.
+- Disconnect cancellation prevents wasted provider calls and avoids stale chunks being emitted to a dead socket.
 
 ## Remaining future direction
-- Add cancel support for in-flight `tts:speak` sessions.
-- Add Opus transcoding or an Opus-native TTS path.
-- Add an automated integration test that starts the API, connects a WebSocket, sends `tts:speak`, and verifies event order using a mock provider.
+- Add explicit `sessionId`-targeted cancel if multi-session-per-connection becomes necessary.
+- Add server-side timeout limits for very long TTS requests.
+- Add integration tests with a mock TTS provider to verify event order under cancel/replacement.

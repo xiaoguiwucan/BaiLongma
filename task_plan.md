@@ -1,29 +1,29 @@
-# Task Plan: v2.1.221 WebSocket TTS Speak Request
+# Task Plan: v2.1.222 WebSocket TTS Cancel and Speak Guards
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.221 with direct WebSocket `tts:speak` requests over `/voice/events`, allowing external clients to send text and receive sentence lifecycle events plus audio chunks without depending on Brain UI playback.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.222 with WebSocket `tts:cancel`, new-speak replacement, and disconnect cancellation guards for direct `/voice/events` `tts:speak` sessions.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect v2.1.220 opt-in audio chunk broadcast path
-- [x] Identify limitation: audio chunks are mirrored only when HTTP segment playback is triggered
-- [x] Choose single-client `tts:speak` path that reuses existing TTS provider config and sentence splitter
+- [x] Inspect v2.1.221 direct `tts:speak` implementation
+- [x] Identify limitation: no explicit cancel or active speak lifecycle guard
+- [x] Choose per-connection active speak tracking to avoid cross-client cancellation surprises
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Upgrade voice event WebSocket hello to version 3 and add `tts_speak` capability
-- [x] Add helpers for per-client JSON events and per-client audio chunks
-- [x] Add `tts:speak` / `speak` WebSocket message handling
-- [x] Create TTS session from WebSocket text request and stream each segment back to the requester
-- [x] Preserve Brain UI and HTTP TTS paths
+- [x] Add `tts:cancel` / `cancel` WebSocket handling
+- [x] Track active speak requestId/sessionId on each WebSocket client
+- [x] Cancel old speak when same client sends a new speak
+- [x] Cancel active speak on connection close/error
+- [x] Stop segment streaming when cancelled, replaced, or disconnected
 - **Status:** complete
 
 ### Phase 3: Version, Docs, UI Notes
-- [x] Bump package version to 2.1.221
+- [x] Bump package version to 2.1.222
 - [x] Update README, CHANGELOG, BACKUP document, and Brain UI release notes
 - [x] Update progress/final verification log
 - **Status:** complete
@@ -34,20 +34,20 @@ Complete
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [x] Commit changes
-- [x] Tag `v2.1.221`
-- [x] Push main and tag to GitHub
-- [x] Create source tarball and Git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag `v2.1.222`
+- [ ] Push main and tag to GitHub
+- [ ] Create source tarball and Git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** pending
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Reuse `createTTSSession` and `streamTTSSegment` | Avoid duplicating provider logic and keep Brain UI/WS behavior consistent |
-| Send `tts:speak` audio only to the requester | Prevent one client request from unexpectedly broadcasting private audio to all subscribed clients |
-| Temporarily force requester audio on during speak and restore previous options afterward | Ensures speak always returns audio while preserving client preferences |
-| Keep output as `audio/mpeg` for now | Current providers return MP3-like streams; Opus conversion is future work |
+| Cancellation is scoped to the same WebSocket connection | Prevent one client from accidentally stopping another client’s TTS |
+| New `tts:speak` cancels previous speak on the same connection | Matches human voice assistant behavior where new output replaces stale output |
+| Disconnect triggers cancel | Avoid background TTS generation when external device disappears |
+| Stream loop checks requestId and session status | Prevent stale chunks from leaking after replacement/cancel |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

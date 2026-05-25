@@ -1,17 +1,14 @@
-# Progress: v2.1.221 WebSocket TTS Speak Request
+# Progress: v2.1.222 WebSocket TTS Cancel and Speak Guards
 
 ## 2026-05-26
-- Resumed from released v2.1.220 baseline.
-- Inspected TTS session manager and voice event WebSocket bus.
-- Upgraded `/voice/events` hello to protocol version 3 with `tts_speak` capability.
-- Added voice event bus helpers for single-client JSON delivery, client option snapshots, and target-client audio chunk delivery.
-- Added WebSocket `tts:speak` / `speak` handling in `src/api.js`.
-- `tts:speak` now creates a TTS session from text, emits session/start/sentence/audio_ready events, streams audio chunks to the requester, and emits sentence_end/stop.
-- Bumped version to 2.1.221 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
+- Resumed from released v2.1.221 baseline.
+- Inspected WebSocket `tts:speak` implementation and TTS session lifecycle.
+- Added per-connection active speak tracking with `requestId` and `sessionId`.
+- Added `tts:cancel` / `cancel` WebSocket message handling.
+- Same-client new `tts:speak` now cancels the previous speak with reason `replaced_by_new_speak`.
+- WebSocket close/error now cancels the active speak with reason `client_disconnected`.
+- Segment streaming now checks cancellation, request replacement, and socket readiness before emitting chunks; cancellation attempts to destroy the provider audio stream.
+- Bumped version to 2.1.222 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
 
-- Verification passed: `node --check src/voice/voice-event-bus.js`, `node --check src/api.js`, and `node --check src/ui/brain-ui/app-shell.js`.
+- Verification passed: `node --check src/api.js`, `node --check src/voice/voice-event-bus.js`, and `node --check src/ui/brain-ui/app-shell.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.221 as `dfabe42 feat: add websocket tts speak`.
-- Tagged and pushed `v2.1.221` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.221
-- Uploaded release assets: `backups/v2.1.221/BaiLongma-v2.1.221-source.tar.gz` and `backups/v2.1.221/BaiLongma-v2.1.221.bundle`.

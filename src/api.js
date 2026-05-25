@@ -1505,12 +1505,24 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     ws.on('error', () => { session?.close(); session = null })
   })
 
-  async function streamTTSSegmentToVoiceClient(ws, { sessionId, index, contentType = 'audio/mpeg' }) {
+  async function streamTTSSegmentToVoiceClient(ws, { sessionId, index, requestId, contentType = 'audio/mpeg' }) {
     publishTTSAudioStart({ sessionId, index, contentType, targetClient: ws })
     try {
       const audioStream = await streamTTSSegment({ sessionId, index })
       await new Promise((resolve, reject) => {
-        audioStream.on('data', chunk => publishTTSAudioChunk({ sessionId, index, chunk, contentType, targetClient: ws }))
+        const finishIfCancelled = () => {
+          const current = getTTSSession(sessionId)
+          if (!current || current.status === 'cancelled' || ws.activeTTSSpeak?.requestId !== requestId || ws.readyState !== 1) {
+            try { audioStream.destroy?.() } catch {}
+            resolve()
+            return true
+          }
+          return false
+        }
+        audioStream.on('data', chunk => {
+          if (finishIfCancelled()) return
+          publishTTSAudioChunk({ sessionId, index, chunk, contentType, targetClient: ws })
+        })
         audioStream.on('end', resolve)
         audioStream.on('error', reject)
       })
@@ -1521,6 +1533,19 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     }
   }
 
+  function cancelVoiceEventTTSSpeak(ws, reason = 'cancelled', requestId = null) {
+    const active = ws.activeTTSSpeak
+    if (!active) {
+      sendVoiceEventClientJson(ws, { type: 'tts', state: 'cancelled', requestId, cancelled: false, reason: 'no_active_session' })
+      return false
+    }
+    cancelTTSSession(active.sessionId)
+    ws.activeTTSSpeak = null
+    sendVoiceEventToClient(ws, { type: 'tts:stop', detail: { requestId: active.requestId, sessionId: active.sessionId, reason } })
+    sendVoiceEventClientJson(ws, { type: 'tts', state: 'cancelled', requestId: active.requestId, sessionId: active.sessionId, cancelled: true, reason })
+    return true
+  }
+
   async function handleVoiceEventTTSSpeak(ws, msg = {}) {
     const text = String(msg.text || msg.ttsText || '').trim()
     const requestId = String(msg.requestId || msg.id || `tts_req_${Date.now()}`)
@@ -1528,6 +1553,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', requestId, error: 'Missing text' })
       return
     }
+    cancelVoiceEventTTSSpeak(ws, 'replaced_by_new_speak', requestId)
     const previousOptions = getVoiceEventClientOptions(ws)
     setVoiceEventClientOptions(ws, {
       audio: true,
@@ -1544,25 +1570,29 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         elevenLabsKey: creds.elevenLabsKey, volcanoAppId: creds.volcanoAppId, volcanoToken: creds.volcanoToken,
       },
     })
+    ws.activeTTSSpeak = { requestId, sessionId: session.id }
     sendVoiceEventClientJson(ws, { type: 'tts', state: 'session', requestId, sessionId: session.id, segments: session.segments })
     sendVoiceEventToClient(ws, { type: 'tts:start', detail: { requestId, sessionId: session.id, segmentCount: session.segments.length } })
     const contentType = 'audio/mpeg'
     try {
       for (let index = 0; index < session.segments.length; index += 1) {
-        if (ws.readyState !== 1) break
+        if (ws.readyState !== 1 || ws.activeTTSSpeak?.requestId !== requestId) break
         const current = getTTSSession(session.id)
         if (!current || current.status === 'cancelled') break
         const segmentText = session.segments[index]
         sendVoiceEventToClient(ws, { type: 'tts:sentence_start', detail: { requestId, sessionId: session.id, index, text: segmentText } })
         sendVoiceEventToClient(ws, { type: 'tts:audio_ready', detail: { requestId, sessionId: session.id, index, text: segmentText, contentType } })
-        await streamTTSSegmentToVoiceClient(ws, { sessionId: session.id, index, contentType })
+        await streamTTSSegmentToVoiceClient(ws, { sessionId: session.id, index, requestId, contentType })
         sendVoiceEventToClient(ws, { type: 'tts:sentence_end', detail: { requestId, sessionId: session.id, index, text: segmentText } })
       }
-      sendVoiceEventToClient(ws, { type: 'tts:stop', detail: { requestId, sessionId: session.id, reason: 'completed' } })
+      const finalSession = getTTSSession(session.id)
+      const stopReason = finalSession?.status === 'cancelled' ? 'cancelled' : 'completed'
+      if (ws.activeTTSSpeak?.requestId === requestId) sendVoiceEventToClient(ws, { type: 'tts:stop', detail: { requestId, sessionId: session.id, reason: stopReason } })
     } catch (err) {
       sendVoiceEventToClient(ws, { type: 'error', detail: { requestId, sessionId: session.id, service: 'tts', error: err.message } })
       sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', requestId, sessionId: session.id, error: err.message })
     } finally {
+      if (ws.activeTTSSpeak?.requestId === requestId) ws.activeTTSSpeak = null
       setVoiceEventClientOptions(ws, previousOptions)
     }
   }
@@ -1571,13 +1601,21 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
   const voiceEventWss = new WebSocketServer({ noServer: true })
   voiceEventWss.on('connection', (ws) => {
     addVoiceEventClient(ws)
-    ws.on('close', () => removeVoiceEventClient(ws))
-    ws.on('error', () => removeVoiceEventClient(ws))
+    const cleanupVoiceClient = () => {
+      cancelVoiceEventTTSSpeak(ws, 'client_disconnected')
+      removeVoiceEventClient(ws)
+    }
+    ws.on('close', cleanupVoiceClient)
+    ws.on('error', cleanupVoiceClient)
     ws.on('message', (raw) => {
       try {
         const msg = JSON.parse(raw.toString())
         if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
           handleVoiceEventTTSSpeak(ws, msg).catch(err => sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', error: err.message }))
+          return
+        }
+        if (msg?.type === 'tts:cancel' || msg?.type === 'cancel') {
+          cancelVoiceEventTTSSpeak(ws, msg.reason || 'client_cancelled', msg.requestId || msg.id || null)
           return
         }
         handleVoiceEventClientMessage(ws, msg)
