@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.222 with WebSocket `tts:cancel`, new-speak replacement, and disconnect cancellation guards for direct `/voice/events` `tts:speak` sessions.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -34,12 +34,12 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [ ] Commit changes
-- [ ] Tag `v2.1.222`
-- [ ] Push main and tag to GitHub
-- [ ] Create source tarball and Git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag `v2.1.222`
+- [x] Push main and tag to GitHub
+- [x] Create source tarball and Git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |

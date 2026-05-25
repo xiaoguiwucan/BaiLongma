@@ -12,3 +12,7 @@
 
 - Verification passed: `node --check src/api.js`, `node --check src/voice/voice-event-bus.js`, and `node --check src/ui/brain-ui/app-shell.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.222 as `7284160 feat: add websocket tts cancel guards`.
+- Tagged and pushed `v2.1.222` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.222
+- Uploaded release assets: `backups/v2.1.222/BaiLongma-v2.1.222-source.tar.gz` and `backups/v2.1.222/BaiLongma-v2.1.222.bundle`.
