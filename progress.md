@@ -10,3 +10,7 @@
 - Verification passed: `node --check scripts/smoke-voice-events.mjs` and `node --check scripts/voice-events-client.mjs`.
 - Verification passed: `npm run smoke:voice-events` 9/9.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.226 as `3f87e5e test: cover voice event publish mapping`.
+- Tagged and pushed `v2.1.226` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.226
+- Uploaded release assets: `backups/v2.1.226/BaiLongma-v2.1.226-source.tar.gz` and `backups/v2.1.226/BaiLongma-v2.1.226.bundle`.
