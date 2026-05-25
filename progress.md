@@ -10,3 +10,8 @@
 - Bumped package version to 2.1.218.
 - Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.218.
 - Verification: JS syntax checks and `npm run smoke:tools` passed.
+
+- Committed v2.1.218 as `27873f8 feat: add voice event websocket channel`.
+- Tagged and pushed `v2.1.218` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.218
+- Uploaded release assets: source tarball and Git bundle under `backups/v2.1.218/`.
