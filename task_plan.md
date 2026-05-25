@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.231 with explicit WebSocket client message validation and structured protocol error replies, so external clients get clear feedback for bad JSON, missing `type`, unsupported message types, and invalid `tts:speak` payloads.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -28,11 +28,11 @@ Verification complete; release in progress
 
 ### Phase 4: Verification and release
 - [x] Run syntax checks and smoke tests
-- [ ] Commit changes
-- [ ] Tag and push v2.1.231
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** in_progress
+- [x] Commit changes
+- [x] Tag and push v2.1.231
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
