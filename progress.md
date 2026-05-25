@@ -1,16 +1,14 @@
-# Progress: v2.1.224 Voice Events Protocol Documentation
+# Progress: v2.1.225 Voice Events Smoke Test
 
 ## 2026-05-26
-- Resumed from released v2.1.223 baseline.
-- Inspected README, CHANGELOG, backup notes, and current `/voice/events` protocol features.
-- Added `docs/VOICE_EVENTS_PROTOCOL.md` as the stable protocol reference for external clients.
-- Documented endpoint/status API, hello/version/capabilities, ping/pong, audio subscription, raw events, Xiaozhi-style event mapping, TTS audio chunks, `tts:speak`, `tts:cancel`, status response, CLI examples, client implementation advice, and known limitations.
-- Bumped version to 2.1.224 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
+- Resumed from released v2.1.224 baseline.
+- Inspected `startAPI` and `/voice/events` protocol paths.
+- Added `scripts/smoke-voice-events.mjs`.
+- The smoke test starts a temporary API server on port `39221` by default, verifies `/voice/events/status`, connects WebSocket clients, validates hello, ping/pong, subscribe audio/binary options, structured `tts:cancel` no-active-session response, and final client count cleanup.
+- Added `npm run smoke:voice-events`.
+- Initial status-after-close assertion saw one remaining client; fixed by resolving after WebSocket close and adding a short cleanup delay.
+- Bumped version to 2.1.225 and updated README, CHANGELOG, BACKUP-2026-05-26.md, and Brain UI in-app release notes.
 
-- Verification passed: protocol document content check for version/tts:speak/tts:cancel/audio_chunk/binaryAudio.
-- Verification passed: `node --check scripts/voice-events-client.mjs` and CLI `--help` output check.
+- Verification passed: `node --check scripts/smoke-voice-events.mjs` and `node --check scripts/voice-events-client.mjs`.
+- Verification passed: `npm run smoke:voice-events` 7/7.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.224 as `471d0c4 docs: add voice events protocol guide`.
-- Tagged and pushed `v2.1.224` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.224
-- Uploaded release assets: `backups/v2.1.224/BaiLongma-v2.1.224-source.tar.gz` and `backups/v2.1.224/BaiLongma-v2.1.224.bundle`.

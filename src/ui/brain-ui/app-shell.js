@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.225</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增语音 WebSocket 协议 smoke 测试，保护基础对接行为。</p>
+                <ul class="release-note-points">
+                  <li>新增 scripts/smoke-voice-events.mjs。</li>
+                  <li>新增 npm run smoke:voice-events。</li>
+                  <li>自动验证 hello、ping、subscribe、tts:cancel 和 status client 计数。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.224</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

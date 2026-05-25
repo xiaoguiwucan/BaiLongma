@@ -1,55 +1,60 @@
-# Task Plan: v2.1.224 Voice Events Protocol Documentation
+# Task Plan: v2.1.225 Voice Events Smoke Test
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.224 with a formal `/voice/events` protocol document for external device, phone, and debug-client integration.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.225 with an automated smoke test for the `/voice/events` protocol, protecting hello, ping, subscribe, cancel, and status behavior.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect current `/voice/events` protocol features and CLI debug client
-- [x] Identify missing artifact: stable protocol documentation for external clients
-- [x] Choose a dedicated Markdown document under `docs/`
+- [x] Inspect current API startup/export behavior
+- [x] Identify protocol behaviors that can be tested without real TTS credentials
+- [x] Choose a temporary local API server smoke test on an isolated port
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add `docs/VOICE_EVENTS_PROTOCOL.md`
-- [x] Document endpoint, status API, hello/version/capabilities, heartbeat
-- [x] Document JSON events, Xiaozhi-style mappings, audio chunks, `tts:speak`, and `tts:cancel`
-- [x] Document CLI examples, client implementation advice, and known limitations
+- [x] Add `scripts/smoke-voice-events.mjs`
+- [x] Validate `/voice/events/status` protocol version
+- [x] Validate WebSocket hello service/version/capabilities
+- [x] Validate ping/pong
+- [x] Validate subscribe audio/binary options
+- [x] Validate `tts:cancel` no-active-session response
+- [x] Validate client count returns to zero after sockets close
+- [x] Add `npm run smoke:voice-events`
 - **Status:** complete
 
 ### Phase 3: Version, Docs, UI Notes
-- [x] Bump package version to 2.1.224
+- [x] Bump package version to 2.1.225
 - [x] Update README, CHANGELOG, BACKUP document, and Brain UI release notes
 - [x] Update progress/final verification log
 - **Status:** complete
 
 ### Phase 4: Verification
-- [x] Check protocol document content
-- [x] Run CLI syntax/help checks
+- [x] Run JS syntax checks for touched files
+- [x] Run `npm run smoke:voice-events`
 - [x] Run `npm run smoke:tools`
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [x] Commit changes
-- [x] Tag `v2.1.224`
-- [x] Push main and tag to GitHub
-- [x] Create source tarball and Git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag `v2.1.225`
+- [ ] Push main and tag to GitHub
+- [ ] Create source tarball and Git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** pending
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Put protocol docs in `docs/VOICE_EVENTS_PROTOCOL.md` | Stable path for hardware/mobile developers and Release references |
-| Document current `audio/mpeg` limitation explicitly | Avoid confusing current MP3-like chunks with future Opus frames |
-| Include CLI examples in protocol docs | Makes documentation immediately verifiable on the developer's Mac |
-| Include client implementation advice | Helps future ESP32/mobile clients handle binary frames, queues, and cancellation correctly |
+| Test without real TTS credentials | Keeps smoke reliable on fresh developer machines |
+| Use isolated default port 39221 | Avoid colliding with normal app port 3721 |
+| Verify no-active-session cancel | Exercises structured cancel response without requiring audio provider |
+| Wait for socket close before status count check | Avoid race between client close and server-side cleanup |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
+| First status-after-close check saw one remaining client | 1 | Wait for WebSocket close event and add a short cleanup delay before status assertion |
 | `npm run smoke:tools` logs `better-sqlite3` Node ABI warning under Node v24 | 1 | Smoke assertions pass 6/6; existing local dependency rebuild warning |

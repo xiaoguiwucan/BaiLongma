@@ -4,6 +4,43 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.225 - 2026-05-26
+
+### 更新内容
+
+- 新增 `scripts/smoke-voice-events.mjs`。
+- 新增 npm script：`npm run smoke:voice-events`。
+- 自动启动临时 API 服务并验证 `/voice/events` 基础协议：
+  - `/voice/events/status` 返回协议版本；
+  - WebSocket hello service/version/capabilities；
+  - ping/pong；
+  - subscribe audio/binaryAudio；
+  - `tts:cancel` 在无 active speak 时返回结构化 `no_active_session`；
+  - socket 关闭后 status 中 client 数归零。
+
+### 改变原因
+
+- v2.1.224 已把协议写成文档，但后续修改仍需要自动化保护，避免不小心破坏 hello、订阅、取消或状态统计。
+- 该 smoke 测试为未来 ESP32/手机端接入和 CI 集成打基础。
+
+### 影响范围
+
+- 不改变运行时协议行为。
+- 新增测试脚本会在本机临时启动一个 API server，默认端口 `39221`，结束后自动关闭。
+
+### 验证结果
+
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-events` 7/7 通过。
+- `node --check scripts/voice-events-client.mjs` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 开发者可运行 `npm run smoke:voice-events` 快速确认语音协议基础行为。
+- 如果默认端口被占用，可设置 `BAILONGMA_VOICE_SMOKE_PORT=其他端口`。
+
 ## v2.1.224 - 2026-05-26
 
 ### 更新内容

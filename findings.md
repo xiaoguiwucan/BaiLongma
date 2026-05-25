@@ -1,16 +1,16 @@
-# Findings: v2.1.224 Voice Events Protocol Documentation
+# Findings: v2.1.225 Voice Events Smoke Test
 
 ## Current baseline
-- `/voice/events` has evolved into protocol v3 with JSON events, TTS audio chunks, direct `tts:speak`, and `tts:cancel`.
-- v2.1.223 added a CLI debug client, but the protocol itself was scattered across README/CHANGELOG/release notes.
-- External device integration needs a stable, single reference document.
+- `/voice/events` protocol v3 has enough non-TTS-provider behavior to test automatically.
+- `startAPI` returns the HTTP server, so a smoke test can start and stop a temporary API instance.
+- Real `tts:speak` audio generation depends on configured provider credentials, so it is not appropriate for a basic smoke test yet.
 
 ## Design finding
-- The protocol doc should describe both raw `voice_event` and Xiaozhi-style mapped events because clients may choose either layer.
-- Audio chunk semantics need clear ordering: metadata JSON followed by binary frame when `binaryAudio=true`.
-- Cancellation semantics must be explicit: scoped to the same WebSocket connection's active speak.
+- Testing hello, ping, subscribe, cancel-without-active-session, and status client cleanup gives useful coverage without external credentials.
+- Client count assertions need to wait until the WebSocket close event has propagated to the server.
+- A later integration test can add mock TTS provider coverage for full `tts:speak` event ordering.
 
 ## Remaining future direction
-- Add Opus frame documentation after actual Opus encoding/transcoding exists.
-- Add sequence diagrams once the client/server flows stabilize further.
-- Add SDK snippets for ESP32 and mobile clients.
+- Add mock/provider injection for deterministic TTS speak tests.
+- Add CI workflow once dependency/native module setup is stable.
+- Extend smoke test to verify `POST /voice/events/publish` event mapping.
