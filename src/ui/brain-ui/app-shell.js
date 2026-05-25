@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.232</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">为 WebSocket tts:speak 增加文本长度和发送冷却保护。</p>
+                <ul class="release-note-points">
+                  <li>tts:speak 默认限制 800 字符、同连接 1200ms 冷却。</li>
+                  <li>/voice/events/protocol 暴露 limits.ttsSpeak 和 tts_speak_limits 能力。</li>
+                  <li>新增 text_too_long / rate_limited protocol_error，并扩展 smoke 覆盖。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.231</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

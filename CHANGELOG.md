@@ -4,6 +4,54 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.232 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` WebSocket `tts:speak` 新增安全限制：
+  - 最大文本长度：800 字符；
+  - 单连接冷却：1200ms。
+- 新增协议能力 `tts_speak_limits`。
+- `/voice/events/protocol` 新增 `limits.ttsSpeak`：
+  - `maxTextChars`；
+  - `cooldownMs`。
+- `errorCodes` 新增：
+  - `text_too_long`：文本超过最大长度；
+  - `rate_limited`：同一 WebSocket 连接发送 `tts:speak` 太快。
+- `validateVoiceEventClientMessage()` 现在会校验 `tts:speak` / `speak` 文本长度。
+- WebSocket 边界新增 per-connection `tts:speak` 冷却保护，并在限流时返回 `retryAfterMs`。
+- `scripts/smoke-voice-mapping.mjs` 从 20 项扩展到 22 项，覆盖限制元数据和超长文本校验。
+- `scripts/smoke-voice-events.mjs` 从 20 项扩展到 23 项，覆盖协议端点限制、超长文本错误和快速重复 speak 限流错误。
+
+### 改变原因
+
+- 外部设备或调试客户端如果误发超长文本，可能导致慢 TTS、较大的音频流和不稳定体验。
+- 快速连续发送 `tts:speak` 会不断取消并重建 TTS session，不适合作为硬件端默认行为。
+- 把限制写进协议元数据，可以让客户端在发送前自检并做 UI 限制，而不是等服务端报错。
+
+### 影响范围
+
+- 合法短文本 `tts:speak` 行为保持兼容。
+- 超过 800 字符的文本会收到 `protocol_error / text_too_long`。
+- 同一 WebSocket 连接在 1200ms 内重复发送 `tts:speak` 会收到 `protocol_error / rate_limited`，并带 `retryAfterMs`。
+- 限制是 per-connection，不是全局/IP 级别。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 22/22 通过。
+- `npm run smoke:voice-events` 23/23 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端应优先读取 `/voice/events/protocol` 的 `limits.ttsSpeak`，在本地 UI 或硬件逻辑中限制输入长度和发送频率。
+- 客户端应处理 `text_too_long` 和 `rate_limited`，后者可参考 `retryAfterMs` 再重试。
+
 ## v2.1.231 - 2026-05-26
 
 ### 更新内容

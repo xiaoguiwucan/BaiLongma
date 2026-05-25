@@ -1,5 +1,9 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits'])
+export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
+  maxTextChars: 800,
+  cooldownMs: 1200,
+})
 export const VOICE_EVENTS_PROTOCOL_STATES = Object.freeze({
   wake: ['accepted', 'rejected'],
   stt: ['partial', 'final'],
@@ -19,8 +23,11 @@ export function getVoiceEventsProtocolMetadata() {
       publish: '/voice/events/publish',
     },
     clientMessages: ['ping', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
-    errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text'],
+    errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text', 'text_too_long', 'rate_limited'],
     mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
+    limits: {
+      ttsSpeak: { ...VOICE_EVENTS_TTS_SPEAK_LIMITS },
+    },
     audio: {
       defaultContentType: 'audio/mpeg',
       binarySubscribe: { type: 'subscribe', audio: true, binaryAudio: true },
@@ -87,7 +94,7 @@ export function sendVoiceEventProtocolError(ws, code, message, extra = {}) {
   return payload
 }
 
-export function validateVoiceEventClientMessage(msg) {
+export function validateVoiceEventClientMessage(msg, { limits = VOICE_EVENTS_TTS_SPEAK_LIMITS } = {}) {
   if (!msg || typeof msg !== 'object' || Buffer.isBuffer(msg) || Array.isArray(msg)) {
     return { ok: false, code: 'invalid_message', message: 'Client message must be a JSON object.' }
   }
@@ -104,6 +111,10 @@ export function validateVoiceEventClientMessage(msg) {
     const text = String(msg.text || msg.ttsText || '').trim()
     if (!text) {
       return { ok: false, code: 'missing_text', message: 'tts:speak requires non-empty text or ttsText.', receivedType: type, requestId }
+    }
+    const maxTextChars = Number(limits?.maxTextChars || VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars)
+    if (text.length > maxTextChars) {
+      return { ok: false, code: 'text_too_long', message: `tts:speak text exceeds ${maxTextChars} characters.`, receivedType: type, requestId, limit: maxTextChars, actual: text.length }
     }
   }
   return { ok: true, type, requestId }

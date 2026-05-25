@@ -14,7 +14,7 @@ import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { createTTSSession, cancelTTSSession, streamTTSSegment, getTTSSession } from './voice/tts-session.js'
-import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
+import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, VOICE_EVENTS_TTS_SPEAK_LIMITS, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -1623,10 +1623,23 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       }
       const validation = validateVoiceEventClientMessage(msg)
       if (!validation.ok) {
-        sendVoiceEventProtocolError(ws, validation.code, validation.message, { requestId: validation.requestId, receivedType: validation.receivedType })
+        sendVoiceEventProtocolError(ws, validation.code, validation.message, { requestId: validation.requestId, receivedType: validation.receivedType, limit: validation.limit, actual: validation.actual })
         return
       }
       if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
+        const now = Date.now()
+        const lastAt = Number(ws.lastTTSSpeakAt || 0)
+        const retryAfterMs = Math.max(0, VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs - (now - lastAt))
+        if (retryAfterMs > 0) {
+          sendVoiceEventProtocolError(ws, 'rate_limited', `tts:speak is limited to one request every ${VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs} ms.`, {
+            requestId: msg.requestId || msg.id || undefined,
+            receivedType: msg.type,
+            limitMs: VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs,
+            retryAfterMs,
+          })
+          return
+        }
+        ws.lastTTSSpeakAt = now
         handleVoiceEventTTSSpeak(ws, msg).catch(err => sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', error: err.message }))
         return
       }

@@ -1,4 +1,4 @@
-import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi, validateVoiceEventClientMessage } from '../src/voice/voice-event-bus.js'
+import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi, validateVoiceEventClientMessage, VOICE_EVENTS_TTS_SPEAK_LIMITS } from '../src/voice/voice-event-bus.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -78,10 +78,12 @@ assert(mapVoiceEventToXiaozhi({ type: 'unknown:event', detail: {} }) === null, '
 assert(mapVoiceEventToXiaozhi(null) === null, 'null event maps to null')
 
 const protocol = getVoiceEventsProtocolMetadata()
-assert(protocol.version >= 3 && protocol.capabilities.includes('tts_speak') && protocol.capabilities.includes('protocol_errors'), 'protocol metadata exposes version, tts_speak, and protocol_errors')
+assert(protocol.version >= 3 && protocol.capabilities.includes('tts_speak') && protocol.capabilities.includes('protocol_errors') && protocol.capabilities.includes('tts_speak_limits'), 'protocol metadata exposes version, tts_speak, protocol_errors, and tts_speak_limits')
 assert(protocol.endpoints?.protocol === '/voice/events/protocol' && protocol.endpoints?.websocket === '/voice/events', 'protocol metadata exposes endpoints')
+assert(protocol.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocol.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol metadata exposes tts speak limits')
 assert(validateVoiceEventClientMessage({ type: 'ping' }).ok === true, 'client validation accepts ping')
 assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: '你好' }).ok === true, 'client validation accepts tts speak with text')
+assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: 'x'.repeat(VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars + 1) }).code === 'text_too_long', 'client validation rejects overlong tts speak')
 assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: '' }).code === 'missing_text', 'client validation rejects empty tts speak')
 assert(validateVoiceEventClientMessage({ type: 'unknown' }).code === 'unsupported_type', 'client validation rejects unsupported type')
 assert(validateVoiceEventClientMessage({}).code === 'missing_type', 'client validation rejects missing type')

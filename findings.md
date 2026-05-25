@@ -1,23 +1,24 @@
-# Findings: v2.1.231 Voice Event Client Message Validation
+# Findings: v2.1.232 Voice Event TTS Speak Safety Limits
 
 ## Current baseline
-- v2.1.230 exposes protocol metadata and shared constants.
-- `/voice/events` WebSocket currently catches parse errors silently.
-- Unsupported client message types currently fall through without a response.
-- `tts:speak` with empty text returns a TTS error, but the validation rules are not reflected in protocol metadata or pure tests.
+- v2.1.231 added structured `protocol_error` responses and validation for malformed WebSocket messages.
+- `tts:speak` still accepts arbitrary text length as long as it is non-empty.
+- Repeated `tts:speak` messages are allowed immediately; the newer speak cancels the previous one.
 
 ## Design finding
-- External hardware clients need deterministic error replies because serial logs and embedded debugging are limited.
-- A structured `protocol_error` reply with `code`, `message`, optional `requestId`, and optional `receivedType` is easier to handle than silent ignore or connection close.
-- Supported inbound message families are:
-  - `ping`
-  - `subscribe` / `voice:subscribe`
-  - `unsubscribe` / `voice:unsubscribe`
-  - `tts:speak` / `speak`
-  - `tts:cancel` / `cancel`
-- Validation can be introduced without bumping protocol version because valid existing messages remain compatible.
+- For hardware/LAN clients, accidental repeated `tts:speak` can cause constant cancellation/recreation of TTS sessions.
+- Very long text can create slow or expensive TTS jobs, large audio streams, or poor UX.
+- Protocol metadata should advertise safety limits so clients can enforce them before sending.
+- A minimal per-WebSocket cooldown is enough for now and does not require global identity/auth.
+
+## Chosen limits
+- `maxTextChars`: 800 characters.
+- `cooldownMs`: 1200 ms per WebSocket connection.
+- New error codes:
+  - `text_too_long`
+  - `rate_limited`
 
 ## Remaining future direction
-- Add JSON schema files for protocol messages.
-- Add max text length / rate limiting for `tts:speak` before exposing to LAN devices broadly.
-- Add authentication or pairing before recommending non-localhost exposure.
+- Add configurable limits in settings.
+- Add global/IP-level rate limiting before exposing beyond localhost/LAN.
+- Add authentication or pairing for non-local clients.

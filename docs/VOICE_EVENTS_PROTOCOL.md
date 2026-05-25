@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.231 更新：协议元数据与 protocol_error）
+版本：v3（BaiLongma v2.1.232 更新：tts:speak 安全限制）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -35,7 +35,8 @@ GET http://127.0.0.1:3721/voice/events/protocol
   "type": "hello",
   "service": "bailongma.voice.events",
   "version": 3,
-  "capabilities": ["json_events", "tts_audio_chunks", "tts_speak", "protocol_errors"],
+  "capabilities": ["json_events", "tts_audio_chunks", "tts_speak", "protocol_errors", "tts_speak_limits"],
+  "limits": { "ttsSpeak": { "maxTextChars": 800, "cooldownMs": 1200 } },
   "history": []
 }
 ```
@@ -45,7 +46,8 @@ GET http://127.0.0.1:3721/voice/events/protocol
 | 字段 | 说明 |
 |---|---|
 | `version` | 当前协议版本。v3 支持 JSON 事件、TTS 音频块、直接 `tts:speak`。 |
-| `capabilities` | 能力声明。客户端应按能力判断是否启用 speak/audio/protocol_error 处理。 |
+| `capabilities` | 能力声明。客户端应按能力判断是否启用 speak/audio/protocol_error/tts_speak_limits 处理。 |
+| `limits.ttsSpeak` | `tts:speak` 文本长度和发送冷却限制。 |
 | `history` | 最近事件历史，方便调试客户端连上后看到上下文。 |
 
 ## 3. 心跳
@@ -221,6 +223,13 @@ GET http://127.0.0.1:3721/voice/events/protocol
 {"type":"speak","text":"你好"}
 ```
 
+安全限制（v2.1.232）：
+
+- `text` / `ttsText` 去空格后必须非空。
+- 默认最长 800 字符。
+- 同一个 WebSocket 连接默认 1200ms 内只能发起一次 `tts:speak`。
+- 当前限制可通过 `/voice/events/protocol` 的 `limits.ttsSpeak` 读取。
+
 典型返回顺序：
 
 ```text
@@ -302,6 +311,8 @@ voice_event tts:stop
 | `missing_type` | 缺少非空字符串 `type` | 补齐消息类型 |
 | `unsupported_type` | `type` 不在支持列表 | 检查协议版本或拼写 |
 | `missing_text` | `tts:speak` / `speak` 缺少非空 `text`/`ttsText` | 补齐要合成的文本 |
+| `text_too_long` | `tts:speak` / `speak` 文本超过 `limits.ttsSpeak.maxTextChars` | 截断或分段发送 |
+| `rate_limited` | 同一连接发送 `tts:speak` 太快 | 根据 `retryAfterMs` 稍后重试 |
 
 支持的客户端消息类型可以通过：
 
@@ -372,6 +383,7 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 
 - 优先解析 `hello.version` 和 `hello.capabilities`，不要硬编码能力。
 - 监听 `protocol_error`，把 `code/message/requestId/receivedType` 打进客户端日志。
+- 读取 `limits.ttsSpeak.maxTextChars/cooldownMs`，在客户端输入框或硬件逻辑中提前限制。
 - 如果是硬件端，建议使用 `binaryAudio=true`，避免 base64 体积膨胀。
 - `audio_chunk` metadata 和紧随其后的 binary frame 应按顺序消费。
 - 对每个 `requestId/sessionId/index` 建立播放队列，收到 `audio_end` 后进入下一段。
@@ -384,4 +396,4 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 - 当前协议未做鉴权，局域网暴露时请自行控制访问范围。
 - 当前 `tts:cancel` 只取消同连接 active speak，不支持跨连接 session 管理。
 - 当前调试客户端是参考实现，不是正式 SDK。
-- 当前 `protocol_error` 只做格式/类型/空文本校验，还没有鉴权、限流或最大文本长度限制。
+- 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本和单连接 speak 冷却，但还没有鉴权或全局/IP 级限流。
