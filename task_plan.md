@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.223 with a reusable CLI debug client for `/voice/events`, making it easy to validate status/listen/speak/cancel and audio chunk saving before external device integration.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -34,12 +34,12 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [ ] Commit changes
-- [ ] Tag `v2.1.223`
-- [ ] Push main and tag to GitHub
-- [ ] Create source tarball and Git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag `v2.1.223`
+- [x] Push main and tag to GitHub
+- [x] Create source tarball and Git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |

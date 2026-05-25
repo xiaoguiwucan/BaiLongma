@@ -15,3 +15,7 @@
 
 - Verification passed: `node --check scripts/voice-events-client.mjs`, CLI `--help` output/exit code check, `node --check src/api.js`, `node --check src/voice/voice-event-bus.js`, and `node --check src/ui/brain-ui/app-shell.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.223 as `7103103 feat: add voice events debug client`.
+- Tagged and pushed `v2.1.223` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.223
+- Uploaded release assets: `backups/v2.1.223/BaiLongma-v2.1.223-source.tar.gz` and `backups/v2.1.223/BaiLongma-v2.1.223.bundle`.
