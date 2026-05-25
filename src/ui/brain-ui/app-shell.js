@@ -463,10 +463,15 @@ const createSettingsModal = () => `
             </div>
             <div class="settings-row">
               <label class="settings-label">声纹录入</label>
-              <button class="settings-save-btn" id="voice-enroll-speaker" type="button">录入我的声纹</button>
+              <button class="settings-save-btn" id="voice-enroll-speaker" type="button">录入/重录声纹</button>
+              <button class="settings-save-btn" id="voice-test-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">测试我的声纹</button>
               <span class="settings-feedback" id="voice-speaker-feedback"></span>
             </div>
-            <p class="settings-hint">声纹只保存在本机，用来过滤非你的声音。录入时请在安静环境下连续说 5–8 秒，例如“贾维斯，今天天气怎么样”。</p>
+            <div class="settings-row">
+              <label class="settings-label">声纹状态</label>
+              <span class="settings-config-info" id="voice-speaker-status">未检测</span>
+            </div>
+            <p class="settings-hint">声纹只保存在本机。v2.1.213 起录入时会拆成多段样本求中心声纹，测试按钮会显示当前分数和建议阈值。录入时请在安静环境下连续说 6–8 秒。</p>
             <div class="settings-row">
               <label class="settings-label" for="voice-speaker-threshold">声纹严格度</label>
               <input type="range" id="voice-speaker-threshold" min="0.45" max="0.80" step="0.01" value="0.55" style="flex:1;cursor:pointer;">
@@ -691,6 +696,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.213</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">增强本地声纹稳定性，减少录入后误拒绝本人声音。</p>
+                <ul class="release-note-points">
+                  <li>声纹录入升级为多样本中心声纹，兼容旧版单样本声纹文件。</li>
+                  <li>新增“测试我的声纹”按钮，显示分数、阈值和样本数量。</li>
+                  <li>录入后提供自校准反馈和建议阈值，方便解决本人声音被拒绝的问题。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.212</span>

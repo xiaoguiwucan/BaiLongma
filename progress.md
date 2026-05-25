@@ -1,17 +1,13 @@
-# Progress: v2.1.212 Xiaozhi-style Wake Word Upgrade
+# Progress: v2.1.213 Voiceprint Stability Upgrade
 
 ## 2026-05-26
-- Started v2.1.212 continuation after user asked “继续 做完”.
-- Inspected current wake gate in `voice-panel.js`, settings in `app.js` / `app-shell.js`, and backend voice config in `config.js`.
-- Extended backend voice config with `wakeMode`, `wakeWindowSeconds`, and `wakeRepeatSuppression`.
-- Upgraded frontend wake gate to support strict prefix matching, loose contains matching, configurable wake command window, and repeated rejected transcript suppression.
-- Added Settings controls for wake matching mode, wake command window slider, and repeated false-text suppression.
+- Started v2.1.213 after completing and releasing v2.1.212.
+- Inspected `sensevoice_server.py` speaker enrollment/verification and current Brain UI voiceprint settings.
+- Updated SenseVoice speaker storage to support multiple enrollment embeddings, centroid calculation, sample metadata, and best-of-centroid/sample verification scoring.
+- Added `speaker_test_start` / `speaker_test_finish` protocol to test the current user's voice against the stored voiceprint without sending text to the assistant.
+- Added settings UI controls for voiceprint self-test and local voiceprint status.
+- Reworked frontend voiceprint enrollment to record 7.5s, display sample count/calibration score, and apply recommended threshold when available.
 
-- Bumped package version to 2.1.212.
-- Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.212.
-- Verification: JS syntax checks passed and `npm run smoke:tools` passed 6/6 with the existing better-sqlite3 Node ABI audit warning.
-
-- Committed v2.1.212 as `19a549e feat: strengthen wake word gating`.
-- Tagged and pushed `v2.1.212` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.212
-- Uploaded release assets: source tarball and Git bundle under `backups/v2.1.212/`.
+- Bumped package version to 2.1.213.
+- Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.213.
+- Verification: Python compile, JS syntax checks, and `npm run smoke:tools` passed.

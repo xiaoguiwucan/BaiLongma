@@ -2243,36 +2243,30 @@ function initTTSSettings() {
     });
   }
 
-  async function enrollSpeakerVoice() {
-    const btn = document.getElementById("voice-enroll-speaker");
-    const fb = document.getElementById("voice-speaker-feedback");
-    if (!btn) return;
-    btn.disabled = true;
-    showFeedback(fb, "准备麦克风…");
-    let stream = null;
-    let ws = null;
+  async function captureSpeakerAudio({ mode = "enroll", seconds = 6500 } = {}) {
+    await ensureLocalAsrForEnrollment();
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 } });
+    const ws = new WebSocket("ws://127.0.0.1:3723");
     let ctx = null;
     let processor = null;
     try {
-      await ensureLocalAsrForEnrollment();
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 } });
-      ws = new WebSocket("ws://127.0.0.1:3723");
       await new Promise((resolve, reject) => {
         ws.onopen = resolve;
         ws.onerror = () => reject(new Error("声纹服务连接失败"));
       });
       ws.binaryType = "arraybuffer";
       const done = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("声纹录入超时")), 15000);
+        const timer = setTimeout(() => reject(new Error(mode === "test" ? "声纹测试超时" : "声纹录入超时")), 18000);
         ws.onmessage = (ev) => {
           try {
             const msg = JSON.parse(ev.data);
-            if (msg.type === "speaker_enroll_ok") { clearTimeout(timer); resolve(msg); }
-            if (msg.type === "error") { clearTimeout(timer); reject(new Error(msg.message || "声纹录入失败")); }
+            if (mode === "test" && msg.type === "speaker_test_result") { clearTimeout(timer); resolve(msg); }
+            if (mode !== "test" && msg.type === "speaker_enroll_ok") { clearTimeout(timer); resolve(msg); }
+            if (msg.type === "error") { clearTimeout(timer); reject(new Error(msg.message || "声纹处理失败")); }
           } catch {}
         };
       });
-      ws.send(JSON.stringify({ type: "speaker_enroll_start" }));
+      ws.send(JSON.stringify({ type: mode === "test" ? "speaker_test_start" : "speaker_enroll_start" }));
       ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
       const src = ctx.createMediaStreamSource(stream);
       processor = ctx.createScriptProcessor(4096, 1, 1);
@@ -2285,15 +2279,69 @@ function initTTSSettings() {
         for (let i = 0; i < f32.length; i++) i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
         ws.send(i16.buffer);
       };
-      showFeedback(fb, "请连续说 6 秒…");
-      await new Promise(r => setTimeout(r, 6500));
+      await new Promise(r => setTimeout(r, seconds));
       processor.onaudioprocess = null;
-      ws.send(JSON.stringify({ type: "speaker_enroll_finish" }));
-      const result = await done;
-      showFeedback(fb, `声纹已录入（${result.seconds || 6}s）`);
+      if (mode === "test") {
+        const speakerThreshold = parseFloat(document.getElementById("voice-speaker-threshold")?.value || "0.55");
+        ws.send(JSON.stringify({ type: "speaker_test_finish", speakerThreshold }));
+      } else {
+        ws.send(JSON.stringify({ type: "speaker_enroll_finish" }));
+      }
+      return await done;
+    } finally {
+      try { processor?.disconnect(); } catch {}
+      try { await ctx?.close(); } catch {}
+      try { stream?.getTracks().forEach(t => t.stop()); } catch {}
+      try { ws?.close(); } catch {}
+    }
+  }
+
+  async function refreshSpeakerStatus() {
+    const el = document.getElementById("voice-speaker-status");
+    if (!el) return;
+    try {
+      await ensureLocalAsrForEnrollment();
+      const ws = new WebSocket("ws://127.0.0.1:3723");
+      const status = await new Promise((resolve, reject) => {
+        const timer = setTimeout(() => reject(new Error("声纹状态超时")), 5000);
+        ws.onopen = () => ws.send(JSON.stringify({ type: "speaker_status" }));
+        ws.onerror = () => reject(new Error("声纹服务连接失败"));
+        ws.onmessage = (ev) => {
+          try {
+            const msg = JSON.parse(ev.data);
+            if (msg.type === "speaker_status") { clearTimeout(timer); resolve(msg); }
+          } catch {}
+        };
+      });
+      try { ws.close(); } catch {}
+      el.textContent = status.configured ? `已录入（${status.sampleCount || 1} 个样本）` : "未录入";
+    } catch {
+      el.textContent = "状态未知";
+    }
+  }
+
+  async function enrollSpeakerVoice() {
+    const btn = document.getElementById("voice-enroll-speaker");
+    const fb = document.getElementById("voice-speaker-feedback");
+    if (!btn) return;
+    btn.disabled = true;
+    showFeedback(fb, "请连续说 6–8 秒，系统会自动拆成多段声纹样本…");
+    try {
+      const result = await captureSpeakerAudio({ mode: "enroll", seconds: 7500 });
+      const calibration = result.calibration || {};
+      const recommended = calibration.recommendedThreshold;
+      showFeedback(fb, `声纹已录入：${result.embeddingSamples || 1} 个样本，自测均值 ${calibration.selfAvg ?? "—"}${recommended ? `，建议阈值 ${recommended}` : ""}`);
       const speakerVerify = document.getElementById("voice-speaker-verify");
       if (speakerVerify) speakerVerify.checked = true;
       localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "true");
+      if (recommended) {
+        const slider = document.getElementById("voice-speaker-threshold");
+        const val = document.getElementById("voice-speaker-threshold-val");
+        if (slider) slider.value = String(recommended);
+        if (val) val.textContent = Number(recommended).toFixed(2);
+        localStorage.setItem(VOICE_SPEAKER_THRESHOLD_KEY, String(recommended));
+      }
+      await refreshSpeakerStatus();
       try {
         await fetch(`${API}/settings/voice`, {
           method: "POST",
@@ -2304,16 +2352,37 @@ function initTTSSettings() {
     } catch (err) {
       showFeedback(fb, err?.message || "声纹录入失败", true);
     } finally {
-      try { processor?.disconnect(); } catch {}
-      try { await ctx?.close(); } catch {}
-      try { stream?.getTracks().forEach(t => t.stop()); } catch {}
-      try { ws?.close(); } catch {}
+      btn.disabled = false;
+    }
+  }
+
+  async function testSpeakerVoice() {
+    const btn = document.getElementById("voice-test-speaker");
+    const fb = document.getElementById("voice-speaker-feedback");
+    if (!btn) return;
+    btn.disabled = true;
+    showFeedback(fb, "请说 3–4 秒，我会测试当前声纹分数…");
+    try {
+      const result = await captureSpeakerAudio({ mode: "test", seconds: 4200 });
+      if (!result.configured) {
+        showFeedback(fb, "还没有录入声纹，请先录入", true);
+      } else if (result.passed) {
+        showFeedback(fb, `通过：分数 ${result.score} / 阈值 ${result.threshold}（样本 ${result.sampleCount || 1}）`);
+      } else {
+        showFeedback(fb, `未通过：分数 ${result.score} / 阈值 ${result.threshold}。建议降低严格度或重新录入`, true);
+      }
+    } catch (err) {
+      showFeedback(fb, err?.message || "声纹测试失败", true);
+    } finally {
       btn.disabled = false;
     }
   }
 
   const enrollSpeakerBtn = document.getElementById("voice-enroll-speaker");
   if (enrollSpeakerBtn) enrollSpeakerBtn.addEventListener("click", enrollSpeakerVoice);
+  const testSpeakerBtn = document.getElementById("voice-test-speaker");
+  if (testSpeakerBtn) testSpeakerBtn.addEventListener("click", testSpeakerVoice);
+  refreshSpeakerStatus();
 
   const speakerThresholdSlider = document.getElementById("voice-speaker-threshold");
   const speakerThresholdVal = document.getElementById("voice-speaker-threshold-val");

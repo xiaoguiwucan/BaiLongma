@@ -109,31 +109,64 @@ class SenseVoiceServer:
         self.model_name = model_name
         self.model = None
         self.speaker_encoder = None
-        self.voiceprint = self._load_voiceprint()
+        self.voiceprint_data = self._load_voiceprint()
+        self.voiceprint = self.voiceprint_data.get("centroid")
         self._executor = ThreadPoolExecutor(max_workers=1)
+
+    def _normalize_emb(self, emb):
+        emb = np.array(emb, dtype=np.float32)
+        norm = np.linalg.norm(emb)
+        return emb / norm if norm > 0 else emb
 
     def _load_voiceprint(self):
         try:
             with open(VOICEPRINT_PATH, "r", encoding="utf-8") as f:
                 data = json.load(f)
-            emb = np.array(data.get("embedding") or [], dtype=np.float32)
-            if emb.size > 0:
-                norm = np.linalg.norm(emb)
-                if norm > 0:
-                    return emb / norm
+            samples = []
+            for raw in data.get("samples") or []:
+                emb = self._normalize_emb(raw)
+                if emb.size > 0:
+                    samples.append(emb)
+            if not samples and data.get("embedding"):
+                emb = self._normalize_emb(data.get("embedding"))
+                if emb.size > 0:
+                    samples.append(emb)
+            centroid = self._normalize_emb(np.mean(samples, axis=0)) if samples else None
+            return {
+                "centroid": centroid,
+                "samples": samples,
+                "threshold": float(data.get("threshold") or SPEAKER_VERIFY_THRESHOLD),
+                "model": data.get("model") or "resemblyzer-ge2e",
+                "createdAt": data.get("createdAt"),
+                "updatedAt": data.get("updatedAt"),
+            }
         except Exception:
-            pass
-        return None
+            return {"centroid": None, "samples": [], "threshold": SPEAKER_VERIFY_THRESHOLD, "model": "resemblyzer-ge2e"}
 
-    def _save_voiceprint(self, emb):
+    def _save_voiceprint(self, samples, calibration=None):
         os.makedirs(os.path.dirname(VOICEPRINT_PATH), exist_ok=True)
-        emb = np.array(emb, dtype=np.float32)
-        norm = np.linalg.norm(emb)
-        if norm > 0:
-            emb = emb / norm
+        norm_samples = [self._normalize_emb(s) for s in samples if np.array(s).size > 0]
+        centroid = self._normalize_emb(np.mean(norm_samples, axis=0)) if norm_samples else None
+        existing = {}
+        try:
+            with open(VOICEPRINT_PATH, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except Exception:
+            existing = {}
+        payload = {
+            "embedding": centroid.tolist() if centroid is not None else [],
+            "samples": [s.tolist() for s in norm_samples],
+            "sampleCount": len(norm_samples),
+            "model": "resemblyzer-ge2e",
+            "threshold": SPEAKER_VERIFY_THRESHOLD,
+            "createdAt": existing.get("createdAt") or int(asyncio.get_event_loop().time()),
+            "updatedAt": int(asyncio.get_event_loop().time()),
+            "calibration": calibration or {},
+        }
         with open(VOICEPRINT_PATH, "w", encoding="utf-8") as f:
-            json.dump({"embedding": emb.tolist(), "model": "resemblyzer-ge2e", "threshold": SPEAKER_VERIFY_THRESHOLD}, f)
-        self.voiceprint = emb
+            json.dump(payload, f)
+        self.voiceprint_data = {"centroid": centroid, "samples": norm_samples, "threshold": SPEAKER_VERIFY_THRESHOLD, "model": "resemblyzer-ge2e"}
+        self.voiceprint = centroid
 
     def _get_speaker_encoder(self):
         if VoiceEncoder is None or preprocess_wav is None:
@@ -158,18 +191,55 @@ class SenseVoiceServer:
         if self.voiceprint is None:
             return None
         emb = self._speaker_embedding(audio_int16)
-        return float(np.dot(emb, self.voiceprint))
+        centroid_score = float(np.dot(emb, self.voiceprint))
+        sample_scores = [float(np.dot(emb, s)) for s in self.voiceprint_data.get("samples", [])]
+        best_score = max([centroid_score, *sample_scores]) if sample_scores else centroid_score
+        return best_score, centroid_score, sample_scores
 
     def enroll_speaker(self, audio_int16: np.ndarray):
-        emb = self._speaker_embedding(audio_int16)
-        self._save_voiceprint(emb)
-        return {"configured": True, "samples": int(len(audio_int16)), "seconds": round(len(audio_int16) / SAMPLE_RATE, 2)}
+        # Split a longer enrollment into overlapping-ish segments so one noisy section does not dominate.
+        total = len(audio_int16)
+        min_len = int(SAMPLE_RATE * 1.2)
+        if total < int(SAMPLE_RATE * 3.0):
+            raise RuntimeError("录音太短，请至少连续说 5-8 秒")
+        segments = []
+        thirds = np.array_split(audio_int16, 3)
+        for part in thirds:
+            if len(part) >= min_len:
+                segments.append(part)
+        segments.append(audio_int16)
+        embeddings = [self._speaker_embedding(seg) for seg in segments]
+        calibration_scores = []
+        if len(embeddings) > 1:
+            centroid = self._normalize_emb(np.mean(embeddings, axis=0))
+            calibration_scores = [float(np.dot(e, centroid)) for e in embeddings]
+        calibration = {
+            "selfMin": round(min(calibration_scores), 3) if calibration_scores else None,
+            "selfAvg": round(float(np.mean(calibration_scores)), 3) if calibration_scores else None,
+            "recommendedThreshold": 0.50 if calibration_scores and min(calibration_scores) < 0.58 else 0.55,
+        }
+        self._save_voiceprint(embeddings, calibration=calibration)
+        return {
+            "configured": True,
+            "samples": int(total),
+            "seconds": round(total / SAMPLE_RATE, 2),
+            "embeddingSamples": len(embeddings),
+            "calibration": calibration,
+        }
 
     def verify_speaker(self, audio_int16: np.ndarray, threshold=SPEAKER_VERIFY_THRESHOLD):
         if self.voiceprint is None:
             return {"configured": False, "passed": False, "score": None, "reason": "未录入声纹"}
-        score = self._speaker_similarity(audio_int16)
-        return {"configured": True, "passed": score >= threshold, "score": round(score, 3), "threshold": threshold}
+        score, centroid_score, sample_scores = self._speaker_similarity(audio_int16)
+        return {
+            "configured": True,
+            "passed": score >= threshold,
+            "score": round(score, 3),
+            "centroidScore": round(centroid_score, 3),
+            "sampleBestScore": round(max(sample_scores), 3) if sample_scores else None,
+            "sampleCount": len(self.voiceprint_data.get("samples", [])),
+            "threshold": threshold,
+        }
 
     def load_model(self):
         default_local_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "models", "SenseVoiceSmall"))
@@ -248,7 +318,25 @@ class SenseVoiceServer:
                                 "speaker": {"configured": self.voiceprint is not None, "enabled": speaker_verify_enabled},
                             }))
                         elif msg.get("type") == "speaker_status":
-                            await websocket.send(json.dumps({"type": "speaker_status", "configured": self.voiceprint is not None}))
+                            await websocket.send(json.dumps({
+                                "type": "speaker_status",
+                                "configured": self.voiceprint is not None,
+                                "sampleCount": len(self.voiceprint_data.get("samples", [])),
+                                "threshold": self.voiceprint_data.get("threshold", SPEAKER_VERIFY_THRESHOLD),
+                            }))
+                        elif msg.get("type") == "speaker_test_start":
+                            enrolling = "test"
+                            enroll_buf = np.array([], dtype=np.int16)
+                            await websocket.send(json.dumps({"type": "speaker_test_started"}))
+                        elif msg.get("type") == "speaker_test_finish":
+                            enrolling = False
+                            try:
+                                threshold = float(msg.get("speakerThreshold") or speaker_threshold or SPEAKER_VERIFY_THRESHOLD)
+                                result = await asyncio.get_event_loop().run_in_executor(self._executor, self.verify_speaker, enroll_buf, threshold)
+                                await websocket.send(json.dumps({"type": "speaker_test_result", **result}))
+                            except Exception as e:
+                                await websocket.send(json.dumps({"type": "error", "message": f"声纹测试失败: {e}"}))
+                            enroll_buf = np.array([], dtype=np.int16)
                         elif msg.get("type") == "speaker_enroll_start":
                             enrolling = True
                             enroll_buf = np.array([], dtype=np.int16)

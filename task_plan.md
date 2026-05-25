@@ -1,44 +1,43 @@
-# Task Plan: v2.1.212 Xiaozhi-style Wake Word Upgrade
+# Task Plan: v2.1.213 Voiceprint Stability Upgrade
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.212 with a stronger configurable wake-word gate: strict/loose modes, configurable command window, repeat/empty rejection, debug visibility, docs, GitHub backup, and Release assets.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.213 with more stable local voiceprint recognition: multi-sample enrollment, enrollment quality/calibration feedback, speaker self-test, settings UI, docs, GitHub backup, and Release assets.
 
 ## Current Phase
-Complete
+Phase 4
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect current wake-word implementation and settings storage
-- [x] Identify frontend/server config fields to extend
+- [x] Inspect current SenseVoice speaker verification code
+- [x] Inspect current settings enrollment UI
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add wake mode/window/repeat suppression config to backend config
-- [x] Upgrade frontend wake gate logic in voice panel
-- [x] Add settings controls and persistence
+- [x] Store multi-sample voiceprint centroids and metadata
+- [x] Add speaker test/status protocol
+- [x] Add settings UI for voiceprint self-test and calibration feedback
 - **Status:** complete
 
 ### Phase 3: Verification
-- [x] Run syntax checks and targeted smoke checks
-- [x] Log any known blockers
+- [x] Run Python compile and JS syntax checks
+- [x] Run targeted smoke checks
 - **Status:** complete
 
 ### Phase 4: Version, Docs, Release
-- [x] Bump version to 2.1.212
+- [x] Bump version to 2.1.213
 - [x] Update README / CHANGELOG / BACKUP / in-app release notes
-- [x] Commit, tag, push, create GitHub Release with source/bundle assets
-- **Status:** complete
+- [ ] Commit, tag, push, create GitHub Release with source/bundle assets
+- **Status:** in_progress
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Keep ASR provider behavior unchanged | v2.1.212 focuses on wake flow, not ASR replacement |
-| Add strict/loose wake modes | User needs avoiding ordinary conversation/video false wakeups |
-| Make wake command window configurable | Existing hardcoded 8s should be user-tunable |
-| Add repeat suppression | The user previously saw repeated hallucinated phrases; wake gate should reject duplicates/noise more visibly |
+| Keep resemblyzer backend for now | Avoid large new model dependency; improve stability with sampling/calibration first |
+| Store centroid plus sample count | More robust than one embedding from one recording |
+| Add self-test before further model swaps | User needs to know whether current threshold rejects their voice |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| `npm run smoke:tools` logs `better-sqlite3` Node ABI warning under Node v24 | 1 | Smoke assertions still pass 6/6; record as existing local dependency rebuild warning |
+| `npm run smoke:tools` logs `better-sqlite3` Node ABI warning under Node v24 | 1 | Smoke assertions pass 6/6; existing local dependency rebuild warning |

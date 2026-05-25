@@ -1,13 +1,12 @@
-# Findings: v2.1.212 Wake Word Upgrade
+# Findings: v2.1.213 Voiceprint Stability Upgrade
 
 ## Current baseline
-- v2.1.211 shipped a voice state machine and settings debug panel.
-- Current wake logic lives in `src/ui/brain-ui/voice-panel.js` with localStorage keys `bailongma-voice-wake-enabled` and `bailongma-voice-wake-words`.
-- Current behavior: wake enabled by default; if transcript contains any configured wake word, the remainder is accepted; if only wake word is spoken, an 8s command window opens.
-- Current backend config in `src/config.js` stores `wakeWordEnabled` and `wakeWords` only.
+- `src/voice/sensevoice_server.py` stores a single normalized embedding in `data/voiceprint.json`.
+- Enrollment protocol: `speaker_enroll_start` -> PCM -> `speaker_enroll_finish` -> `speaker_enroll_ok`.
+- Verification compares current embedding against stored embedding with cosine similarity and threshold default 0.55.
+- UI has enroll button and threshold slider but no self-test/calibration workflow.
 
-## Needed v2.1.212 additions
-- Persist wake mode: loose contains-keyword vs strict prefix-keyword.
-- Persist wake window seconds instead of hardcoded 8s.
-- Add repeat/noise suppression controls and state debug events.
-- Surface wake status in settings debug panel.
+## Stability gaps
+- One enrollment sample can be too narrow and reject the same user under different distance/noise/video conditions.
+- User cannot test score before enabling strict speaker verification.
+- Stored file has no useful sample metadata beyond embedding/model/threshold.

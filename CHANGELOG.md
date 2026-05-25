@@ -4,6 +4,41 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.213 - 2026-05-26
+
+### 更新内容
+
+- 本地声纹从单一 embedding 升级为多样本声纹：录入时会把 7.5 秒语音拆成多个片段，分别提取 embedding，再计算中心声纹。
+- 声纹验证改为“中心声纹 + 样本最佳分数”综合判断，降低同一用户因距离、音量、语速变化被误拒绝的概率。
+- `data/voiceprint.json` 新增 `samples`、`sampleCount`、`calibration` 等元数据，同时保留旧 `embedding` 字段兼容旧版本。
+- 本地 SenseVoice WebSocket 新增 `speaker_test_start` / `speaker_test_finish` 协议，可在不触发助手的情况下测试当前声音是否通过声纹。
+- 设置页新增“测试我的声纹”按钮和“声纹状态”，会显示分数、阈值和样本数量。
+- 录入完成后显示自校准均值和建议阈值；如果录入样本一致性较低，会建议更宽松阈值。
+
+### 改变原因
+
+- 用户反馈“录了声纹，但识别不到我的声音”。单次声纹样本在真实使用中容易受距离、麦克风角度、噪声、视频播放、语速变化影响。
+- 多样本中心声纹和自测分数可以显著提升可调试性，让用户知道是阈值过高、录入质量差，还是当前环境噪声太强。
+
+### 影响范围
+
+- 不上传任何声纹数据；`data/voiceprint.json` 仍是本机隐私文件，不进入 GitHub。
+- 兼容旧版单 embedding 声纹文件，读取时会自动作为一个样本使用。
+- 本版本仍使用 `resemblyzer`，还没有切换到 3D-Speaker/ECAPA 等更重模型。
+
+### 验证结果
+
+- `python3 -m py_compile src/voice/sensevoice_server.py` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 已有声纹文件可继续使用，但建议用户在 v2.1.213 后重新录入一次，以获得多样本声纹和校准信息。
+- 如果“测试我的声纹”未通过，优先降低声纹严格度到 0.50–0.55，或在安静环境重新录入。
+
 ## v2.1.212 - 2026-05-26
 
 ### 更新内容
