@@ -15,3 +15,7 @@
 
 - Verification passed: `node --check src/voice/voice-event-bus.js`, `node --check src/api.js`, and `node --check src/ui/brain-ui/app-shell.js`.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.220 as `3ac0ca9 feat: add websocket tts audio chunks`.
+- Tagged and pushed `v2.1.220` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.220
+- Uploaded release assets: `backups/v2.1.220/BaiLongma-v2.1.220-source.tar.gz` and `backups/v2.1.220/BaiLongma-v2.1.220.bundle`.

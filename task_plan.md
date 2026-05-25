@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.220 with optional WebSocket TTS audio chunk subscription on top of the existing `/voice/events` JSON lifecycle channel, then back it up to GitHub with detailed docs and Release assets.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -34,12 +34,12 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [ ] Commit changes
-- [ ] Tag `v2.1.220`
-- [ ] Push main and tag to GitHub
-- [ ] Create source tarball and Git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag `v2.1.220`
+- [x] Push main and tag to GitHub
+- [x] Create source tarball and Git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
