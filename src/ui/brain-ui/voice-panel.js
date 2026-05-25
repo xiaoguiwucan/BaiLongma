@@ -92,6 +92,9 @@ const VOICE_WHISPER_MODEL_KEY = 'bailongma-voice-whisper-model'; // 兼容旧版
 const VOICE_LOCAL_ASR_MODEL_KEY = 'bailongma-voice-local-asr-model';
 const VOICE_WAKE_ENABLED_KEY = 'bailongma-voice-wake-enabled';
 const VOICE_WAKE_WORDS_KEY = 'bailongma-voice-wake-words';
+const VOICE_WAKE_MODE_KEY = 'bailongma-voice-wake-mode';
+const VOICE_WAKE_WINDOW_KEY = 'bailongma-voice-wake-window-seconds';
+const VOICE_WAKE_REPEAT_SUPPRESS_KEY = 'bailongma-voice-wake-repeat-suppression';
 const VOICE_SPEAKER_VERIFY_KEY = 'bailongma-voice-speaker-verify';
 const VOICE_SPEAKER_THRESHOLD_KEY = 'bailongma-voice-speaker-threshold';
 const VOICE_VIDEO_DUCK_KEY = 'bailongma-voice-video-duck';
@@ -361,6 +364,7 @@ export function initVoicePanel({
   // 多句累积：Paraformer 按句回调，需拼接完整段落
   let accumulatedText = '';
   let wakeActiveUntil = 0;
+  let lastWakeReject = { text: '', at: 0, count: 0 };
 
   async function startMic() {
     try {
@@ -416,7 +420,10 @@ export function initVoicePanel({
       .split(/[,，、\s]+/)
       .map(w => w.trim())
       .filter(Boolean);
-    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'] };
+    const mode = localStorage.getItem(VOICE_WAKE_MODE_KEY) === 'loose' ? 'loose' : 'strict';
+    const windowSeconds = Math.max(3, Math.min(30, Number(localStorage.getItem(VOICE_WAKE_WINDOW_KEY) || 8) || 8));
+    const repeatSuppression = localStorage.getItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY) !== 'false';
+    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'], mode, windowSeconds, repeatSuppression };
   }
 
   function normalizeWakeText(text = '') {
@@ -426,10 +433,18 @@ export function initVoicePanel({
   function applyWakeWordGate(text = '') {
     const raw = String(text || '').trim();
     const cfg = getWakeConfig();
-    if (!cfg.enabled) return { accepted: true, text: raw, wokeOnly: false };
+    if (!cfg.enabled) return { accepted: true, text: raw, wokeOnly: false, reason: 'wake disabled' };
 
     const now = Date.now();
-    if (wakeActiveUntil > now) return { accepted: true, text: raw, wokeOnly: false };
+    if (wakeActiveUntil > now) return { accepted: true, text: raw, wokeOnly: false, reason: 'wake window active' };
+
+    if (cfg.repeatSuppression) {
+      const normalizedRaw = normalizeWakeText(raw);
+      if (normalizedRaw && normalizedRaw === lastWakeReject.text && now - lastWakeReject.at < 6000) {
+        lastWakeReject = { text: normalizedRaw, at: now, count: lastWakeReject.count + 1 };
+        return { accepted: false, text: '', wokeOnly: false, reason: 'repeat suppressed', repeatCount: lastWakeReject.count };
+      }
+    }
 
     const normalized = normalizeWakeText(raw);
     for (const word of cfg.words) {
@@ -437,6 +452,7 @@ export function initVoicePanel({
       if (!nw) continue;
       const idx = normalized.indexOf(nw);
       if (idx < 0) continue;
+      if (cfg.mode === 'strict' && idx !== 0) continue;
 
       // 从原文里按未归一化唤醒词尽量切掉前缀；切不准时再做宽松替换。
       let remainder = raw;
@@ -444,11 +460,14 @@ export function initVoicePanel({
       if (directIdx >= 0) remainder = raw.slice(directIdx + word.length);
       else remainder = raw.replace(new RegExp(word.split('').map(ch => ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s,，、。.！!？?：:；;]*'), 'i'), '');
       remainder = remainder.replace(/^[\s,，、。.！!？?：:；;]+/, '').trim();
-      wakeActiveUntil = Date.now() + 8000;
-      if (!remainder) return { accepted: false, text: '', wokeOnly: true };
-      return { accepted: true, text: remainder, wokeOnly: false };
+      wakeActiveUntil = Date.now() + cfg.windowSeconds * 1000;
+      lastWakeReject = { text: '', at: 0, count: 0 };
+      if (!remainder) return { accepted: false, text: '', wokeOnly: true, reason: 'wake only', word, windowSeconds: cfg.windowSeconds };
+      return { accepted: true, text: remainder, wokeOnly: false, reason: 'wake matched', word, mode: cfg.mode };
     }
-    return { accepted: false, text: '', wokeOnly: false };
+    const normalizedRaw = normalizeWakeText(raw);
+    if (cfg.repeatSuppression && normalizedRaw) lastWakeReject = { text: normalizedRaw, at: now, count: 1 };
+    return { accepted: false, text: '', wokeOnly: false, reason: cfg.mode === 'strict' ? 'wake not at prefix' : 'wake missing' };
   }
 
   function looksLikeAsrHallucination(text = '') {
@@ -540,8 +559,10 @@ export function initVoicePanel({
           const gated = applyWakeWordGate(text);
           if (!gated.accepted) {
             if (gated.wokeOnly) {
-              if (transcript) transcript.textContent = '已唤醒，请继续说指令…';
-              setStatus(VOICE_STATES.WAKE_DETECTED, { reason: 'wake word detected, waiting command' });
+              if (transcript) transcript.textContent = `已唤醒，请在 ${gated.windowSeconds || 8} 秒内继续说指令…`;
+              setStatus(VOICE_STATES.WAKE_DETECTED, { reason: 'wake word detected, waiting command', word: gated.word, windowSeconds: gated.windowSeconds });
+            } else {
+              setStatus(VOICE_STATES.LISTENING, { reason: gated.reason || 'wake rejected', repeatCount: gated.repeatCount });
             }
             return;
           }
@@ -553,7 +574,7 @@ export function initVoicePanel({
           if (transcript) transcript.textContent = accumulatedText;
           const input = getChatInput?.();
           if (input) input.value = accumulatedText;
-          window.dispatchEvent(new CustomEvent('bailongma:assistant-wake', { detail: { text: acceptedText } }));
+          window.dispatchEvent(new CustomEvent('bailongma:assistant-wake', { detail: { text: acceptedText, wakeReason: gated.reason, wakeWord: gated.word } }));
           triggerDone();
         } else {
           lastTranscriptText = accumulatedText ? accumulatedText + '，' + text : text;

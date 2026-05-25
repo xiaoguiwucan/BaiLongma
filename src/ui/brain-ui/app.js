@@ -2120,6 +2120,9 @@ function initTTSSettings() {
   const VOICE_LOCAL_ASR_MODEL_KEY = "bailongma-voice-local-asr-model";
   const VOICE_WAKE_ENABLED_KEY = "bailongma-voice-wake-enabled";
   const VOICE_WAKE_WORDS_KEY = "bailongma-voice-wake-words";
+  const VOICE_WAKE_MODE_KEY = "bailongma-voice-wake-mode";
+  const VOICE_WAKE_WINDOW_KEY = "bailongma-voice-wake-window-seconds";
+  const VOICE_WAKE_REPEAT_SUPPRESS_KEY = "bailongma-voice-wake-repeat-suppression";
   const VOICE_SPEAKER_VERIFY_KEY = "bailongma-voice-speaker-verify";
   const VOICE_SPEAKER_THRESHOLD_KEY = "bailongma-voice-speaker-threshold";
   const VOICE_VIDEO_DUCK_KEY = "bailongma-voice-video-duck";
@@ -2173,6 +2176,10 @@ function initTTSSettings() {
     localStorage.setItem(VOICE_LOCAL_ASR_MODEL_KEY, savedLocalModel);
     const wakeEnabled = document.getElementById("voice-wake-enabled");
     const wakeWords = document.getElementById("voice-wake-words");
+    const wakeMode = document.getElementById("voice-wake-mode");
+    const wakeWindow = document.getElementById("voice-wake-window");
+    const wakeWindowVal = document.getElementById("voice-wake-window-val");
+    const wakeRepeatSuppression = document.getElementById("voice-wake-repeat-suppression");
     const speakerVerify = document.getElementById("voice-speaker-verify");
     const speakerThreshold = document.getElementById("voice-speaker-threshold");
     const speakerThresholdVal = document.getElementById("voice-speaker-threshold-val");
@@ -2185,10 +2192,20 @@ function initTTSSettings() {
     const savedWakeWords = Array.isArray(serverVoice?.wakeWords) ? serverVoice.wakeWords.join("，") : (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || "小龙马，龙马，白龙马");
     if (wakeEnabled) wakeEnabled.checked = savedWakeEnabled;
     if (wakeWords) wakeWords.value = savedWakeWords;
+    const savedWakeMode = ["loose", "strict"].includes(serverVoice?.wakeMode) ? serverVoice.wakeMode : (localStorage.getItem(VOICE_WAKE_MODE_KEY) || "strict");
+    const savedWakeWindow = Math.max(3, Math.min(30, Number(serverVoice?.wakeWindowSeconds || localStorage.getItem(VOICE_WAKE_WINDOW_KEY) || 8) || 8));
+    const savedWakeRepeatSuppression = typeof serverVoice?.wakeRepeatSuppression === "boolean" ? serverVoice.wakeRepeatSuppression : localStorage.getItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY) !== "false";
+    if (wakeMode) wakeMode.value = savedWakeMode;
+    if (wakeWindow) wakeWindow.value = String(savedWakeWindow);
+    if (wakeWindowVal) wakeWindowVal.textContent = `${savedWakeWindow}s`;
+    if (wakeRepeatSuppression) wakeRepeatSuppression.checked = savedWakeRepeatSuppression;
     const savedSpeakerVerify = typeof serverVoice?.speakerVerificationEnabled === "boolean" ? serverVoice.speakerVerificationEnabled : localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === "true";
     if (speakerVerify) speakerVerify.checked = savedSpeakerVerify;
     localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(savedWakeEnabled));
     localStorage.setItem(VOICE_WAKE_WORDS_KEY, savedWakeWords);
+    localStorage.setItem(VOICE_WAKE_MODE_KEY, savedWakeMode);
+    localStorage.setItem(VOICE_WAKE_WINDOW_KEY, String(savedWakeWindow));
+    localStorage.setItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY, String(savedWakeRepeatSuppression));
     localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(savedSpeakerVerify));
     const savedSpeakerThreshold = parseFloat(localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) || "0.55");
     if (speakerThreshold) speakerThreshold.value = String(savedSpeakerThreshold);
@@ -2205,6 +2222,14 @@ function initTTSSettings() {
   if (voiceThreshSlider && voiceThreshVal) {
     voiceThreshSlider.addEventListener("input", () => {
       voiceThreshVal.textContent = parseFloat(voiceThreshSlider.value).toFixed(3);
+    });
+  }
+
+  const wakeWindowSlider = document.getElementById("voice-wake-window");
+  const wakeWindowVal = document.getElementById("voice-wake-window-val");
+  if (wakeWindowSlider && wakeWindowVal) {
+    wakeWindowSlider.addEventListener("input", () => {
+      wakeWindowVal.textContent = `${Math.round(Number(wakeWindowSlider.value) || 8)}s`;
     });
   }
 
@@ -2309,6 +2334,9 @@ function initTTSSettings() {
       const whisperModel = localAsrModel === "sensevoice-small" ? (localStorage.getItem(VOICE_WHISPER_MODEL_KEY) || "small") : localAsrModel;
       const wakeEnabled = document.getElementById("voice-wake-enabled")?.checked ?? true;
       const wakeWords = document.getElementById("voice-wake-words")?.value?.trim() || "小龙马，龙马，白龙马";
+      const wakeMode = document.getElementById("voice-wake-mode")?.value === "loose" ? "loose" : "strict";
+      const wakeWindowSeconds = Math.max(3, Math.min(30, Number(document.getElementById("voice-wake-window")?.value || 8) || 8));
+      const wakeRepeatSuppression = document.getElementById("voice-wake-repeat-suppression")?.checked ?? true;
       const speakerVerify = document.getElementById("voice-speaker-verify")?.checked ?? false;
       const speakerThreshold = parseFloat(document.getElementById("voice-speaker-threshold")?.value || "0.55");
       const videoDuck = document.getElementById("voice-video-duck")?.checked ?? true;
@@ -2325,6 +2353,9 @@ function initTTSSettings() {
       localStorage.setItem(VOICE_WHISPER_MODEL_KEY, whisperModel);
       localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(wakeEnabled));
       localStorage.setItem(VOICE_WAKE_WORDS_KEY, wakeWords);
+      localStorage.setItem(VOICE_WAKE_MODE_KEY, wakeMode);
+      localStorage.setItem(VOICE_WAKE_WINDOW_KEY, String(wakeWindowSeconds));
+      localStorage.setItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY, String(wakeRepeatSuppression));
       localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(speakerVerify));
       localStorage.setItem(VOICE_SPEAKER_THRESHOLD_KEY, String(speakerThreshold));
       localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(videoDuck));
@@ -2341,6 +2372,9 @@ function initTTSSettings() {
         whisperModel,
         wakeWordEnabled: wakeEnabled,
         wakeWords: wakeWords.split(/[,，、\s]+/).map(w => w.trim()).filter(Boolean),
+        wakeMode,
+        wakeWindowSeconds,
+        wakeRepeatSuppression,
         speakerVerificationEnabled: speakerVerify,
       };
       const aliyunKey = document.getElementById("voice-aliyun-key")?.value?.trim();

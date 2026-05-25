@@ -1,16 +1,13 @@
-# Findings: v2.1.211 Xiaozhi-style Voice Foundation
+# Findings: v2.1.212 Wake Word Upgrade
 
-## Existing baseline
-- Latest released version before this work: v2.1.210.
-- Existing local ASR stack already includes SenseVoiceSmall default, Whisper fallback, wake-word gate, voiceprint gate, and video protection toggles.
-- User requires every version/update to be backed up to GitHub and GitHub Releases with detailed notes and assets.
+## Current baseline
+- v2.1.211 shipped a voice state machine and settings debug panel.
+- Current wake logic lives in `src/ui/brain-ui/voice-panel.js` with localStorage keys `bailongma-voice-wake-enabled` and `bailongma-voice-wake-words`.
+- Current behavior: wake enabled by default; if transcript contains any configured wake word, the remainder is accepted; if only wake word is spoken, an 8s command window opens.
+- Current backend config in `src/config.js` stores `wakeWordEnabled` and `wakeWords` only.
 
-## Research carryover from Xiaozhi
-- Xiaozhi-style flow should be event/state driven: wake, ASR, LLM, TTS lifecycle, interruption, stale round protection.
-- The first safe BaiLongma step is a voice state machine + round/session IDs + settings/debug UI.
-
-
-## Phase 1 discovery
-- `src/ui/brain-ui/voice-panel.js` is the main runtime voice controller: mic lifecycle, ASR WebSocket, wake-word gate, speaker rejection, barge-in, video/media mode, and TTS suspension hooks all live there.
-- Settings markup is generated in `src/ui/brain-ui/app-shell.js`; settings behavior is in `src/ui/brain-ui/app.js` around the voice keys block.
-- Safe integration path: add a small browser-compatible state machine module and wire existing `setStatus(...)` calls through it. Avoid changing ASR/TTS provider behavior in this foundation release.
+## Needed v2.1.212 additions
+- Persist wake mode: loose contains-keyword vs strict prefix-keyword.
+- Persist wake window seconds instead of hardcoded 8s.
+- Add repeat/noise suppression controls and state debug events.
+- Surface wake status in settings debug panel.

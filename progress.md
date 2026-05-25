@@ -1,21 +1,12 @@
-# Progress: v2.1.211 Xiaozhi-style Voice Foundation
+# Progress: v2.1.212 Xiaozhi-style Wake Word Upgrade
 
 ## 2026-05-26
-- Started implementation after user confirmed “开始吧”.
-- Replaced old planning files with v2.1.211 plan focused on voice state foundation.
+- Started v2.1.212 continuation after user asked “继续 做完”.
+- Inspected current wake gate in `voice-panel.js`, settings in `app.js` / `app-shell.js`, and backend voice config in `config.js`.
+- Extended backend voice config with `wakeMode`, `wakeWindowSeconds`, and `wakeRepeatSuppression`.
+- Upgraded frontend wake gate to support strict prefix matching, loose contains matching, configurable wake command window, and repeated rejected transcript suppression.
+- Added Settings controls for wake matching mode, wake command window slider, and repeated false-text suppression.
 
-- Added `src/voice/voice-state-machine.js` with explicit Xiaozhi-style states, transition metadata, roundId/asrSessionId/ttsSessionId generation, stale event checks, event history, and browser `bailongma:voice-state` dispatches.
-- Wired `src/ui/brain-ui/voice-panel.js` to use the state machine for existing ASR/wake/speaker/video/TTS states while preserving current provider behavior.
-- Added Settings → Voice debug panel in `src/ui/brain-ui/app-shell.js` and persistence/update logic in `src/ui/brain-ui/app.js`.
-- Added v2.1.211 release note card in the in-app Update tab.
-- Verification: JS syntax checks passed for `src/voice/voice-state-machine.js`, `src/ui/brain-ui/voice-panel.js`, `src/ui/brain-ui/app.js`, and `src/ui/brain-ui/app-shell.js`.
-- Verification: `npm run smoke:tools` passed 6/6. It still logs the known local `better-sqlite3` Node ABI mismatch for audit persistence under Node v24, but the smoke assertions passed.
-- Verification blocker: `npm run smoke:brain-ui` timed out waiting for `#graph circle`; this appears unrelated to the voice changes and is logged for follow-up.
-
-- Bumped npm package version to 2.1.211.
-- Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.211.
-
-- Committed v2.1.211 as `cef1062 feat: add xiaozhi-style voice state foundation`.
-- Tagged and pushed `v2.1.211` to origin.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.211
-- Uploaded release assets: source tarball and Git bundle under `backups/v2.1.211/`.
+- Bumped package version to 2.1.212.
+- Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.212.
+- Verification: JS syntax checks passed and `npm run smoke:tools` passed 6/6 with the existing better-sqlite3 Node ABI audit warning.

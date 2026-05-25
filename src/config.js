@@ -629,7 +629,7 @@ export function setSocialConfig(updates) {
 }
 
 const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
-const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'wakeWordEnabled', 'wakeWords', 'speakerVerificationEnabled', ...VOICE_SECRET_KEYS]
+const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', ...VOICE_SECRET_KEYS]
 const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
 const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
 const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
@@ -647,6 +647,9 @@ export function getVoiceConfig() {
     localAsrModel: LOCAL_ASR_MODELS.has(stored.localAsrModel) ? stored.localAsrModel : 'sensevoice-small',
     wakeWordEnabled: typeof stored.wakeWordEnabled === 'boolean' ? stored.wakeWordEnabled : true,
     wakeWords: Array.isArray(stored.wakeWords) && stored.wakeWords.length ? stored.wakeWords : ['小龙马', '龙马', '白龙马'],
+    wakeMode: ['loose', 'strict'].includes(stored.wakeMode) ? stored.wakeMode : 'strict',
+    wakeWindowSeconds: Number.isFinite(Number(stored.wakeWindowSeconds)) ? Math.max(3, Math.min(30, Number(stored.wakeWindowSeconds))) : 8,
+    wakeRepeatSuppression: typeof stored.wakeRepeatSuppression === 'boolean' ? stored.wakeRepeatSuppression : true,
     speakerVerificationEnabled: typeof stored.speakerVerificationEnabled === 'boolean' ? stored.speakerVerificationEnabled : false,
   }
   for (const key of VOICE_SECRET_KEYS) {
@@ -688,6 +691,19 @@ export function setVoiceConfig(updates) {
     if (key === 'wakeWords') {
       const words = Array.isArray(val) ? val : String(val || '').split(/[,，、\s]+/)
       next.wakeWords = [...new Set(words.map(w => String(w || '').trim()).filter(Boolean))].slice(0, 12)
+      continue
+    }
+    if (key === 'wakeMode') {
+      if (['loose', 'strict'].includes(trimmed)) next.wakeMode = trimmed
+      continue
+    }
+    if (key === 'wakeWindowSeconds') {
+      const seconds = Number(val)
+      if (Number.isFinite(seconds)) next.wakeWindowSeconds = Math.max(3, Math.min(30, seconds))
+      continue
+    }
+    if (key === 'wakeRepeatSuppression') {
+      next.wakeRepeatSuppression = val === true || trimmed === 'true'
       continue
     }
     if (key === 'speakerVerificationEnabled') {

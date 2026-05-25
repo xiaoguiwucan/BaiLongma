@@ -4,6 +4,44 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.212 - 2026-05-26
+
+### 更新内容
+
+- 唤醒词系统新增“严格 / 宽松”匹配模式：
+  - 严格模式要求语音以唤醒词开头，适合视频播放、多人聊天和高噪声场景，默认启用。
+  - 宽松模式保留旧体验，只要句中包含唤醒词即可触发。
+- 唤醒后指令窗口从固定 8 秒改为可配置 3–30 秒。
+- 新增“抑制重复误识别文本”开关，用于过滤连续重复的错误 ASR 文本，降低视频/噪声导致的误触发。
+- `src/config.js` 增加 `wakeMode`、`wakeWindowSeconds`、`wakeRepeatSuppression` 配置，并通过 `/settings/voice` 保存。
+- `voice-panel.js` 的 wake gate 现在会给状态机写入更明确的拒绝/唤醒原因，例如 `wake missing`、`wake not at prefix`、`repeat suppressed`、`wake matched`。
+- 设置页“语音识别”新增唤醒匹配模式、唤醒窗口滑杆和重复误识别抑制选项。
+
+### 改变原因
+
+- 用户要求只有喊出关键词时才开始识别语音，避免普通聊天或视频声音误唤醒助手。
+- 小智式交互强调明确的唤醒状态和短时间指令窗口，因此需要把旧版硬编码 8 秒窗口改成可配置。
+- 之前出现过重复幻觉文本，本版本进一步在唤醒门控层抑制连续重复的无效文本。
+
+### 影响范围
+
+- 本版本不替换 ASR 模型，不改变声纹模型和视频抗干扰底层能力。
+- 默认从“句中包含唤醒词即可”调整为“严格：必须以唤醒词开头”，误唤醒更少，但用户需要更明确地说“龙马，帮我……”。
+- 如果用户喜欢旧体验，可以在设置里切换为“宽松”。
+
+### 验证结果
+
+- `node --check src/config.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告，但不影响 smoke 断言。
+
+### 部署注意事项
+
+- 源码部署方式不变。
+- 已有用户首次打开设置时会自动写入默认 `wakeMode=strict`、`wakeWindowSeconds=8`、`wakeRepeatSuppression=true`。
+
 ## v2.1.211 - 2026-05-26
 
 ### 更新内容

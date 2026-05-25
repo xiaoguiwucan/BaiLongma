@@ -440,7 +440,23 @@ const createSettingsModal = () => `
               <label class="settings-label" for="voice-wake-words">唤醒词</label>
               <input class="settings-input" type="text" id="voice-wake-words" placeholder="小龙马，龙马，白龙马">
             </div>
-            <p class="settings-hint">启用后，普通说话/视频声音会被忽略；只有识别到唤醒词才会把指令发送给助手。可以说“龙马，帮我查天气”，或只说“龙马”后 8 秒内继续说指令。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-mode">唤醒匹配模式</label>
+              <select class="settings-select" id="voice-wake-mode">
+                <option value="strict">严格：必须以唤醒词开头，推荐</option>
+                <option value="loose">宽松：句中包含唤醒词即可</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-window">唤醒后指令窗口</label>
+              <input type="range" id="voice-wake-window" min="3" max="30" step="1" value="8" style="flex:1;cursor:pointer;">
+              <span id="voice-wake-window-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">8s</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-repeat-suppression">抑制重复误识别文本</label>
+              <input id="voice-wake-repeat-suppression" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <p class="settings-hint">严格模式更适合视频/聊天环境：必须说“龙马，帮我查天气”。只说“龙马”后，会在设定窗口内等待下一句指令；重复误识别文本会被静默忽略。</p>
             <div class="settings-row">
               <label class="settings-label" for="voice-speaker-verify">只响应我的声音</label>
               <input id="voice-speaker-verify" type="checkbox" style="width:auto;flex:none;">
@@ -675,6 +691,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.212</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">增强小智式唤醒词流程，减少视频和普通聊天误唤醒。</p>
+                <ul class="release-note-points">
+                  <li>新增严格/宽松唤醒模式，默认严格：必须以唤醒词开头。</li>
+                  <li>唤醒后指令窗口改为 3–30 秒可配置，不再固定 8 秒。</li>
+                  <li>新增重复误识别文本抑制，降低噪声和视频导致的连续误触发。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.211</span>
