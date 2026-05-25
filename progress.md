@@ -14,3 +14,8 @@
 
 - Bumped npm package version to 2.1.211.
 - Updated README, CHANGELOG, backup document, and in-app release notes for v2.1.211.
+
+- Committed v2.1.211 as `cef1062 feat: add xiaozhi-style voice state foundation`.
+- Tagged and pushed `v2.1.211` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.211
+- Uploaded release assets: source tarball and Git bundle under `backups/v2.1.211/`.

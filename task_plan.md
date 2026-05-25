@@ -4,7 +4,7 @@
 Start the Xiaozhi-inspired optimization plan for BaiLongma by shipping v2.1.211 with a reusable voice interaction state machine, round/session guards, settings/debug visibility, and documentation/release backup discipline.
 
 ## Current Phase
-Phase 5
+Complete
 
 ## Phases
 
@@ -35,8 +35,8 @@ Phase 5
 ### Phase 5: Version, Docs, Release
 - [x] Bump version to 2.1.211
 - [x] Update README / CHANGELOG / BACKUP notes / Brain UI release notes
-- [ ] Commit, tag, push, create GitHub Release with source/bundle assets
-- **Status:** in_progress
+- [x] Commit, tag, push, create GitHub Release with source/bundle assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
