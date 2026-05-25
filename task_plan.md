@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.232 with explicit `tts:speak` safety limits: maximum text length, per-connection cooldown, protocol metadata for those limits, structured `protocol_error` responses, tests, docs, UI notes, and GitHub Release assets.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -29,11 +29,11 @@ Verification complete; release in progress
 
 ### Phase 4: Verification and release
 - [x] Run syntax checks and smoke tests
-- [ ] Commit changes
-- [ ] Tag and push v2.1.232
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** in_progress
+- [x] Commit changes
+- [x] Tag and push v2.1.232
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
