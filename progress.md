@@ -10,3 +10,7 @@
 - Verification passed: protocol document content check for version/tts:speak/tts:cancel/audio_chunk/binaryAudio.
 - Verification passed: `node --check scripts/voice-events-client.mjs` and CLI `--help` output check.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.224 as `471d0c4 docs: add voice events protocol guide`.
+- Tagged and pushed `v2.1.224` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.224
+- Uploaded release assets: `backups/v2.1.224/BaiLongma-v2.1.224-source.tar.gz` and `backups/v2.1.224/BaiLongma-v2.1.224.bundle`.
