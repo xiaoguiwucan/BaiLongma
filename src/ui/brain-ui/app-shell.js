@@ -727,6 +727,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.229</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增事件映射纯函数 smoke，快速保护小智式协议映射。</p>
+                <ul class="release-note-points">
+                  <li>导出 mapVoiceEventToXiaozhi(event)。</li>
+                  <li>新增 scripts/smoke-voice-mapping.mjs。</li>
+                  <li>新增 npm run smoke:voice-mapping，覆盖 13 项核心映射。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.228</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

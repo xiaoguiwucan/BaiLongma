@@ -1,14 +1,15 @@
-# Findings: v2.1.228 Voice Events Full TTS Lifecycle Mapping Smoke
+# Findings: v2.1.229 Voice Event Mapping Pure Smoke
 
 ## Current baseline
-- v2.1.227 smoke verifies ASR final, wake accepted, and TTS audio_ready mappings.
-- Full external playback needs more lifecycle coverage: start, sentence_start, sentence_end, and stop.
-- All lifecycle mappings are deterministic in `voice-event-bus.js` and can be tested with synthetic publish events.
+- `voice-event-bus.js` has a central event-to-Xiaozhi mapping function used by broadcast paths.
+- v2.1.228 WebSocket smoke covers many mappings, but requires starting an API server.
+- Mapping logic itself is pure and can be tested directly.
 
 ## Design finding
-- TTS lifecycle smoke protects the event order vocabulary that hardware clients will use to start queues, play each sentence, and stop playback.
-- Synthetic lifecycle tests do not prove audio quality, but they do protect the JSON protocol contract.
+- Direct pure-function tests are faster and make mapping regressions easier to diagnose.
+- The WebSocket smoke should remain because it validates integration, client cleanup, and publish bridge behavior.
+- Exporting `mapVoiceEventToXiaozhi` gives future tooling and tests a stable runtime source of truth.
 
 ## Remaining future direction
-- Add direct `tts:speak` event-order testing with a mock provider.
-- Add audio chunk binary/base64 sequencing tests once provider mocking exists.
+- Use the exported mapper in protocol documentation generation or snapshot tests.
+- Add TypeScript/JSDoc schema definitions for mapped event payloads.

@@ -4,6 +4,44 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.229 - 2026-05-26
+
+### 更新内容
+
+- `src/voice/voice-event-bus.js` 导出纯函数 `mapVoiceEventToXiaozhi(event)`。
+- 新增 `scripts/smoke-voice-mapping.mjs`。
+- 新增 npm script：`npm run smoke:voice-mapping`。
+- 新增 13 项快速映射检查，覆盖：
+  - ASR partial/final；
+  - wake accepted/rejected；
+  - TTS start/sentence_start/audio_ready/sentence_end/stop；
+  - audio_ready 默认 `contentType`；
+  - interrupt source fallback；
+  - unknown/null 事件返回 `null`。
+
+### 改变原因
+
+- v2.1.225-v2.1.228 通过 WebSocket smoke 间接保护事件映射，但每次都需要启动临时 API server。
+- 抽出纯函数并新增快速 mapping smoke 后，可以在不启动服务端的情况下快速验证核心协议映射，降低后续改动成本。
+
+### 影响范围
+
+- 不改变运行时协议行为。
+- 只是把原内部映射函数作为可测试 API 导出，并新增测试脚本。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `npm run smoke:voice-mapping` 13/13 通过。
+- `npm run smoke:voice-events` 15/15 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 开发者可运行 `npm run smoke:voice-mapping` 快速验证事件映射，无需启动后端。
+
 ## v2.1.228 - 2026-05-26
 
 ### 更新内容

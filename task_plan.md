@@ -1,51 +1,54 @@
-# Task Plan: v2.1.228 Voice Events Full TTS Lifecycle Mapping Smoke
+# Task Plan: v2.1.229 Voice Event Mapping Pure Smoke
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.228 with smoke coverage for the full TTS lifecycle mapping over `/voice/events/publish`.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.229 with an exported pure `mapVoiceEventToXiaozhi` function and a fast mapping smoke test that does not need to start the API server.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Inspect v2.1.227 wake/TTS audio-ready smoke coverage
-- [x] Identify missing coverage: TTS start/sentence_start/sentence_end/stop mappings
-- [x] Choose synthetic TTS lifecycle events that require no provider credentials
+- [x] Inspect current `voice-event-bus.js` mapping function
+- [x] Identify that mapping is only indirectly tested via WebSocket smoke
+- [x] Choose to export the pure mapper and add a direct smoke script
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Extend `scripts/smoke-voice-events.mjs`
-- [x] Publish `tts:start`, `tts:sentence_start`, `tts:audio_ready`, `tts:sentence_end`, and `tts:stop`
-- [x] Verify Xiaozhi-style TTS lifecycle mappings and key metadata fields
+- [x] Export `mapVoiceEventToXiaozhi(event)`
+- [x] Update internal callers to use the exported mapper
+- [x] Add `scripts/smoke-voice-mapping.mjs`
+- [x] Add `npm run smoke:voice-mapping`
+- [x] Cover 13 core mapping cases
 - **Status:** complete
 
 ### Phase 3: Version, Docs, UI Notes
-- [x] Bump package version to 2.1.228
+- [x] Bump package version to 2.1.229
 - [x] Update README, CHANGELOG, BACKUP document, and Brain UI release notes
 - [x] Update progress/final verification log
 - **Status:** complete
 
 ### Phase 4: Verification
 - [x] Run JS syntax checks for touched files
+- [x] Run `npm run smoke:voice-mapping`
 - [x] Run `npm run smoke:voice-events`
 - [x] Run `npm run smoke:tools`
 - **Status:** complete
 
 ### Phase 5: GitHub Backup and Release
-- [x] Commit changes
-- [x] Tag `v2.1.228`
-- [x] Push main and tag to GitHub
-- [x] Create source tarball and Git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag `v2.1.229`
+- [ ] Push main and tag to GitHub
+- [ ] Create source tarball and Git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** pending
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Use synthetic TTS lifecycle events | Tests event mapping without relying on TTS provider credentials |
-| Assert key fields per lifecycle state | External clients need sessionId/index/text/url/reason to manage playback queues |
-| Keep test in `smoke:voice-events` | Centralizes protocol protection in one command |
+| Export the mapper instead of duplicating mapping in tests | Prevents test logic from diverging from runtime logic |
+| Keep WebSocket smoke too | Pure smoke is fast, WebSocket smoke still protects integration/broadcast path |
+| Include null/unknown cases | Protects graceful behavior for unsupported events |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

@@ -81,7 +81,7 @@ export function handleVoiceEventClientMessage(ws, raw) {
   return { handled: false }
 }
 
-function mapToXiaozhi(event) {
+export function mapVoiceEventToXiaozhi(event) {
   const type = event?.type
   const detail = event?.detail || {}
   if (type === 'tts:start') return { type: 'tts', state: 'start', sessionId: detail.sessionId, segmentCount: detail.segmentCount }
@@ -113,7 +113,7 @@ export function publishVoiceEvent(event) {
     detail: event?.detail || {},
   }
   const payload = { type: 'voice_event', event: normalized }
-  const xiaozhi = mapToXiaozhi(normalized)
+  const xiaozhi = mapVoiceEventToXiaozhi(normalized)
   history.push({ ...payload, xiaozhi })
   if (history.length > 100) history.shift()
   for (const ws of clients) {
@@ -131,7 +131,7 @@ export function sendVoiceEventToClient(ws, event) {
     detail: event?.detail || {},
   }
   const payload = { type: 'voice_event', event: normalized }
-  const xiaozhi = mapToXiaozhi(normalized)
+  const xiaozhi = mapVoiceEventToXiaozhi(normalized)
   safeSend(ws, payload)
   if (xiaozhi) safeSend(ws, xiaozhi)
   return { delivered: ws?.readyState === 1 ? 1 : 0, xiaozhi }
