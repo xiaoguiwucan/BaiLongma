@@ -11,3 +11,7 @@
 - Verification passed: `node --check scripts/smoke-voice-events.mjs` and `node --check scripts/voice-events-client.mjs`.
 - Verification passed: `npm run smoke:voice-events` 11/11.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.227 as `347ebbc test: cover wake and tts voice event mappings`.
+- Tagged and pushed `v2.1.227` to origin.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.227
+- Uploaded release assets: `backups/v2.1.227/BaiLongma-v2.1.227-source.tar.gz` and `backups/v2.1.227/BaiLongma-v2.1.227.bundle`.
