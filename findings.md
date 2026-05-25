@@ -1,12 +1,12 @@
-# Findings: v2.1.213 Voiceprint Stability Upgrade
+# Findings: v2.1.214 Video Voice Robustness Upgrade
 
 ## Current baseline
-- `src/voice/sensevoice_server.py` stores a single normalized embedding in `data/voiceprint.json`.
-- Enrollment protocol: `speaker_enroll_start` -> PCM -> `speaker_enroll_finish` -> `speaker_enroll_ok`.
-- Verification compares current embedding against stored embedding with cosine similarity and threshold default 0.55.
-- UI has enroll button and threshold slider but no self-test/calibration workflow.
+- `voice-panel.js` dispatches `bailongma:voice-activity` while video mode is active if mic volume exceeds `BARGEIN_THRESHOLD`.
+- `app.js` listens for `bailongma:voice-activity` and calls `startMediaVoiceDuck({ holdMs: 1800, pause: false })`.
+- Local video is ducked to volume 0.10; YouTube receives setVolume 10; Bilibili/cross-origin fallback pauses.
+- Existing settings: auto duck/pause, Space PTT, system AEC.
 
-## Stability gaps
-- One enrollment sample can be too narrow and reject the same user under different distance/noise/video conditions.
-- User cannot test score before enabling strict speaker verification.
-- Stored file has no useful sample metadata beyond embedding/model/threshold.
+## Gaps
+- Duck volume and hold duration are hardcoded.
+- A single high-volume frame can trigger media duck.
+- Settings UI does not expose current duck status/tuning.

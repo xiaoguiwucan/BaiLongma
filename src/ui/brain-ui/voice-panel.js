@@ -99,6 +99,7 @@ const VOICE_SPEAKER_VERIFY_KEY = 'bailongma-voice-speaker-verify';
 const VOICE_SPEAKER_THRESHOLD_KEY = 'bailongma-voice-speaker-threshold';
 const VOICE_VIDEO_DUCK_KEY = 'bailongma-voice-video-duck';
 const VOICE_VIDEO_AEC_KEY = 'bailongma-voice-video-aec';
+const VOICE_VIDEO_DUCK_SENSITIVITY_KEY = 'bailongma-voice-video-duck-sensitivity';
 
 // 从 localStorage 读取灵敏度阈值，支持运行时动态修改
 function getVoiceThreshold() {
@@ -183,12 +184,21 @@ export function initVoicePanel({
       const sum = micData.dataArray.reduce((a, b) => a + b, 0);
       const vol = (sum / micData.dataArray.length) / 255;
 
-      // 视频播放中：检测到近场人声时通知媒体层先降音量/暂停，让唤醒词和声纹有机会听清。
-      if (mediaModeActive && localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== 'false' && vol > BARGEIN_THRESHOLD) {
+      // 视频播放中：连续检测到近场人声才通知媒体层降音量/暂停，让唤醒词和声纹有机会听清。
+      if (mediaModeActive && localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== 'false') {
+        const sensitivity = Math.max(0.55, Math.min(1.6, Number(localStorage.getItem(VOICE_VIDEO_DUCK_SENSITIVITY_KEY) || 1) || 1));
+        const mediaDuckThreshold = BARGEIN_THRESHOLD * sensitivity;
+        if (vol > mediaDuckThreshold) {
+          mediaVoiceFrames += 1;
+          mediaVoiceLastVol = vol;
+        } else {
+          mediaVoiceFrames = Math.max(0, mediaVoiceFrames - 1);
+        }
         const now = Date.now();
-        if (now - lastMediaVoiceActivityAt > 900) {
+        if (mediaVoiceFrames >= 3 && now - lastMediaVoiceActivityAt > 900) {
           lastMediaVoiceActivityAt = now;
-          window.dispatchEvent(new CustomEvent('bailongma:voice-activity', { detail: { volume: vol } }));
+          mediaVoiceFrames = 0;
+          window.dispatchEvent(new CustomEvent('bailongma:voice-activity', { detail: { volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3 } }));
         }
       }
 
@@ -328,6 +338,8 @@ export function initVoicePanel({
   let mediaModeActive = false;
   let mediaStartedMic = false;
   let lastMediaVoiceActivityAt = 0;
+  let mediaVoiceFrames = 0;
+  let mediaVoiceLastVol = 0;
   let ttsStartTime = 0;
   let bargeinFrames = 0;
   let nearFieldGate = {

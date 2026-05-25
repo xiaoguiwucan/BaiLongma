@@ -496,7 +496,26 @@ const createSettingsModal = () => `
               <label class="settings-label" for="voice-video-aec">启用系统回声消除 AEC</label>
               <input id="voice-video-aec" type="checkbox" checked style="width:auto;flex:none;">
             </div>
-            <p class="settings-hint">本地 mp4 可直接降音量；YouTube 会尝试通过播放器 API 降音量；Bilibili 等跨域播放器无法稳定调音量时会短暂停/恢复。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-video-duck-level">视频降音目标</label>
+              <input type="range" id="voice-video-duck-level" min="0.02" max="0.50" step="0.01" value="0.10" style="flex:1;cursor:pointer;">
+              <span id="voice-video-duck-level-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">10%</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-video-duck-hold">降音保持时间</label>
+              <input type="range" id="voice-video-duck-hold" min="800" max="8000" step="100" value="2200" style="flex:1;cursor:pointer;">
+              <span id="voice-video-duck-hold-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">2.2s</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-video-duck-sensitivity">人声触发灵敏度</label>
+              <input type="range" id="voice-video-duck-sensitivity" min="0.55" max="1.60" step="0.05" value="1.00" style="flex:1;cursor:pointer;">
+              <span id="voice-video-duck-sensitivity-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">1.00</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label">当前降音状态</label>
+              <span class="settings-config-info" id="voice-media-duck-status">空闲</span>
+            </div>
+            <p class="settings-hint">本地 mp4 可直接降音量；YouTube 会尝试通过播放器 API 降音量；Bilibili 等跨域播放器无法稳定调音量时会短暂停/恢复。v2.1.214 起会连续确认近场声音后再降音，避免爆炸声/鼓点单帧误触发。</p>
           </div>
           <div class="settings-section">
             <div class="settings-section-label">语音灵敏度</div>
@@ -696,6 +715,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v2.1.214</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">增强视频播放抗干扰，让唤醒词更容易盖过视频声音。</p>
+                <ul class="release-note-points">
+                  <li>视频降音触发改为连续帧确认，减少单帧噪声误触发。</li>
+                  <li>新增视频降音目标、保持时间和触发灵敏度设置。</li>
+                  <li>新增当前降音状态显示，方便调试视频播放时的语音唤醒。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.213</span>

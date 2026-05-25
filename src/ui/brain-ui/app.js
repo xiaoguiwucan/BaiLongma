@@ -2127,7 +2127,10 @@ function initTTSSettings() {
   const VOICE_SPEAKER_THRESHOLD_KEY = "bailongma-voice-speaker-threshold";
   const VOICE_VIDEO_DUCK_KEY = "bailongma-voice-video-duck";
   const VOICE_VIDEO_PTT_KEY = "bailongma-voice-video-ptt";
+  const VOICE_VIDEO_DUCK_LEVEL_KEY = "bailongma-voice-video-duck-level";
+  const VOICE_VIDEO_DUCK_HOLD_KEY = "bailongma-voice-video-duck-hold";
   const VOICE_VIDEO_AEC_KEY = "bailongma-voice-video-aec";
+  const VOICE_VIDEO_DUCK_SENSITIVITY_KEY = "bailongma-voice-video-duck-sensitivity";
   const VOICE_DEBUG_ENABLED_KEY = "bailongma-voice-debug-enabled";
   const VOICE_LOCAL_DEFAULT_MIGRATION_KEY = "bailongma-voice-local-default-v1";
 
@@ -2186,6 +2189,12 @@ function initTTSSettings() {
     const videoDuck = document.getElementById("voice-video-duck");
     const videoPtt = document.getElementById("voice-video-ptt");
     const videoAec = document.getElementById("voice-video-aec");
+    const videoDuckLevel = document.getElementById("voice-video-duck-level");
+    const videoDuckLevelVal = document.getElementById("voice-video-duck-level-val");
+    const videoDuckHold = document.getElementById("voice-video-duck-hold");
+    const videoDuckHoldVal = document.getElementById("voice-video-duck-hold-val");
+    const videoDuckSensitivity = document.getElementById("voice-video-duck-sensitivity");
+    const videoDuckSensitivityVal = document.getElementById("voice-video-duck-sensitivity-val");
     const voiceDebugEnabled = document.getElementById("voice-debug-enabled");
     const voiceDebugPanel = document.getElementById("voice-debug-panel");
     const savedWakeEnabled = typeof serverVoice?.wakeWordEnabled === "boolean" ? serverVoice.wakeWordEnabled : localStorage.getItem(VOICE_WAKE_ENABLED_KEY) !== "false";
@@ -2213,6 +2222,15 @@ function initTTSSettings() {
     if (videoDuck) videoDuck.checked = localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== "false";
     if (videoPtt) videoPtt.checked = localStorage.getItem(VOICE_VIDEO_PTT_KEY) !== "false";
     if (videoAec) videoAec.checked = localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== "false";
+    const savedDuckLevel = Math.max(0.02, Math.min(0.50, Number(localStorage.getItem(VOICE_VIDEO_DUCK_LEVEL_KEY) || 0.10) || 0.10));
+    const savedDuckHold = Math.max(800, Math.min(8000, Number(localStorage.getItem(VOICE_VIDEO_DUCK_HOLD_KEY) || 2200) || 2200));
+    const savedDuckSensitivity = Math.max(0.55, Math.min(1.60, Number(localStorage.getItem(VOICE_VIDEO_DUCK_SENSITIVITY_KEY) || 1.0) || 1.0));
+    if (videoDuckLevel) videoDuckLevel.value = String(savedDuckLevel);
+    if (videoDuckLevelVal) videoDuckLevelVal.textContent = `${Math.round(savedDuckLevel * 100)}%`;
+    if (videoDuckHold) videoDuckHold.value = String(savedDuckHold);
+    if (videoDuckHoldVal) videoDuckHoldVal.textContent = `${(savedDuckHold / 1000).toFixed(1)}s`;
+    if (videoDuckSensitivity) videoDuckSensitivity.value = String(savedDuckSensitivity);
+    if (videoDuckSensitivityVal) videoDuckSensitivityVal.textContent = savedDuckSensitivity.toFixed(2);
     const debugEnabled = localStorage.getItem(VOICE_DEBUG_ENABLED_KEY) !== "false";
     if (voiceDebugEnabled) voiceDebugEnabled.checked = debugEnabled;
     if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
@@ -2392,6 +2410,28 @@ function initTTSSettings() {
     });
   }
 
+  const videoDuckLevelSlider = document.getElementById("voice-video-duck-level");
+  const videoDuckLevelVal = document.getElementById("voice-video-duck-level-val");
+  if (videoDuckLevelSlider && videoDuckLevelVal) {
+    videoDuckLevelSlider.addEventListener("input", () => {
+      videoDuckLevelVal.textContent = `${Math.round(Number(videoDuckLevelSlider.value || 0.1) * 100)}%`;
+    });
+  }
+  const videoDuckHoldSlider = document.getElementById("voice-video-duck-hold");
+  const videoDuckHoldVal = document.getElementById("voice-video-duck-hold-val");
+  if (videoDuckHoldSlider && videoDuckHoldVal) {
+    videoDuckHoldSlider.addEventListener("input", () => {
+      videoDuckHoldVal.textContent = `${(Number(videoDuckHoldSlider.value || 2200) / 1000).toFixed(1)}s`;
+    });
+  }
+  const videoDuckSensitivitySlider = document.getElementById("voice-video-duck-sensitivity");
+  const videoDuckSensitivityVal = document.getElementById("voice-video-duck-sensitivity-val");
+  if (videoDuckSensitivitySlider && videoDuckSensitivityVal) {
+    videoDuckSensitivitySlider.addEventListener("input", () => {
+      videoDuckSensitivityVal.textContent = Number(videoDuckSensitivitySlider.value || 1).toFixed(2);
+    });
+  }
+
   if (saveVoiceBtn) {
     saveVoiceBtn.addEventListener("click", async () => {
       const lang      = document.getElementById("voice-lang-select")?.value || "zh-CN";
@@ -2411,6 +2451,9 @@ function initTTSSettings() {
       const videoDuck = document.getElementById("voice-video-duck")?.checked ?? true;
       const videoPtt = document.getElementById("voice-video-ptt")?.checked ?? true;
       const videoAec = document.getElementById("voice-video-aec")?.checked ?? true;
+      const videoDuckLevel = Math.max(0.02, Math.min(0.50, Number(document.getElementById("voice-video-duck-level")?.value || 0.10) || 0.10));
+      const videoDuckHold = Math.max(800, Math.min(8000, Number(document.getElementById("voice-video-duck-hold")?.value || 2200) || 2200));
+      const videoDuckSensitivity = Math.max(0.55, Math.min(1.60, Number(document.getElementById("voice-video-duck-sensitivity")?.value || 1.0) || 1.0));
       const voiceDebugEnabled = document.getElementById("voice-debug-enabled")?.checked ?? true;
 
       localStorage.setItem(VOICE_LANG_KEY,      lang);
@@ -2430,6 +2473,9 @@ function initTTSSettings() {
       localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(videoDuck));
       localStorage.setItem(VOICE_VIDEO_PTT_KEY, String(videoPtt));
       localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(videoAec));
+      localStorage.setItem(VOICE_VIDEO_DUCK_LEVEL_KEY, String(videoDuckLevel));
+      localStorage.setItem(VOICE_VIDEO_DUCK_HOLD_KEY, String(videoDuckHold));
+      localStorage.setItem(VOICE_VIDEO_DUCK_SENSITIVITY_KEY, String(videoDuckSensitivity));
       localStorage.setItem(VOICE_DEBUG_ENABLED_KEY, String(voiceDebugEnabled));
       localStorage.setItem(VOICE_LOCAL_DEFAULT_MIGRATION_KEY, "1");
 
@@ -3080,9 +3126,25 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
     return videoActive && videoKind && videoKind !== "empty" && videoKind !== "camera";
   }
 
-  function startMediaVoiceDuck({ holdMs = 1800, pause = false } = {}) {
+  function getMediaDuckLevel() {
+    return Math.max(0.02, Math.min(0.50, Number(localStorage.getItem(VOICE_VIDEO_DUCK_LEVEL_KEY) || 0.10) || 0.10));
+  }
+
+  function getMediaDuckHoldMs(fallback = 2200) {
+    return Math.max(800, Math.min(8000, Number(localStorage.getItem(VOICE_VIDEO_DUCK_HOLD_KEY) || fallback) || fallback));
+  }
+
+  function updateMediaDuckStatus(active, detail = {}) {
+    window.dispatchEvent(new CustomEvent("bailongma:media-duck", { detail: { active, ...detail } }));
+    const el = document.getElementById("voice-media-duck-status");
+    if (el) el.textContent = active ? `已压低视频音量（${detail.kind || videoKind}）` : "空闲";
+  }
+
+  function startMediaVoiceDuck({ holdMs = null, pause = false } = {}) {
     if (!isVideoPlayableActive()) return;
     if (localStorage.getItem(VOICE_VIDEO_DUCK_KEY) === "false" && !pause) return;
+    holdMs = holdMs == null ? getMediaDuckHoldMs() : holdMs;
+    const duckLevel = getMediaDuckLevel();
     const now = Date.now();
     const existing = mediaVoiceDuck;
     if (!existing) {
@@ -3096,10 +3158,10 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
       };
       if (videoKind === "file" && videoFeed) {
         videoFeed.dataset.voiceDuck = "1";
-        videoFeed.volume = Math.min(videoFeed.volume || 1, 0.10);
+        videoFeed.volume = Math.min(videoFeed.volume || 1, duckLevel);
         videoFeed.muted = false;
       } else if (videoKind === "youtube") {
-        postFrameCommand("setVolume", [10]);
+        postFrameCommand("setVolume", [Math.round(duckLevel * 100)]);
       } else if (videoKind === "bilibili") {
         pauseCurrentVideo();
         mediaVoiceDuck.paused = true;
@@ -3109,6 +3171,7 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
       pauseCurrentVideo();
       mediaVoiceDuck.paused = true;
     }
+    updateMediaDuckStatus(true, { kind: videoKind, paused: Boolean(mediaVoiceDuck?.paused), duckLevel, holdMs });
     clearTimeout(mediaVoiceDuck.timer);
     mediaVoiceDuck.timer = setTimeout(() => restoreMediaVoiceDuck(), holdMs);
   }
@@ -3130,11 +3193,12 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
     } else if (duck.kind === "bilibili") {
       if (duck.paused) resumeCurrentVideo();
     }
+    updateMediaDuckStatus(false, { kind: duck.kind });
   }
 
   function pauseForAssistantVoice() {
     if (!isVideoPlayableActive()) return;
-    startMediaVoiceDuck({ holdMs: 12000, pause: true });
+    startMediaVoiceDuck({ holdMs: Math.max(12000, getMediaDuckHoldMs(2200) * 4), pause: true });
   }
 
   function resetVideoSurface() {
@@ -3586,7 +3650,7 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
 
   window.bailongmaMedia = { handle: handleMediaCommand, showVideo, controlVideo, showImage, showCamera, showMusic, controlMusic, startMediaVoiceDuck, restoreMediaVoiceDuck, pauseForAssistantVoice };
   window.addEventListener("bailongma:media", (event) => handleMediaCommand(event.detail || {}));
-  window.addEventListener("bailongma:voice-activity", () => startMediaVoiceDuck({ holdMs: 1800, pause: false }));
+  window.addEventListener("bailongma:voice-activity", (event) => startMediaVoiceDuck({ holdMs: getMediaDuckHoldMs(), pause: false, volume: event.detail?.volume }));
   window.addEventListener("bailongma:assistant-wake", () => pauseForAssistantVoice());
 
   // Push-to-talk：按住空格说话；Agent 正在说话时按下空格直接打断
