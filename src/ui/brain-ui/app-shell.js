@@ -548,6 +548,7 @@ const createSettingsModal = () => `
               <label class="settings-label">声纹录入</label>
               <button class="settings-save-btn" id="voice-enroll-speaker" type="button">录入/重录声纹</button>
               <button class="settings-save-btn" id="voice-test-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">测试我的声纹</button>
+              <button class="settings-save-btn" id="voice-clear-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">清除声纹</button>
               <span class="settings-feedback" id="voice-speaker-feedback"></span>
             </div>
             <div class="settings-row">

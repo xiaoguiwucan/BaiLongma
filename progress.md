@@ -334,3 +334,9 @@
 - After a successful start request, Brain UI refreshes both speaker status and the local voice doctor so the two diagnostic panels stay synchronized.
 - Extended brain-ui smoke coverage for the start-service button, feedback text, and post-start speaker status transition.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added a clear/re-enroll path for local voiceprint recovery when a bad enrollment causes repeated rejection.
+- SenseVoice local server now accepts `speaker_clear`, deletes `data/voiceprint.json`, and resets in-memory voiceprint samples/centroid.
+- New backend `POST /voice/local/speaker/clear` guards against clearing while the local service is stopped and disables speaker verification after a successful clear.
+- Brain UI now has a “清除声纹” button beside enroll/test; after clearing it refreshes speaker status and local voice doctor and prompts the user to re-enroll.
+- Extended smoke coverage for stopped-service clear rejection and UI clear flow.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

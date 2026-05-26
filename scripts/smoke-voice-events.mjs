@@ -93,6 +93,8 @@ try {
   assert(summaryBefore.ok === true && summaryBefore.summary?.level === 'offline' && summaryBefore.summary?.issues?.includes('no_clients'), 'summary endpoint reports offline before clients connect', JSON.stringify(summaryBefore))
   const speakerStatusBefore = await fetch(`${API}/voice/local/speaker/status`).then(r => r.json())
   assert(speakerStatusBefore.ok === true && speakerStatusBefore.speaker?.reachable === false && speakerStatusBefore.local?.status, 'local speaker status endpoint reports unreachable when local service is stopped', JSON.stringify(speakerStatusBefore.speaker))
+  const clearSpeakerStopped = await fetch(`${API}/voice/local/speaker/clear`, { method: 'POST' }).then(r => r.json())
+  assert(clearSpeakerStopped.ok === false && clearSpeakerStopped.code === 'local_voice_not_running', 'local speaker clear requires running local service', JSON.stringify(clearSpeakerStopped))
   const localDoctorBefore = await fetch(`${API}/voice/local/doctor?windowMs=60000`).then(r => r.json())
   assert(localDoctorBefore.ok === true && localDoctorBefore.checks?.some(item => item.id === 'provider') && localDoctorBefore.checks?.some(item => item.id === 'process') && Array.isArray(localDoctorBefore.nextActions), 'local voice doctor endpoint exposes readiness checks and next actions', JSON.stringify(localDoctorBefore))
   assert(localDoctorBefore.speakerStatus?.reachable === false && localDoctorBefore.checks?.some(item => item.id === 'speaker_gate'), 'local voice doctor includes runtime speaker status when local service is not running', JSON.stringify(localDoctorBefore.speakerStatus))

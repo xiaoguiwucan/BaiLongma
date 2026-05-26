@@ -168,6 +168,17 @@ class SenseVoiceServer:
         self.voiceprint_data = {"centroid": centroid, "samples": norm_samples, "threshold": SPEAKER_VERIFY_THRESHOLD, "model": "resemblyzer-ge2e"}
         self.voiceprint = centroid
 
+
+    def _clear_voiceprint(self):
+        try:
+            if os.path.exists(VOICEPRINT_PATH):
+                os.remove(VOICEPRINT_PATH)
+        except Exception:
+            pass
+        self.voiceprint_data = {"centroid": None, "samples": [], "threshold": SPEAKER_VERIFY_THRESHOLD, "model": "resemblyzer-ge2e"}
+        self.voiceprint = None
+        return {"configured": False, "sampleCount": 0, "threshold": SPEAKER_VERIFY_THRESHOLD}
+
     def _get_speaker_encoder(self):
         if VoiceEncoder is None or preprocess_wav is None:
             raise RuntimeError("缺少声纹依赖，请运行: pip install resemblyzer webrtcvad-wheels")
@@ -324,6 +335,9 @@ class SenseVoiceServer:
                                 "sampleCount": len(self.voiceprint_data.get("samples", [])),
                                 "threshold": self.voiceprint_data.get("threshold", SPEAKER_VERIFY_THRESHOLD),
                             }))
+                        elif msg.get("type") == "speaker_clear":
+                            result = self._clear_voiceprint()
+                            await websocket.send(json.dumps({"type": "speaker_clear_ok", **result}))
                         elif msg.get("type") == "speaker_test_start":
                             enrolling = "test"
                             enroll_buf = np.array([], dtype=np.int16)

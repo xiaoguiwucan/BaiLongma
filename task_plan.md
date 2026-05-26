@@ -406,3 +406,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui smoke coverage for start-service feedback and status transition.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 41: Clear and re-enroll voiceprint
+- [x] Add `speaker_clear` command to the local SenseVoice WebSocket service.
+- [x] Remove local `data/voiceprint.json` and reset in-memory voiceprint state when clearing.
+- [x] Add backend `POST /voice/local/speaker/clear` with local-service-running guard.
+- [x] Disable speaker verification after a successful clear to avoid rejecting all wake attempts.
+- [x] Add Brain UI “清除声纹” action next to enroll/test controls.
+- [x] Refresh speaker status and local voice doctor after clearing.
+- [x] Extend brain-ui and voice-events smoke coverage.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

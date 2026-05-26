@@ -503,6 +503,13 @@ new WebSocket(url)`,
       return
     }
 
+
+    if (url.pathname === '/voice/local/speaker/clear') {
+      localDoctorFixed = false
+      sendJson(res, { ok: true, cleared: true, speaker: { ok: true, reachable: true, configured: false, sampleCount: 0, threshold: 0.55 }, voice: { speakerVerificationEnabled: false } })
+      return
+    }
+
     if (url.pathname === '/voice/local/doctor') {
       sendJson(res, {
         ok: true,
@@ -703,6 +710,9 @@ try {
   await page.click('#voice-speaker-start-service')
   await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已请求启动'))
   await page.waitForFunction(() => document.querySelector('#voice-speaker-status')?.textContent.includes('已录入'))
+  await page.click('#voice-clear-speaker')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('声纹已清除'))
+  await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-verify') === 'false')
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())

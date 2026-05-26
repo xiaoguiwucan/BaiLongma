@@ -232,6 +232,38 @@ async function queryLocalSpeakerStatus({ timeoutMs = 900 } = {}) {
   })
 }
 
+
+async function clearLocalSpeakerVoiceprint({ timeoutMs = 1200 } = {}) {
+  const local = getVoiceStatus()
+  if (local.status !== 'running') {
+    const err = new Error('Local voice service is not running.')
+    err.statusCode = 409
+    err.code = 'local_voice_not_running'
+    throw err
+  }
+  return await new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (err, value) => {
+      if (settled) return
+      settled = true
+      try { ws.close() } catch (_) {}
+      clearTimeout(timer)
+      err ? reject(err) : resolve(value)
+    }
+    const ws = new WebSocket(`ws://127.0.0.1:${local.port || 3723}`)
+    const timer = setTimeout(() => finish(new Error('Speaker clear timeout.')), timeoutMs)
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'speaker_clear' })))
+    ws.on('message', raw => {
+      try {
+        const msg = JSON.parse(String(raw))
+        if (msg.type === 'speaker_clear_ok') finish(null, { ok: true, configured: Boolean(msg.configured), sampleCount: Number(msg.sampleCount || 0), threshold: msg.threshold })
+        if (msg.type === 'error') finish(new Error(msg.message || 'Speaker clear failed.'))
+      } catch (_) {}
+    })
+    ws.on('error', err => finish(err))
+  })
+}
+
 function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) {
   const voice = getVoiceConfig()
   const local = getVoiceStatus()
@@ -1824,6 +1856,18 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         jsonResponse(res, 200, { ok: true, speaker: speakerStatus, local: getVoiceStatus(), voice: getVoiceConfig() })
       }).catch(err => {
         jsonResponse(res, 200, { ok: true, speaker: { ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' }, local: getVoiceStatus(), voice: getVoiceConfig() })
+      })
+      return
+    }
+
+
+    // POST /voice/local/speaker/clear — clear local voiceprint from local ASR service
+    if (req.method === 'POST' && url.pathname === '/voice/local/speaker/clear') {
+      clearLocalSpeakerVoiceprint().then(result => {
+        setVoiceConfig({ speakerVerificationEnabled: false })
+        jsonResponse(res, 200, { ok: true, cleared: true, speaker: result, voice: getVoiceConfig() })
+      }).catch(err => {
+        jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message, code: err.code || 'speaker_clear_failed' })
       })
       return
     }

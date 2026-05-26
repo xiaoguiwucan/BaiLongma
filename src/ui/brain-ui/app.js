@@ -3467,6 +3467,29 @@ function initTTSSettings() {
     }
   }
 
+
+  async function clearSpeakerVoice() {
+    const btn = document.getElementById("voice-clear-speaker");
+    const fb = document.getElementById("voice-speaker-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在清除本机声纹…");
+    try {
+      const resp = await fetch(`${API}/voice/local/speaker/clear`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "清除失败");
+      const speakerVerify = document.getElementById("voice-speaker-verify");
+      if (speakerVerify) speakerVerify.checked = false;
+      localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "false");
+      showFeedback(fb, "声纹已清除，请重新录入");
+      await refreshSpeakerStatus();
+      try { await refreshVoiceLocalDoctor(); } catch {}
+    } catch (err) {
+      showFeedback(fb, err?.message || "清除失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
   const enrollSpeakerBtn = document.getElementById("voice-enroll-speaker");
   if (enrollSpeakerBtn) enrollSpeakerBtn.addEventListener("click", enrollSpeakerVoice);
   document.getElementById("voice-speaker-enroll-shortcut")?.addEventListener("click", () => enrollSpeakerBtn?.click());
@@ -3474,6 +3497,7 @@ function initTTSSettings() {
   document.getElementById("voice-speaker-refresh-status")?.addEventListener("click", refreshSpeakerStatus);
   const testSpeakerBtn = document.getElementById("voice-test-speaker");
   if (testSpeakerBtn) testSpeakerBtn.addEventListener("click", testSpeakerVoice);
+  document.getElementById("voice-clear-speaker")?.addEventListener("click", clearSpeakerVoice);
   refreshSpeakerStatus();
 
   const speakerThresholdSlider = document.getElementById("voice-speaker-threshold");
