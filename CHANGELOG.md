@@ -5,6 +5,84 @@
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
 
+
+## v2.3.2 - 2026-05-26
+
+### 更新内容
+
+这是语音唤醒稳定性补丁版，收束 v2.3.1 之后的三个开发检查点：视频/音乐 pre-roll 预录音门控、语音调试面板增强、partial ASR 与正式指令发送分离。
+
+- `package.json` / `package-lock.json` 版本升级到 `2.3.2`。
+- 新增视频/音乐 pre-roll 音频缓存：媒体播放时保留最近 0.8–4 秒麦克风环形缓存，检测到近场人声后打开临时 ASR 门控并先 flush 预录音块，降低视频声音盖住唤醒词开头时丢字的问题。
+- 设置页新增“视频/音乐预录音缓存”开关和“预录音时长”滑杆；后端配置新增 `videoVoicePreRollEnabled` / `videoVoicePreRollMs`。
+- 视频抗干扰预设、readiness wizard、local doctor 和 Brain UI smoke 均纳入 pre-roll 配置。
+- 语音调试面板增强：显示麦克风/VAD 当前值、峰值、阈值，唤醒通过/拒绝原因和置信度，声纹通过/拒绝分数和阈值，媒体 ASR 门控/pre-roll 缓存状态。
+- 修复 ASR partial 中间结果可能变成待发送指令的问题：partial 现在只用于显示/调试，不再写入 `lastTranscriptText`，也不会触发 auto-send。只有 final 且通过唤醒/声纹门控后的文本才会进入正式发送。
+- wake rejected 或 ASR 幻觉过滤时会清空待发送文本，并显示清楚的忽略原因，避免残留 partial 文本被误发。
+- 新增 `npm run smoke:voice-panel-gating`，保护“partial 不得绕过唤醒门控触发发送”的关键不变量。
+
+### 改变原因
+
+- 用户反馈视频播放声音会盖住本人唤醒，单纯降音/AEC 仍可能导致唤醒词开头已经丢失。pre-roll 能在检测到近场人声后补回开头音频。
+- 真实使用中需要看见“到底是麦克风没听到、唤醒被拒绝、声纹被拒绝，还是媒体门控没打开”，所以调试面板必须显示关键判定数据。
+- partial ASR 只是临时识别结果，不应该绕过唤醒词和声纹成为正式指令；这一步让唤醒门控和正式命令文本更清晰分离。
+- v2.3.1 后已经积累多个相关检查点，继续不发版会再次造成版本跨度过大，因此收束为 v2.3.2。
+
+### 影响范围
+
+- 默认仍使用本地 ASR/SenseVoiceSmall，Whisper 保留备用。
+- 视频/音乐 pre-roll 只在媒体模式且开启视频降音/预录音时工作；不会把原始音频保存到磁盘，只在内存中保留短暂环形缓存。
+- partial ASR 不再触发自动发送，可能让界面看见临时文字但不会发送；最终文本通过门控后才会进入聊天输入/自动发送。
+- 如果用户关闭预录音缓存，媒体场景退回 v2.3.1 之前的降音/PTT/AEC 行为。
+
+### 验证结果
+
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `node --check src/config.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-brain-ui.mjs` 通过。
+- `node --check scripts/smoke-voice-panel-gating.mjs` 通过。
+- `npm run smoke:voice-panel-gating` 7/7 通过。
+- `npm run smoke:brain-ui` 通过。
+- `npm run smoke:voice-events` 92/92 通过。
+- `npm run smoke:voice-manager` 7/7 通过。
+
+### 部署注意事项
+
+源码运行：
+
+```bash
+npm install
+npm start
+```
+
+Mac 打包：
+
+```bash
+npm run build:mac
+```
+
+建议打开 Brain UI -> 设置 -> 语音识别：
+
+1. 应用“视频抗干扰”预设。
+2. 确认“视频/音乐预录音缓存”开启。
+3. 播放视频后打开“小智式语音状态机”，观察麦克风/VAD、唤醒判定、声纹判定和媒体门控状态。
+
+### 备份附件说明
+
+- Release 应上传 `BaiLongma-source-v2.3.2.zip`：Git 追踪源码快照。
+- Release 应上传 `BaiLongma-v2.3.2.bundle`：离线 Git bundle。
+- 如 Mac arm64 打包成功，应上传 `Bailongma-2.3.2-arm64.dmg` 和 `Bailongma-2.3.2-mac-arm64.zip`。
+- 不上传 `.env`、`config.json`、`data/`、`node_modules/`、本地模型目录、虚拟环境和运行时缓存。
+
+### 已知限制
+
+- pre-roll 只能补回麦克风实际采到的音频；如果视频外放极大、麦克风完全收不到本人声音，仍需要降低播放音量、靠近麦克风或使用空格按住说话。
+- 当前仍是软件侧唤醒门控，不等同于专用 KWS/WakeNet；后续可继续接入 sherpa-onnx KWS 或 openWakeWord。
+- Mac 包仍未 notarize，跨机器首次打开可能需要在系统设置中允许。
+
 ## v2.3.1 - 2026-05-26
 
 ### 更新内容

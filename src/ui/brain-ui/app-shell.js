@@ -904,6 +904,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.3.2</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">语音唤醒稳定性补丁版：视频/音乐 pre-roll、调试面板增强、partial ASR 不再绕过唤醒门控自动发送。</p>
+                <ul class="release-note-points">
+                  <li>视频/音乐播放时保留短暂麦克风环形缓存，检测到近场人声后先 flush 预录音，减少唤醒词开头丢失。</li>
+                  <li>语音调试面板新增 VAD/麦克风、唤醒原因、声纹分数、媒体门控和 pre-roll 状态。</li>
+                  <li>ASR partial 只用于显示/调试；只有 final 且通过唤醒/声纹门控后才进入正式发送。</li>
+                  <li>新增 smoke:voice-panel-gating，保护 partial 不得触发自动发送的不变量。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.3.1</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
