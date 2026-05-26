@@ -2892,6 +2892,58 @@ function initTTSSettings() {
   }
   document.getElementById("voice-local-doctor-refresh")?.addEventListener("click", refreshVoiceLocalDoctor);
   document.getElementById("voice-readiness-apply")?.addEventListener("click", applyVoiceReadinessWizard);
+  document.getElementById("voice-self-test-start")?.addEventListener("click", startVoiceSelfTest);
+  let voiceSelfTestSince = 0;
+
+  function renderVoiceSelfTest(test = {}) {
+    const steps = Array.isArray(test.steps) ? test.steps : [];
+    if (!steps.length) return '<div class="voice-clients-empty">还没有开始实测。</div>';
+    const header = `<div class="voice-readiness-helper">${escapeFocusText(test.instruction || "请说：龙马，测试一下")}</div>`;
+    const eventHint = Array.isArray(test.events) && test.events.length ? `<div class="voice-self-test-events">最近事件：${test.events.slice(-5).map(item => escapeFocusText(item.event?.type || item.type || "event")).join(" / ")}</div>` : "";
+    return header + steps.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status || "pending")}">
+      <span>${escapeFocusText(item.status || "pending")}</span>
+      <div><strong>${escapeFocusText(item.label || item.id || "检查项")}</strong><em>${escapeFocusText(item.detail || item.action || "")}</em></div>
+    </div>`).join("") + eventHint;
+  }
+
+  async function refreshVoiceSelfTest() {
+    const panel = document.getElementById("voice-self-test");
+    const list = document.getElementById("voice-self-test-list");
+    if (!panel || !list) return;
+    panel.hidden = false;
+    try {
+      const since = voiceSelfTestSince || (Date.now() - 60000);
+      const resp = await fetch(`${API}/voice/local/self-test?since=${encodeURIComponent(String(since))}`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "语音实测失败");
+      list.innerHTML = renderVoiceSelfTest(data);
+      const fb = document.getElementById("voice-self-test-feedback");
+      if (fb) fb.textContent = data.level === "ok" ? "闭环通过" : data.level === "warn" ? "部分通过，请看提示" : "等待你说唤醒词";
+    } catch (err) {
+      list.innerHTML = `<div class="voice-clients-error">${escapeFocusText(err?.message || "语音实测失败")}</div>`;
+    }
+  }
+
+  async function startVoiceSelfTest() {
+    const btn = document.getElementById("voice-self-test-start");
+    const fb = document.getElementById("voice-self-test-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "实测已开始，请说：龙马，测试一下");
+    try {
+      const resp = await fetch(`${API}/voice/local/self-test/start`, { method: "POST" });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "开始实测失败");
+      voiceSelfTestSince = Number(data.since || Date.now());
+      const list = document.getElementById("voice-self-test-list");
+      if (list) list.innerHTML = renderVoiceSelfTest(data.selfTest || {});
+      setTimeout(refreshVoiceSelfTest, 2500);
+      setTimeout(refreshVoiceSelfTest, 7000);
+    } catch (err) {
+      showFeedback(fb, err?.message || "开始实测失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
 
   function renderVoiceReadinessWizard(readiness = {}) {
     const steps = Array.isArray(readiness.steps) ? readiness.steps : [];
@@ -2980,6 +3032,7 @@ function initTTSSettings() {
       showFeedback(fb, data.speaker?.skipped ? `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}；声纹未录入，已保持关闭防锁死` : `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}`);
       await refreshVoiceLocalDoctor();
       await refreshSpeakerStatus();
+      await refreshVoiceSelfTest();
       await loadVoiceStabilityPresets();
     } catch (err) {
       showFeedback(fb, err?.message || "一键准备失败", true);
@@ -3198,6 +3251,7 @@ function initTTSSettings() {
 
     applyVoiceProviderUI(savedProvider);
     refreshVoiceReadinessWizard();
+    refreshVoiceSelfTest();
     refreshVoiceLocalDoctor();
   }
 

@@ -377,3 +377,10 @@
 - Reset smoke-mutated `config.json` back to tracked state.
 - Pushed development checkpoint `c2eb63c feat: prevent speaker gate lockout` to `origin/main`.
 - No tag/GitHub Release created; this remains part of the next large-version milestone bundle.
+- Added a local voice self-test loop so “一键语音准备” can be followed by a real wake/asr/tts readiness check instead of only static settings inspection.
+- New backend `POST /voice/local/self-test/start` starts a timestamped self-test session and starts local ASR when appropriate.
+- New backend `GET /voice/local/self-test?since=...` evaluates recent `wake:accepted`, `speaker:*`, `asr:final`, and `tts:stop` events into human-readable steps.
+- Brain UI now includes a “语音实测闭环” panel with a “开始实测” button and live guidance: say “龙马，测试一下”, then inspect wake/asr/tts results and recent events.
+- Extended smoke coverage for backend self-test start/evaluate and Brain UI self-test rendering.
+- Verification passed: syntax checks for API/config/Brain UI scripts, `python3 -m py_compile src/voice/sensevoice_server.py`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.

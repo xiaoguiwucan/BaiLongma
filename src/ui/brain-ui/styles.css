@@ -4724,7 +4724,8 @@ body.person-card-mode .person-card-panel,
 
 
 
-.voice-readiness-wizard {
+.voice-readiness-wizard,
+.voice-self-test {
   display: grid;
   gap: 10px;
   margin: 12px 0;
@@ -4926,4 +4927,14 @@ body.person-card-mode .person-card-panel,
   width: auto;
   padding: 0 10px;
   margin-left: 6px;
+}
+
+.voice-self-test-events {
+  padding: 7px 9px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 11px;
+  color: var(--dim);
+  background: rgba(0,0,0,0.12);
+  font-size: 11px;
+  line-height: 1.5;
 }

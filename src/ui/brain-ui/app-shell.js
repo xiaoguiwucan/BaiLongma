@@ -449,6 +449,17 @@ const createSettingsModal = () => `
                 <div id="voice-readiness-list" class="voice-readiness-list"></div>
                 <span class="settings-feedback" id="voice-readiness-feedback"></span>
               </div>
+              <div class="voice-self-test" id="voice-self-test" hidden>
+                <div class="voice-readiness-head">
+                  <div>
+                    <strong>语音实测闭环</strong>
+                    <p class="settings-hint">一键准备后，用真实唤醒词验证“唤醒→识别→播报”是否走通。</p>
+                  </div>
+                  <button class="settings-save-btn" id="voice-self-test-start" type="button">开始实测</button>
+                </div>
+                <div id="voice-self-test-list" class="voice-readiness-list"></div>
+                <span class="settings-feedback" id="voice-self-test-feedback"></span>
+              </div>
               <div class="voice-local-doctor" id="voice-local-doctor" hidden>
                 <div class="voice-local-doctor-head">
                   <strong>本地语音体检</strong>

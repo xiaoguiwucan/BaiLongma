@@ -418,6 +418,41 @@ function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) 
 
 
 
+
+function getVoiceEventHistorySince(since = 0) {
+  const start = Number(since || 0)
+  return getVoiceEventHistory({ limit: 100 }).filter(item => Number(item.event?.at || 0) >= start)
+}
+
+function buildLocalVoiceSelfTest({ since = Date.now() - 60000 } = {}) {
+  const startedAt = Number(since || 0)
+  const voice = getVoiceConfig()
+  const local = getVoiceStatus()
+  const metrics = getVoiceEventMetricsWindow({ since: startedAt, until: Date.now() })
+  const events = getVoiceEventHistorySince(startedAt)
+  const steps = []
+  const add = (id, label, status, detail, action = '') => steps.push({ id, label, status, detail, action })
+  add('local_process', '本地服务', local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn', local.status === 'running' ? `运行中：${local.engineLabel || local.engine || 'local'} / ${local.model || voice.localAsrModel || 'sensevoice-small'}` : (local.message || '本地语音服务未运行'), local.status === 'running' ? '保持本地服务运行。' : '先点击一键准备或启动本地语音服务。')
+  add('wake_event', '唤醒事件', metrics.wakeAccepted > 0 ? 'ok' : metrics.wakeRejected > 0 ? 'warn' : 'pending', `已接受 ${metrics.wakeAccepted} 次，拒绝 ${metrics.wakeRejected} 次。`, '请说“龙马，测试一下”。')
+  add('speaker_event', '声纹事件', voice.speakerVerificationEnabled ? metrics.speakerAccepted > 0 ? 'ok' : metrics.speakerRejected > 0 ? 'warn' : 'pending' : 'info', voice.speakerVerificationEnabled ? `通过 ${metrics.speakerAccepted} 次，拒绝 ${metrics.speakerRejected} 次。` : '声纹门控未开启，本项仅在“只响应我的声音”开启后检查。', voice.speakerVerificationEnabled ? '如果本人被拒绝，请降低严格度或重录声纹。' : '如需只响应本人，请先录入声纹再开启。')
+  add('asr_final', '识别结果', metrics.asrFinal > 0 ? 'ok' : metrics.wakeAccepted > 0 ? 'warn' : 'pending', metrics.asrFinal > 0 ? `收到 ${metrics.asrFinal} 条最终识别结果。` : '还没有最终识别文本。', '唤醒后说一句完整指令，例如“打开设置”。')
+  add('tts_loop', '播报闭环', metrics.ttsStop > 0 ? 'ok' : metrics.asrFinal > 0 ? 'warn' : 'pending', metrics.ttsStop > 0 ? `TTS 已完成 ${metrics.ttsStop} 次。` : '还没有观察到 TTS 完成事件。', '如果已有识别但无播报，检查 TTS 配置/音频播放。')
+  const level = steps.some(item => item.status === 'warn' || item.status === 'error') ? 'warn' : steps.some(item => item.status === 'pending') ? 'pending' : 'ok'
+  return {
+    ok: true,
+    level,
+    since: startedAt,
+    checkedAt: Date.now(),
+    instruction: '请靠近 Mac 说：“龙马，测试一下”。如果正在播放视频，先试按住说话兜底。',
+    voice,
+    local,
+    metrics,
+    steps,
+    events: events.slice(-12),
+    nextActions: steps.filter(item => item.status !== 'ok' && item.status !== 'info').map(item => ({ id: item.id, label: item.label, action: item.action })).slice(0, 5),
+  }
+}
+
 async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
   const speakerStatus = await queryLocalSpeakerStatus().catch(err => ({ ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' }))
   const doctor = buildVoiceLocalDoctor({ windowMs, speakerStatus })
@@ -2078,6 +2113,26 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       }).catch(err => {
         jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message, code: err.code || 'speaker_clear_failed' })
       })
+      return
+    }
+
+    // POST /voice/local/self-test/start — start a timestamped local voice self-test session
+    if (req.method === 'POST' && url.pathname === '/voice/local/self-test/start') {
+      const voice = getVoiceConfig()
+      const local = getVoiceStatus()
+      let started = null
+      if (voice.asrProvider === 'local' && local.status !== 'running' && local.status !== 'starting') {
+        started = startVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', localAsrModel: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
+      }
+      const since = Date.now()
+      jsonResponse(res, 200, { ok: true, since, started, selfTest: buildLocalVoiceSelfTest({ since }) })
+      return
+    }
+
+    // GET /voice/local/self-test — evaluate recent local voice wake/asr/tts loop events
+    if (req.method === 'GET' && url.pathname === '/voice/local/self-test') {
+      const since = Number(url.searchParams.get('since') || Date.now() - 60000) || Date.now() - 60000
+      jsonResponse(res, 200, buildLocalVoiceSelfTest({ since }))
       return
     }
 

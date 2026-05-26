@@ -495,6 +495,43 @@ new WebSocket(url)`,
 
 
 
+    if (url.pathname === '/voice/local/self-test/start') {
+      sendJson(res, {
+        ok: true,
+        since: Date.now(),
+        selfTest: {
+          ok: true,
+          level: 'pending',
+          instruction: '请说：龙马，测试一下',
+          steps: [
+            { id: 'local_process', label: '本地服务', status: 'ok', detail: '运行中：SenseVoice / sensevoice-small' },
+            { id: 'wake_event', label: '唤醒事件', status: 'pending', detail: '等待唤醒事件。' },
+          ],
+          events: [],
+        },
+      })
+      return
+    }
+
+    if (url.pathname === '/voice/local/self-test') {
+      sendJson(res, {
+        ok: true,
+        level: readinessApplied ? 'ok' : 'pending',
+        instruction: '请说：龙马，测试一下',
+        steps: readinessApplied ? [
+          { id: 'local_process', label: '本地服务', status: 'ok', detail: '运行中：SenseVoice / sensevoice-small' },
+          { id: 'wake_event', label: '唤醒事件', status: 'ok', detail: '已接受 1 次，拒绝 0 次。' },
+          { id: 'asr_final', label: '识别结果', status: 'ok', detail: '收到 1 条最终识别结果。' },
+          { id: 'tts_loop', label: '播报闭环', status: 'ok', detail: 'TTS 已完成 1 次。' },
+        ] : [
+          { id: 'local_process', label: '本地服务', status: 'pending', detail: '等待开始实测。' },
+          { id: 'wake_event', label: '唤醒事件', status: 'pending', detail: '等待唤醒事件。' },
+        ],
+        events: readinessApplied ? [{ event: { type: 'wake:accepted' } }, { event: { type: 'asr:final' } }, { event: { type: 'tts:stop' } }] : [],
+      })
+      return
+    }
+
     if (url.pathname === '/__smoke/speaker-gate-lock') {
       speakerGateLocked = true
       sendJson(res, { ok: true })
@@ -792,6 +829,11 @@ try {
   await page.click('#voice-readiness-apply')
   await page.waitForFunction(() => document.querySelector('#voice-readiness-feedback')?.textContent.includes('已应用本地语音基线'))
   await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('运行中：SenseVoice'))
+  const selfTestInitial = await page.textContent('#voice-self-test-list')
+  if (!selfTestInitial.includes('语音实测') && !selfTestInitial.includes('本地服务')) throw new Error(`voice self-test panel did not initialize: ${selfTestInitial}`)
+  await page.click('#voice-self-test-start')
+  await page.waitForFunction(() => document.querySelector('#voice-self-test-feedback')?.textContent.includes('实测已开始') || document.querySelector('#voice-self-test-feedback')?.textContent.includes('闭环通过'))
+  await page.waitForFunction(() => document.querySelector('#voice-self-test-list')?.textContent.includes('唤醒事件') && document.querySelector('#voice-self-test-list')?.textContent.includes('识别结果'))
   const readinessSnapshot = await page.evaluate(() => ({
     wakeMode: document.querySelector('#voice-wake-mode')?.value,
     duck: document.querySelector('#voice-video-duck')?.checked,
