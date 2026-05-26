@@ -203,3 +203,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-config and voice-events smoke coverage for persisted auto-tuning policy.
 - [x] Verify config/API syntax plus voice-config, voice-events, brain-ui, and wake-guard smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 21: Persist video playback voice wake protection settings
+- [x] Add backend voice config fields for video duck, PTT, AEC, duck level, duck hold, and duck sensitivity.
+- [x] Clamp all video voice protection settings to safe ranges.
+- [x] Hydrate the Brain UI video playback voice settings from `/settings/voice`.
+- [x] Mirror server video settings into localStorage so runtime media/voice logic uses the same values immediately.
+- [x] Save video voice protection settings back through `/settings/voice` with the rest of voice settings.
+- [x] Extend voice-config and brain-ui smoke coverage.
+- [x] Verify syntax plus voice-config and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

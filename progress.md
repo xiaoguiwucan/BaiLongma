@@ -189,3 +189,11 @@
 - Verification passed: syntax checks for config/API/smoke scripts, `npm run smoke:voice-config` 13/13, `npm run smoke:voice-events` 58/58, `npm run smoke:brain-ui`, and `npm run smoke:wake-guard` 9/9.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Persisted the video-playback voice wake protection settings into backend voice config instead of relying only on browser localStorage.
+- Added voice config fields for `videoVoiceDuckEnabled`, `videoVoicePttEnabled`, `videoVoiceAecEnabled`, `videoVoiceDuckLevel`, `videoVoiceDuckHoldMs`, and `videoVoiceDuckSensitivity` with safe clamping.
+- Settings UI now hydrates video duck/PTT/AEC switches and duck level/hold/sensitivity from `/settings/voice`, mirrors them into localStorage for runtime media/voice code, and saves them back through `/settings/voice`.
+- Extended `smoke:voice-config` to 19/19 checks for persisted/clamped video voice wake protection settings.
+- Extended `smoke:brain-ui` to verify server-provided video voice settings hydrate the settings UI and localStorage runtime keys.
+- Verification passed: syntax checks for config, Brain UI app, and smoke scripts; `npm run smoke:voice-config` 19/19; `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

@@ -46,6 +46,22 @@ try {
   assert(auto.wakeAutoTuningCooldownMs === 60000, 'wake auto tuning cooldown clamps low', JSON.stringify(auto))
   assert(auto.wakeAutoTuningMaxActionsPerHour === 6, 'wake auto tuning hourly limit clamps high', JSON.stringify(auto))
   assert(auto.wakeAutoTuningLastAppliedAt === 12345, 'wake auto tuning last applied timestamp persists', JSON.stringify(auto))
+
+  setVoiceConfig({
+    videoVoiceDuckEnabled: false,
+    videoVoicePttEnabled: false,
+    videoVoiceAecEnabled: false,
+    videoVoiceDuckLevel: 0.001,
+    videoVoiceDuckHoldMs: 99999,
+    videoVoiceDuckSensitivity: 99,
+  })
+  const video = getVoiceConfig()
+  assert(video.videoVoiceDuckEnabled === false, 'video voice duck can be disabled', JSON.stringify(video))
+  assert(video.videoVoicePttEnabled === false, 'video voice ptt can be disabled', JSON.stringify(video))
+  assert(video.videoVoiceAecEnabled === false, 'video voice aec can be disabled', JSON.stringify(video))
+  assert(video.videoVoiceDuckLevel === 0.02, 'video voice duck level clamps low', JSON.stringify(video))
+  assert(video.videoVoiceDuckHoldMs === 8000, 'video voice duck hold clamps high', JSON.stringify(video))
+  assert(video.videoVoiceDuckSensitivity === 1.6, 'video voice duck sensitivity clamps high', JSON.stringify(video))
 } finally {
   setVoiceConfig(before)
 }

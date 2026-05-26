@@ -113,6 +113,34 @@ function createServer() {
       return
     }
 
+    if (url.pathname === '/settings/voice') {
+      sendJson(res, {
+        ok: true,
+        voice: {
+          asrProvider: 'local',
+          localAsrModel: 'sensevoice-small',
+          asrProfile: 'balanced',
+          wakeWordEnabled: true,
+          wakeWords: ['小龙马', '龙马', '白龙马'],
+          wakeMode: 'strict',
+          wakeWindowSeconds: 8,
+          wakeRepeatSuppression: true,
+          wakeConfidenceThreshold: 0.72,
+          wakeMinCommandChars: 2,
+          wakeCooldownMs: 1200,
+          wakeRequireSpeakerWhenEnabled: true,
+          speakerVerificationEnabled: false,
+          videoVoiceDuckEnabled: false,
+          videoVoicePttEnabled: true,
+          videoVoiceAecEnabled: false,
+          videoVoiceDuckLevel: 0.25,
+          videoVoiceDuckHoldMs: 3600,
+          videoVoiceDuckSensitivity: 1.35,
+        },
+      })
+      return
+    }
+
 
 
 
@@ -519,6 +547,39 @@ try {
   if (!snapshot.personImage) throw new Error('person card hero image was not visible')
   if (!snapshot.closeHidden) throw new Error('person card close button should be hidden until hover')
   await page.waitForFunction(() => document.querySelector('#voice-clients-count')?.textContent === '1' && document.querySelector('.voice-client-card')?.textContent.includes('smoke-esp32'))
+  await page.click('#settings-btn')
+  await page.waitForSelector('#settings-overlay:not([hidden])')
+  await page.evaluate(() => {
+    document.querySelectorAll('.settings-nav-item').forEach(btn => btn.classList.toggle('active', btn.dataset.tab === 'voice'))
+    document.querySelectorAll('.settings-tab').forEach(tab => tab.classList.toggle('active', tab.dataset.tab === 'voice'))
+  })
+  await page.waitForFunction(() => document.querySelector('#voice-video-duck-level-val')?.textContent.includes('25%'), null, { timeout: 5000 }).catch(() => {})
+  const videoVoiceLabelDebug = await page.evaluate(() => ({
+    level: document.querySelector('#voice-video-duck-level-val')?.textContent || '',
+    hold: document.querySelector('#voice-video-duck-hold-val')?.textContent || '',
+    hasFetch: typeof window.fetch,
+  }))
+  if (!videoVoiceLabelDebug.level.includes('25%') || !videoVoiceLabelDebug.hold.includes('3.6s')) throw new Error(`server video voice labels did not hydrate settings UI: ${JSON.stringify(videoVoiceLabelDebug)}`)
+  const videoVoiceSnapshot = await page.evaluate(() => ({
+    duckChecked: document.querySelector('#voice-video-duck')?.checked,
+    pttChecked: document.querySelector('#voice-video-ptt')?.checked,
+    aecChecked: document.querySelector('#voice-video-aec')?.checked,
+    duckLevel: document.querySelector('#voice-video-duck-level')?.value,
+    duckHold: document.querySelector('#voice-video-duck-hold')?.value,
+    sensitivity: document.querySelector('#voice-video-duck-sensitivity')?.value,
+    storedDuck: localStorage.getItem('bailongma-voice-video-duck'),
+    storedPtt: localStorage.getItem('bailongma-voice-video-ptt'),
+    storedAec: localStorage.getItem('bailongma-voice-video-aec'),
+    storedLevel: localStorage.getItem('bailongma-voice-video-duck-level'),
+    storedHold: localStorage.getItem('bailongma-voice-video-duck-hold'),
+    storedSensitivity: localStorage.getItem('bailongma-voice-video-duck-sensitivity'),
+  }))
+  if (videoVoiceSnapshot.duckChecked !== false || videoVoiceSnapshot.pttChecked !== true || videoVoiceSnapshot.aecChecked !== false) throw new Error('server video voice booleans did not hydrate settings UI')
+  if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35') throw new Error('server video voice numeric settings did not hydrate settings UI')
+  if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
+  if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
+  await page.click('#settings-close')
+  await page.waitForFunction(() => document.querySelector('#settings-overlay')?.hidden === true)
   const voiceClientSnapshot = await page.evaluate(() => ({
     count: document.querySelector('#voice-clients-count')?.textContent || '',
     audio: document.querySelector('#voice-clients-audio-count')?.textContent || '',

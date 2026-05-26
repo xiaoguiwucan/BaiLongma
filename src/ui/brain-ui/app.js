@@ -2932,18 +2932,27 @@ function initTTSSettings() {
     const savedSpeakerThreshold = parseFloat(localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) || "0.55");
     if (speakerThreshold) speakerThreshold.value = String(savedSpeakerThreshold);
     if (speakerThresholdVal) speakerThresholdVal.textContent = savedSpeakerThreshold.toFixed(2);
-    if (videoDuck) videoDuck.checked = localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== "false";
-    if (videoPtt) videoPtt.checked = localStorage.getItem(VOICE_VIDEO_PTT_KEY) !== "false";
-    if (videoAec) videoAec.checked = localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== "false";
-    const savedDuckLevel = Math.max(0.02, Math.min(0.50, Number(localStorage.getItem(VOICE_VIDEO_DUCK_LEVEL_KEY) || 0.10) || 0.10));
-    const savedDuckHold = Math.max(800, Math.min(8000, Number(localStorage.getItem(VOICE_VIDEO_DUCK_HOLD_KEY) || 2200) || 2200));
-    const savedDuckSensitivity = Math.max(0.55, Math.min(1.60, Number(localStorage.getItem(VOICE_VIDEO_DUCK_SENSITIVITY_KEY) || 1.0) || 1.0));
+    const savedVideoDuck = typeof serverVoice?.videoVoiceDuckEnabled === "boolean" ? serverVoice.videoVoiceDuckEnabled : localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== "false";
+    const savedVideoPtt = typeof serverVoice?.videoVoicePttEnabled === "boolean" ? serverVoice.videoVoicePttEnabled : localStorage.getItem(VOICE_VIDEO_PTT_KEY) !== "false";
+    const savedVideoAec = typeof serverVoice?.videoVoiceAecEnabled === "boolean" ? serverVoice.videoVoiceAecEnabled : localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== "false";
+    if (videoDuck) videoDuck.checked = savedVideoDuck;
+    if (videoPtt) videoPtt.checked = savedVideoPtt;
+    if (videoAec) videoAec.checked = savedVideoAec;
+    const savedDuckLevel = Math.max(0.02, Math.min(0.50, Number(serverVoice?.videoVoiceDuckLevel ?? localStorage.getItem(VOICE_VIDEO_DUCK_LEVEL_KEY) ?? 0.10) || 0.10));
+    const savedDuckHold = Math.max(800, Math.min(8000, Number(serverVoice?.videoVoiceDuckHoldMs ?? localStorage.getItem(VOICE_VIDEO_DUCK_HOLD_KEY) ?? 2200) || 2200));
+    const savedDuckSensitivity = Math.max(0.55, Math.min(1.60, Number(serverVoice?.videoVoiceDuckSensitivity ?? localStorage.getItem(VOICE_VIDEO_DUCK_SENSITIVITY_KEY) ?? 1.0) || 1.0));
     if (videoDuckLevel) videoDuckLevel.value = String(savedDuckLevel);
     if (videoDuckLevelVal) videoDuckLevelVal.textContent = `${Math.round(savedDuckLevel * 100)}%`;
     if (videoDuckHold) videoDuckHold.value = String(savedDuckHold);
     if (videoDuckHoldVal) videoDuckHoldVal.textContent = `${(savedDuckHold / 1000).toFixed(1)}s`;
     if (videoDuckSensitivity) videoDuckSensitivity.value = String(savedDuckSensitivity);
     if (videoDuckSensitivityVal) videoDuckSensitivityVal.textContent = savedDuckSensitivity.toFixed(2);
+    localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(savedVideoDuck));
+    localStorage.setItem(VOICE_VIDEO_PTT_KEY, String(savedVideoPtt));
+    localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(savedVideoAec));
+    localStorage.setItem(VOICE_VIDEO_DUCK_LEVEL_KEY, String(savedDuckLevel));
+    localStorage.setItem(VOICE_VIDEO_DUCK_HOLD_KEY, String(savedDuckHold));
+    localStorage.setItem(VOICE_VIDEO_DUCK_SENSITIVITY_KEY, String(savedDuckSensitivity));
     const debugEnabled = localStorage.getItem(VOICE_DEBUG_ENABLED_KEY) !== "false";
     if (voiceDebugEnabled) voiceDebugEnabled.checked = debugEnabled;
     if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
@@ -3241,6 +3250,12 @@ function initTTSSettings() {
         wakeCooldownMs,
         wakeRequireSpeakerWhenEnabled,
         speakerVerificationEnabled: speakerVerify,
+        videoVoiceDuckEnabled: videoDuck,
+        videoVoicePttEnabled: videoPtt,
+        videoVoiceAecEnabled: videoAec,
+        videoVoiceDuckLevel: videoDuckLevel,
+        videoVoiceDuckHoldMs: videoDuckHold,
+        videoVoiceDuckSensitivity: videoDuckSensitivity,
       };
       const aliyunKey = document.getElementById("voice-aliyun-key")?.value?.trim();
       if (aliyunKey) body.aliyunApiKey = aliyunKey;
