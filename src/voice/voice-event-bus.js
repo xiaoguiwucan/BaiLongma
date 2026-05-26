@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding', 'event_history', 'link_summary'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding', 'event_history', 'link_summary', 'link_self_check'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -49,6 +49,7 @@ export function getVoiceEventsOnboarding({ host = '127.0.0.1', port = 3721, prot
       clients: '/voice/events/clients',
       history: '/voice/events/history',
       summary: '/voice/events/summary',
+      check: '/voice/events/check',
     },
     commands: { local: localCommand, lan: lanCommand },
     messages: { clientHello, subscribe },
@@ -72,6 +73,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
       clients: '/voice/events/clients',
       history: '/voice/events/history',
       summary: '/voice/events/summary',
+      check: '/voice/events/check',
       onboarding: '/voice/events/onboarding',
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
@@ -533,6 +535,84 @@ export function getVoiceEventLinkSummary({ windowMs = 60000 } = {}) {
     issues,
     suggestions,
     clientDetails,
+  }
+}
+
+
+export function getVoiceEventLinkSelfCheck({ windowMs = 60000, host = '127.0.0.1', port = 3721, protocol = 'http:', tokenConfigured = false } = {}) {
+  const summary = getVoiceEventLinkSummary({ windowMs })
+  const onboarding = getVoiceEventsOnboarding({ host, port, protocol, tokenConfigured })
+  const protocolMeta = getVoiceEventsProtocolMetadata({ auth: { tokenConfigured } })
+  const steps = []
+  const addStep = (id, label, status, detail, action = '') => steps.push({ id, label, status, detail, action })
+  addStep(
+    'protocol',
+    '协议能力',
+    protocolMeta.capabilities.includes('json_events') && protocolMeta.capabilities.includes('link_summary') ? 'ok' : 'error',
+    `协议 v${protocolMeta.version}，能力 ${protocolMeta.capabilities.length} 项`,
+    '如果这里异常，请重启桌面应用或检查 /voice/events/protocol。',
+  )
+  addStep(
+    'clients',
+    '客户端连接',
+    summary.status.clients > 0 ? 'ok' : 'warn',
+    summary.status.clients > 0 ? `已连接 ${summary.status.clients} 个客户端` : '还没有外部客户端连接',
+    summary.status.clients > 0 ? '保持设备在线。' : onboarding.commands.local,
+  )
+  addStep(
+    'identity',
+    '设备握手',
+    summary.clientDetails.some(client => client.identity && !String(client.identity.clientId || '').startsWith('ws_')) ? 'ok' : summary.status.clients > 0 ? 'warn' : 'pending',
+    summary.status.clients > 0 ? '检查 client:hello / capabilities' : '等待客户端连接后检查握手',
+    '设备连接后先发送 client:hello，包含 clientId/device/platform/capabilities。',
+  )
+  addStep(
+    'audio_subscription',
+    '音频订阅',
+    summary.status.audioSubscribers > 0 ? 'ok' : summary.status.clients > 0 ? 'warn' : 'pending',
+    summary.status.audioSubscribers > 0 ? `音频订阅 ${summary.status.audioSubscribers} 个` : '尚未发现音频订阅',
+    '发送 subscribe: {"type":"subscribe","audio":true,"binaryAudio":true}。',
+  )
+  addStep(
+    'binary_audio',
+    '二进制音频',
+    summary.status.binaryAudioSubscribers > 0 ? 'ok' : summary.status.audioSubscribers > 0 ? 'warn' : 'pending',
+    summary.status.binaryAudioSubscribers > 0 ? `二进制订阅 ${summary.status.binaryAudioSubscribers} 个` : '未启用二进制音频或未订阅音频',
+    'ESP32/局域网设备优先声明 binary_audio，并订阅 binaryAudio=true。',
+  )
+  addStep(
+    'recent_events',
+    '最近事件',
+    summary.recent.total > 0 ? 'ok' : summary.status.clients > 0 ? 'warn' : 'pending',
+    summary.recent.total > 0 ? `最近 ${Math.round(summary.windowMs / 1000)} 秒 ${summary.recent.total} 个事件` : '还没有唤醒/识别/TTS 事件',
+    '触发一次唤醒词或发送 POST /voice/events/publish 测试事件。',
+  )
+  addStep(
+    'wake_asr_tts',
+    '唤醒→识别→播报闭环',
+    summary.recent.wakeAccepted > 0 && summary.recent.asrFinal > 0 && summary.recent.ttsStop > 0 ? 'ok' : summary.recent.wakeAccepted > 0 || summary.recent.asrFinal > 0 || summary.recent.ttsStart > 0 ? 'warn' : 'pending',
+    `wake ${summary.recent.wakeAccepted}/${summary.recent.wakeRejected} · asrFinal ${summary.recent.asrFinal} · tts ${summary.recent.ttsStart}/${summary.recent.ttsStop}`,
+    '如果缺 ASR，检查麦克风/VAD/本地 ASR；如果缺 TTS stop，检查 TTS session 和音频播放。',
+  )
+  const errorCount = steps.filter(step => step.status === 'error').length
+  const warnCount = steps.filter(step => step.status === 'warn').length
+  const pendingCount = steps.filter(step => step.status === 'pending').length
+  const overall = errorCount ? 'error' : warnCount ? 'warn' : pendingCount ? 'pending' : 'ok'
+  const nextActions = steps.filter(step => step.status !== 'ok').map(step => ({ id: step.id, label: step.label, action: step.action })).slice(0, 4)
+  if (!nextActions.length) nextActions.push({ id: 'ready', label: '可以实测', action: '现在可以喊唤醒词并观察最近语音事件时间线。' })
+  return {
+    ok: overall === 'ok',
+    service: 'bailongma.voice.events',
+    version: VOICE_EVENTS_PROTOCOL_VERSION,
+    checkedAt: Date.now(),
+    overall,
+    counts: { ok: steps.filter(step => step.status === 'ok').length, warn: warnCount, pending: pendingCount, error: errorCount },
+    steps,
+    nextActions,
+    commands: onboarding.commands,
+    messages: onboarding.messages,
+    urls: onboarding.urls,
+    summary,
   }
 }
 

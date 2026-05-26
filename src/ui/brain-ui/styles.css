@@ -4228,3 +4228,100 @@ body.person-card-mode .person-card-panel,
   color: var(--dim);
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
+
+.voice-link-check {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(215,181,255,0.24);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 10% 0%, rgba(215,181,255,0.12), transparent 36%),
+    rgba(255,255,255,0.018);
+}
+.voice-link-check-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.voice-link-check-title {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.voice-link-check-sub {
+  margin-top: 3px;
+  color: var(--dim);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+}
+.voice-link-check-steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 7px;
+}
+.voice-link-check-step {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(0,0,0,0.10);
+}
+.voice-link-check-step span {
+  display: inline-block;
+  margin-bottom: 4px;
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--dim);
+  background: rgba(255,255,255,0.04);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 8px;
+  text-transform: uppercase;
+}
+.voice-link-check-step strong {
+  display: block;
+  color: var(--ink);
+  font-size: 11px;
+}
+.voice-link-check-step em {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink2);
+  font-size: 10px;
+  font-style: normal;
+  line-height: 1.45;
+}
+.voice-link-check-step-ok span { color: #8ff0b3; background: rgba(143,240,179,0.08); }
+.voice-link-check-step-warn span { color: var(--warm); background: rgba(211,152,114,0.08); }
+.voice-link-check-step-error span { color: #ff8f8f; background: rgba(255,143,143,0.08); }
+.voice-link-check-actions {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.voice-link-check-actions p {
+  margin: 0;
+  color: var(--ink2);
+  font-size: 10px;
+  line-height: 1.5;
+}
+.voice-link-check-actions strong {
+  margin-right: 6px;
+  color: var(--cool);
+}
+.voice-link-check-commands {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.voice-link-check-commands code {
+  display: block;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.18);
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

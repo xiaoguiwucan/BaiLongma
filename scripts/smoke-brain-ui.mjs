@@ -141,12 +141,13 @@ function createServer() {
         ok: true,
         service: 'bailongma.voice.events',
         version: 3,
-        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'event_history', 'link_summary'],
+        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'event_history', 'link_summary', 'link_self_check'],
         endpoints: {
           websocket: '/voice/events',
           clients: '/voice/events/clients',
           history: '/voice/events/history',
           summary: '/voice/events/summary',
+          check: '/voice/events/check',
           protocol: '/voice/events/protocol',
           publish: '/voice/events/publish',
         },
@@ -159,6 +160,39 @@ function createServer() {
     }
 
 
+
+
+    if (url.pathname === '/voice/events/check') {
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.events',
+        version: 3,
+        checkedAt: Date.now(),
+        overall: 'ok',
+        counts: { ok: 7, warn: 0, pending: 0, error: 0 },
+        steps: [
+          { id: 'protocol', label: '协议能力', status: 'ok', detail: '协议 v3，能力 12 项', action: 'ok' },
+          { id: 'clients', label: '客户端连接', status: 'ok', detail: '已连接 1 个客户端', action: '保持设备在线。' },
+          { id: 'wake_asr_tts', label: '唤醒→识别→播报闭环', status: 'ok', detail: 'wake 1/0 · asrFinal 1 · tts 1/1', action: '可以实测。' },
+        ],
+        nextActions: [{ id: 'ready', label: '可以实测', action: '现在可以喊唤醒词并观察最近语音事件时间线。' }],
+        commands: { local: 'npm run voice:events -- listen --url ws://127.0.0.1:3721/voice/events --audio --binary --client-id mac-debug', lan: 'npm run voice:events -- listen --url ws://<Mac局域网IP>:3721/voice/events --audio --binary --client-id esp32-test' },
+        messages: { clientHello: { type: 'client:hello' } },
+        urls: { check: '/voice/events/check' },
+        summary: {
+          ok: true,
+          level: 'ok',
+          windowMs: 60000,
+          checkedAt: Date.now(),
+          status: { clients: 1, audioSubscribers: 1, binaryAudioSubscribers: 1, history: 4, version: 3 },
+          recent: { total: 4, wakeAccepted: 1, wakeRejected: 0, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0 },
+          issues: [],
+          suggestions: ['链路整体正常：客户端、订阅、事件历史均可观测。'],
+          clientDetails: [],
+        },
+      })
+      return
+    }
 
     if (url.pathname === '/voice/events/summary') {
       sendJson(res, {
@@ -421,6 +455,7 @@ try {
     guide: document.querySelector('#voice-clients-guide')?.textContent || '',
     history: document.querySelector('#voice-events-history-list')?.textContent || '',
     summary: document.querySelector('#voice-link-summary')?.textContent || '',
+    check: document.querySelector('#voice-link-check')?.textContent || '',
   }))
   if (voiceClientSnapshot.count !== '1') throw new Error('voice clients panel did not show connected client count')
   if (!voiceClientSnapshot.card.includes('binary')) throw new Error('voice clients panel did not render negotiated binary mode')
@@ -429,8 +464,13 @@ try {
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/clients')) throw new Error('voice clients protocol diagnostics did not render clients endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/history')) throw new Error('voice clients protocol diagnostics did not render history endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/summary')) throw new Error('voice clients protocol diagnostics did not render summary endpoint')
+  if (!voiceClientSnapshot.diagnostics.includes('/voice/events/check')) throw new Error('voice clients protocol diagnostics did not render check endpoint')
   if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('链路正常')) throw new Error('voice link summary did not render healthy status')
   if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop')) throw new Error('voice events history timeline did not render recent events')
+  await page.evaluate(() => document.querySelector('#voice-link-check-btn')?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-link-check')?.textContent.includes('一键语音链路自检'))
+  const selfCheckText = await page.textContent('#voice-link-check')
+  if (!selfCheckText.includes('全部通过') || !selfCheckText.includes('客户端连接') || !selfCheckText.includes('可以实测')) throw new Error('voice link self-check panel did not render expected status and actions')
   if (!voiceClientSnapshot.guide.includes('npm run voice:events -- listen')) throw new Error('voice clients guide did not render debug connect command')
   if (!voiceClientSnapshot.guide.includes('esp32-test') || !voiceClientSnapshot.guide.includes('client:hello')) throw new Error('voice clients guide did not render LAN command and handshake example')
   await page.hover('.pc-card')

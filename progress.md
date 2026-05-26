@@ -85,3 +85,15 @@
 - Verification passed: `npm run smoke:voice-mapping` 42/42, `npm run smoke:voice-events` 47/47, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.
+- Added backend `GET /voice/events/check` as a one-click voice-link self-check and onboarding endpoint.
+- Added `link_self_check` protocol capability and `endpoints.check` metadata; protocol diagnostics now advertises `/voice/events/check`.
+- Added `getVoiceEventLinkSelfCheck()` to evaluate protocol readiness, client connection, device handshake, audio subscription, binary audio, recent events, and wake→ASR→TTS loop status.
+- Self-check returns ordered steps, overall status, counts, next actions, local/LAN onboarding commands, client messages, URLs, and the current summary snapshot.
+- Added Brain UI “一键自检” button and self-check panel rendering status, step results, next actions, and copyable local/LAN commands.
+- Extended `smoke:voice-mapping` to 44/44 for `link_self_check` protocol metadata and self-check helper output.
+- Extended `smoke:voice-events` to 48/48 for `/voice/events/check` endpoint coverage.
+- Extended `smoke:brain-ui` to mock `/voice/events/check`, verify protocol diagnostics, click the one-key check action, and assert self-check results render.
+- Verification passed: syntax checks for voice bus, API, Brain UI app, and smoke scripts.
+- Verification passed: `npm run smoke:voice-mapping` 44/44, `npm run smoke:voice-events` 48/48, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.

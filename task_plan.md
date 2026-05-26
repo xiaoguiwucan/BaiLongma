@@ -101,3 +101,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Refresh summary together with clients/history in auto-refresh mode.
 - [x] Extend mapping, voice-events, and brain-ui smoke coverage.
 - [x] Verify all relevant smoke suites.
+
+## Checkpoint 10: One-click voice link self-check
+- [x] Add `GET /voice/events/check` backend endpoint.
+- [x] Add `link_self_check` protocol capability and `endpoints.check` metadata.
+- [x] Evaluate protocol readiness, client connection, handshake, audio subscription, binary audio, recent events, and wake→ASR→TTS loop.
+- [x] Return ordered self-check steps, overall status, next actions, onboarding commands, URLs, and summary snapshot.
+- [x] Add Brain UI “一键自检” button and self-check result panel.
+- [x] Extend mapping, voice-events, and brain-ui smoke coverage.
+- [x] Verify all relevant smoke suites.

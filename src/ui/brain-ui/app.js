@@ -1822,6 +1822,35 @@ function renderVoiceLinkSummary(summary = {}) {
     </div>`;
 }
 
+
+function renderVoiceLinkCheck(check = {}) {
+  const statusText = check.overall === "ok" ? "全部通过" : check.overall === "warn" ? "需要处理" : check.overall === "pending" ? "等待接入" : "存在错误";
+  const steps = Array.isArray(check.steps) ? check.steps : [];
+  const actions = Array.isArray(check.nextActions) ? check.nextActions : [];
+  const localCommand = check.commands?.local || "";
+  const lanCommand = check.commands?.lan || "";
+  return `
+    <div class="voice-link-check-head">
+      <div>
+        <div class="voice-link-check-title">一键语音链路自检</div>
+        <div class="voice-link-check-sub">${escapeFocusText(new Date(check.checkedAt || Date.now()).toLocaleTimeString())} · ${escapeFocusText(statusText)}</div>
+      </div>
+      <div class="voice-link-badge voice-link-badge-${escapeFocusText(check.overall || "pending")}">${escapeFocusText(statusText)}</div>
+    </div>
+    <div class="voice-link-check-steps">
+      ${steps.map(step => `
+        <div class="voice-link-check-step voice-link-check-step-${escapeFocusText(step.status || "pending")}">
+          <span>${escapeFocusText(step.status || "pending")}</span>
+          <strong>${escapeFocusText(step.label || step.id || "step")}</strong>
+          <em>${escapeFocusText(step.detail || "")}</em>
+        </div>`).join("")}
+    </div>
+    <div class="voice-link-check-actions">
+      ${actions.map(item => `<p><strong>${escapeFocusText(item.label || item.id || "下一步")}</strong>${escapeFocusText(item.action || "")}</p>`).join("")}
+    </div>
+    ${localCommand || lanCommand ? `<div class="voice-link-check-commands">${localCommand ? `<code>${escapeFocusText(localCommand)}</code>` : ""}${lanCommand ? `<code>${escapeFocusText(lanCommand)}</code>` : ""}</div>` : ""}`;
+}
+
 function initVoiceClientsPanel() {
   const listEl = document.getElementById("voice-clients-list");
   if (!listEl) return;
@@ -1830,10 +1859,12 @@ function initVoiceClientsPanel() {
   const binaryCountEl = document.getElementById("voice-clients-binary-count");
   const feedbackEl = document.getElementById("voice-clients-feedback");
   const refreshBtn = document.getElementById("voice-clients-refresh-btn");
+  const checkBtn = document.getElementById("voice-link-check-btn");
   const protocolBtn = document.getElementById("voice-clients-protocol-btn");
   const copyBtn = document.getElementById("voice-clients-copy-btn");
   const diagnosticsEl = document.getElementById("voice-clients-diagnostics");
   const summaryEl = document.getElementById("voice-link-summary");
+  const checkEl = document.getElementById("voice-link-check");
   const guideEl = document.getElementById("voice-clients-guide");
   const autoEl = document.getElementById("voice-clients-auto-refresh");
   const historyListEl = document.getElementById("voice-events-history-list");
@@ -1888,6 +1919,7 @@ function initVoiceClientsPanel() {
       <div class="voice-diagnostic-line"><span>Clients</span><code>${escapeFocusText(endpoints.clients || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>History</span><code>${escapeFocusText(endpoints.history || "/voice/events/history")}</code></div>
       <div class="voice-diagnostic-line"><span>Summary</span><code>${escapeFocusText(endpoints.summary || "/voice/events/summary")}</code></div>
+      <div class="voice-diagnostic-line"><span>Check</span><code>${escapeFocusText(endpoints.check || "/voice/events/check")}</code></div>
       <div class="voice-diagnostic-line"><span>Audio Modes</span><code>${escapeFocusText(modes.join(" / ") || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>Capabilities</span><code>${escapeFocusText(caps.filter(c => ["client_identity", "audio_negotiation", "client_diagnostics", "tts_speak"].includes(c)).join(" · ") || "—")}</code></div>
     `;
@@ -1938,6 +1970,27 @@ function initVoiceClientsPanel() {
       summaryEl.hidden = false;
       summaryEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/summary 失败：${escapeFocusText(err.message || err)}</div>`;
       if (!quiet && feedbackEl) feedbackEl.textContent = "总控读取失败";
+    }
+  }
+
+  async function runVoiceLinkCheck() {
+    if (!checkEl) return;
+    if (feedbackEl) feedbackEl.textContent = "语音链路自检中…";
+    checkEl.hidden = false;
+    checkEl.innerHTML = '<div class="voice-clients-empty">正在检查协议、客户端、订阅、事件闭环…</div>';
+    try {
+      const res = await fetch(`${API}/voice/events/check?windowMs=60000`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      checkEl.innerHTML = renderVoiceLinkCheck(data);
+      if (feedbackEl) feedbackEl.textContent = data.overall === "ok" ? "自检通过" : "自检完成";
+      if (data.summary && summaryEl) {
+        summaryEl.hidden = false;
+        summaryEl.innerHTML = renderVoiceLinkSummary(data.summary);
+      }
+    } catch (err) {
+      checkEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/check 失败：${escapeFocusText(err.message || err)}</div>`;
+      if (feedbackEl) feedbackEl.textContent = "自检失败";
     }
   }
 
@@ -1998,6 +2051,7 @@ function initVoiceClientsPanel() {
   }
 
   refreshBtn?.addEventListener("click", () => { refreshVoiceClients(); refreshVoiceEventsHistory({ quiet: true }); refreshVoiceLinkSummary({ quiet: true }); });
+  checkBtn?.addEventListener("click", () => runVoiceLinkCheck());
   historyRefreshBtn?.addEventListener("click", () => refreshVoiceEventsHistory());
   historyFilterEl?.addEventListener("change", () => refreshVoiceEventsHistory());
   protocolBtn?.addEventListener("click", () => refreshProtocolDiagnostics());
