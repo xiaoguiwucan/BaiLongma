@@ -3,7 +3,7 @@ import fs from 'fs'
 import path from 'path'
 import net from 'net'
 import { fileURLToPath } from 'url'
-import { WebSocketServer } from 'ws'
+import WebSocket, { WebSocketServer } from 'ws'
 import { pushMessage } from './queue.js'
 import { getDB, getConfig, setConfig, insertUISignal, upsertMediaHistory, getMediaHistory, updateLastJarvisConversationContent } from './db.js'
 import { emitEvent, addSSEClient, removeSSEClient, addACUIClient, removeACUIClient, removeActiveUICard, emitUICommand, flushStickyEvents, setStickyEvent } from './events.js'
@@ -202,7 +202,37 @@ function buildVoiceStabilityPresetResponse({ windowMs = 60000 } = {}) {
 }
 
 
-function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
+
+async function queryLocalSpeakerStatus({ timeoutMs = 900 } = {}) {
+  const local = getVoiceStatus()
+  if (local.status !== 'running') {
+    return { ok: false, configured: false, reachable: false, reason: 'local_voice_not_running', detail: '本地语音服务未运行，无法读取声纹状态。' }
+  }
+  return await new Promise(resolve => {
+    let settled = false
+    const finish = (value) => {
+      if (settled) return
+      settled = true
+      try { ws.close() } catch (_) {}
+      clearTimeout(timer)
+      resolve(value)
+    }
+    const ws = new WebSocket(`ws://127.0.0.1:${local.port || 3723}`)
+    const timer = setTimeout(() => finish({ ok: false, configured: false, reachable: false, reason: 'speaker_status_timeout', detail: '声纹状态查询超时。' }), timeoutMs)
+    ws.on('open', () => ws.send(JSON.stringify({ type: 'speaker_status' })))
+    ws.on('message', raw => {
+      try {
+        const msg = JSON.parse(String(raw))
+        if (msg.type === 'speaker_status') {
+          finish({ ok: true, reachable: true, configured: Boolean(msg.configured), sampleCount: Number(msg.sampleCount || 0), threshold: msg.threshold, detail: msg.configured ? `已录入 ${Number(msg.sampleCount || 0)} 个声纹样本。` : '本地服务可达，但还没有录入声纹。' })
+        }
+      } catch (_) {}
+    })
+    ws.on('error', err => finish({ ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' }))
+  })
+}
+
+function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) {
   const voice = getVoiceConfig()
   const local = getVoiceStatus()
   let summary = null
@@ -251,12 +281,17 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     videoOk ? null : 'apply_video_guard',
   )
   const speakerConfiguredHint = voice.speakerVerificationEnabled ? '已启用，只响应我的声音。' : '未启用，任何清晰唤醒词都可能触发。'
+  const speakerRuntime = speakerStatus && typeof speakerStatus === 'object' ? speakerStatus : null
+  const speakerDetail = speakerRuntime
+    ? `${speakerConfiguredHint} 本地声纹：${speakerRuntime.reachable === false ? speakerRuntime.detail : speakerRuntime.configured ? `已录入 ${speakerRuntime.sampleCount || 0} 个样本` : '未录入'}。当前严格度 ${voice.speakerThreshold ?? '—'}。`
+    : `${speakerConfiguredHint} 当前严格度 ${voice.speakerThreshold ?? '—'}。`
+  const speakerStatusLevel = voice.speakerVerificationEnabled && speakerRuntime && speakerRuntime.reachable && !speakerRuntime.configured ? 'warn' : voice.speakerVerificationEnabled ? 'ok' : 'info'
   add(
     'speaker_gate',
     '声纹门控',
-    voice.speakerVerificationEnabled ? 'ok' : 'info',
-    `${speakerConfiguredHint} 当前严格度 ${voice.speakerThreshold ?? '—'}。`,
-    voice.speakerVerificationEnabled ? '如果本人被拒绝，降低严格度或重新录入。' : '如需只响应你本人，请录入声纹并开启“只响应我的声音”。',
+    speakerStatusLevel,
+    speakerDetail,
+    voice.speakerVerificationEnabled ? (speakerRuntime?.configured === false ? '请先录入声纹；如果已录入但这里显示未录入，请重启本地语音服务。' : '如果本人被拒绝，降低严格度或重新录入。') : '如需只响应你本人，请录入声纹并开启“只响应我的声音”。',
   )
   if (summary) {
     const recent = summary.recent || {}
@@ -276,6 +311,7 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     voice,
     local,
     summary: summary ? { level: summary.level, recent: summary.recent, issues: summary.issues, suggestions: summary.suggestions } : null,
+    speakerStatus: speakerRuntime,
     recentFixes: Array.isArray(voice.voiceLocalDoctorHistory) ? voice.voiceLocalDoctorHistory.slice(-5).reverse() : [],
     checks,
     nextActions: checks.filter(item => item.status !== 'ok').map(item => ({ id: item.id, label: item.label, action: item.action, fixAction: item.fixAction || null })).slice(0, 5),
@@ -1784,7 +1820,11 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     // GET /voice/local/doctor — local voice readiness and human troubleshooting checklist
     if (req.method === 'GET' && url.pathname === '/voice/local/doctor') {
       const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))
-      jsonResponse(res, 200, buildVoiceLocalDoctor({ windowMs }))
+      queryLocalSpeakerStatus().then(speakerStatus => {
+        jsonResponse(res, 200, buildVoiceLocalDoctor({ windowMs, speakerStatus }))
+      }).catch(err => {
+        jsonResponse(res, 200, buildVoiceLocalDoctor({ windowMs, speakerStatus: { ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' } }))
+      })
       return
     }
 

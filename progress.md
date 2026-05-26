@@ -312,3 +312,9 @@
 - Brain UI shows a “回滚” button on the latest repair history entry, syncs rolled-back settings into controls/localStorage, and refreshes the doctor panel.
 - Extended smoke coverage for backend rollback and UI rollback flow.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added runtime speaker status checks to the local voice doctor so it no longer relies only on persisted config when diagnosing “I recorded voiceprint but it cannot recognize me”.
+- Backend now queries the local ASR WebSocket `speaker_status` when the local service is running and returns reachable/configured/sample count/threshold details.
+- Local voice doctor warns if speaker verification is enabled but the runtime service reports no enrolled voiceprint.
+- Brain UI local voice doctor now renders a “声纹服务” status strip showing whether the runtime service is reachable and whether a voiceprint is enrolled.
+- Extended smoke coverage for backend speaker status when service is not running and for Brain UI speaker status rendering.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

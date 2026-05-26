@@ -368,3 +368,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage for rollback.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 37: Runtime speaker status in local voice doctor
+- [x] Add backend runtime query for local ASR WebSocket `speaker_status`.
+- [x] Include reachable/configured/sampleCount/threshold/detail in local voice doctor response.
+- [x] Use runtime speaker status to warn when speaker verification is enabled but the local service reports no enrolled voiceprint.
+- [x] Render runtime speaker service status in Brain UI local voice doctor.
+- [x] Extend brain-ui smoke coverage for speaker service status rendering.
+- [x] Extend voice-events smoke coverage for local-service-not-running speaker status.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

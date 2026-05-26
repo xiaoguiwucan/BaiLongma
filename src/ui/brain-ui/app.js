@@ -2901,9 +2901,11 @@ function initTTSSettings() {
       <div><strong>${escapeFocusText(item.label || item.id || "检查项")}</strong><em>${escapeFocusText(item.detail || "")}${item.action ? ` · ${escapeFocusText(item.action)}` : ""}</em></div>
       ${item.fixAction ? `<button class="voice-local-doctor-fix" data-action="${escapeFocusText(item.fixAction)}" type="button">一键修复</button>` : ""}
     </div>`).join("");
+    const speaker = doctor.speakerStatus;
+    const speakerHtml = speaker ? `<div class="voice-local-speaker-runtime"><strong>声纹服务</strong><span>${escapeFocusText(speaker.reachable === false ? "不可达" : speaker.configured ? "已录入" : "未录入")}</span><em>${escapeFocusText(speaker.detail || "")}</em></div>` : "";
     const fixes = Array.isArray(doctor.recentFixes) ? doctor.recentFixes : [];
     const fixHtml = fixes.length ? `<div class="voice-local-doctor-history"><strong>最近修复</strong>${fixes.map((item, index) => `<span>${escapeFocusText(item.label || item.action || "修复")} · ${escapeFocusText(new Date(item.at || Date.now()).toLocaleTimeString())}${index === 0 && item.before && Object.keys(item.before).length ? `<button class="voice-local-doctor-rollback" data-id="${escapeFocusText(item.id || "")}" type="button">回滚</button>` : ""}</span>`).join("")}</div>` : "";
-    return checkHtml + fixHtml;
+    return checkHtml + speakerHtml + fixHtml;
   }
 
   function bindVoiceLocalDoctorFixes() {

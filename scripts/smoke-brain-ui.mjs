@@ -494,6 +494,7 @@ new WebSocket(url)`,
       sendJson(res, {
         ok: true,
         level: localDoctorFixed ? 'ok' : 'warn',
+        speakerStatus: { ok: true, reachable: true, configured: localDoctorFixed, sampleCount: localDoctorFixed ? 3 : 0, detail: localDoctorFixed ? '已录入 3 个声纹样本。' : '本地服务可达，但还没有录入声纹。' },
         recentFixes: localDoctorFixHistory,
         checks: localDoctorFixed ? [
           { id: 'provider', label: '识别服务商', status: 'ok', detail: '当前使用本地 ASR，音频不会上传云端。', action: '保持本地模式。' },
@@ -515,7 +516,7 @@ new WebSocket(url)`,
         action: 'start_local_voice',
         record: localDoctorFixHistory[0],
         voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
-        doctor: { ok: true, level: 'ok', recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
+        doctor: { ok: true, level: 'ok', speakerStatus: { ok: true, reachable: true, configured: true, sampleCount: 3, detail: '已录入 3 个声纹样本。' }, recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
       })
       return
     }
@@ -529,7 +530,7 @@ new WebSocket(url)`,
         rolledBack: 'voice_doctor_smoke',
         record: localDoctorFixHistory[0],
         voice: { asrProvider: 'local', localAsrModel: 'small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
-        doctor: { ok: true, level: 'warn', recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'warn', detail: 'stopped：本地语音服务未运行' }] },
+        doctor: { ok: true, level: 'warn', speakerStatus: { ok: true, reachable: true, configured: false, sampleCount: 0, detail: '本地服务可达，但还没有录入声纹。' }, recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'warn', detail: 'stopped：本地语音服务未运行' }] },
       })
       return
     }
@@ -673,7 +674,7 @@ try {
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
   if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
-  if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行')) throw new Error('local voice doctor did not render readiness checks')
+  if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('最近修复') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('启动本地语音服务') && document.querySelector('.voice-local-doctor-rollback')?.textContent.includes('回滚'))
   await page.evaluate(() => document.querySelector('.voice-local-doctor-rollback')?.click())
