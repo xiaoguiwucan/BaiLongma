@@ -109,3 +109,12 @@
 - Verification passed: `npm run smoke:voice-mapping` 46/46, `npm run smoke:voice-events` 49/49, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.
+- Started post-v2.2.0 major-line work without creating a new release, per major-release cadence.
+- Cleaned local release asset output directory after confirming v2.2.0 GitHub Release and uploaded assets are present.
+- Added next-stage wake guard tuning settings for video/noisy environments: `wakeConfidenceThreshold`, `wakeMinCommandChars`, `wakeCooldownMs`, and `wakeRequireSpeakerWhenEnabled`.
+- Persisted the new wake guard settings through `/settings/voice` using `getVoiceConfig()` / `setVoiceConfig()` with safe clamping.
+- Added Brain UI controls for wake confidence threshold, minimum command length, wake cooldown, and “speaker verification required for wake when enabled”.
+- Added localStorage synchronization and save payload wiring for the new wake guard settings.
+- Added `smoke:voice-config` covering clamping and boolean persistence for the new wake guard fields.
+- Verification passed: `npm run smoke:voice-config` 8/8 and `npm run smoke:brain-ui`.
+- This is a post-v2.2.0 development checkpoint only: committed/pushed for GitHub backup, no tag and no GitHub Release.

@@ -23,7 +23,8 @@
     "voice:events": "node scripts/voice-events-client.mjs",
     "smoke:voice-events": "node scripts/smoke-voice-events.mjs",
     "smoke:voice-mapping": "node scripts/smoke-voice-mapping.mjs",
-    "smoke:voice-events-client": "node scripts/smoke-voice-events-client.mjs"
+    "smoke:voice-events-client": "node scripts/smoke-voice-events-client.mjs",
+    "smoke:voice-config": "node scripts/smoke-voice-config.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

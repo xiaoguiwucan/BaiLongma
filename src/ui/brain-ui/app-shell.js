@@ -513,7 +513,26 @@ const createSettingsModal = () => `
               <label class="settings-label" for="voice-wake-repeat-suppression">抑制重复误识别文本</label>
               <input id="voice-wake-repeat-suppression" type="checkbox" checked style="width:auto;flex:none;">
             </div>
-            <p class="settings-hint">严格模式更适合视频/聊天环境：必须说“龙马，帮我查天气”。只说“龙马”后，会在设定窗口内等待下一句指令；重复误识别文本会被静默忽略。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-confidence">唤醒置信度阈值</label>
+              <input type="range" id="voice-wake-confidence" min="0.50" max="0.98" step="0.01" value="0.72" style="flex:1;cursor:pointer;">
+              <span id="voice-wake-confidence-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">0.72</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-min-command">唤醒后最短指令字数</label>
+              <input type="range" id="voice-wake-min-command" min="0" max="20" step="1" value="2" style="flex:1;cursor:pointer;">
+              <span id="voice-wake-min-command-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">2字</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-cooldown">唤醒冷却时间</label>
+              <input type="range" id="voice-wake-cooldown" min="0" max="15000" step="100" value="1200" style="flex:1;cursor:pointer;">
+              <span id="voice-wake-cooldown-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">1.2s</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-require-speaker">声纹开启时唤醒也必须通过声纹</label>
+              <input id="voice-wake-require-speaker" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <p class="settings-hint">严格模式更适合视频/聊天环境：必须说“龙马，帮我查天气”。只说“龙马”后，会在设定窗口内等待下一句指令；重复误识别文本会被静默忽略。v2.3 开始可调唤醒置信度、最短指令字数和冷却时间，降低视频/他人说话误唤醒。</p>
             <div class="settings-row">
               <label class="settings-label" for="voice-speaker-verify">只响应我的声音</label>
               <input id="voice-speaker-verify" type="checkbox" style="width:auto;flex:none;">

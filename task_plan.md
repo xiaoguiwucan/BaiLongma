@@ -118,3 +118,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add Brain UI “生成接入包” action and expandable package files panel.
 - [x] Extend mapping, voice-events, and brain-ui smoke coverage.
 - [x] Verify all relevant smoke suites.
+
+## Checkpoint 12: Post-v2.2.0 wake guard tuning foundation
+- [x] Confirm v2.2.0 Release exists with source and bundle assets.
+- [x] Clean local release output artifacts from the working tree.
+- [x] Add persisted wake confidence, minimum command length, cooldown, and speaker-gated wake settings.
+- [x] Add Brain UI controls and save/load wiring for the new wake guard settings.
+- [x] Add `smoke:voice-config` coverage for new voice config fields.
+- [x] Verify brain-ui and voice-config smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

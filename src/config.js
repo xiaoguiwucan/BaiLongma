@@ -629,7 +629,7 @@ export function setSocialConfig(updates) {
 }
 
 const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
-const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', ...VOICE_SECRET_KEYS]
+const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', 'wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', ...VOICE_SECRET_KEYS]
 const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
 const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
 const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
@@ -652,6 +652,10 @@ export function getVoiceConfig() {
     wakeWindowSeconds: Number.isFinite(Number(stored.wakeWindowSeconds)) ? Math.max(3, Math.min(30, Number(stored.wakeWindowSeconds))) : 8,
     wakeRepeatSuppression: typeof stored.wakeRepeatSuppression === 'boolean' ? stored.wakeRepeatSuppression : true,
     speakerVerificationEnabled: typeof stored.speakerVerificationEnabled === 'boolean' ? stored.speakerVerificationEnabled : false,
+    wakeConfidenceThreshold: Number.isFinite(Number(stored.wakeConfidenceThreshold)) ? Math.max(0.50, Math.min(0.98, Number(stored.wakeConfidenceThreshold))) : 0.72,
+    wakeMinCommandChars: Number.isFinite(Number(stored.wakeMinCommandChars)) ? Math.max(0, Math.min(20, Math.round(Number(stored.wakeMinCommandChars)))) : 2,
+    wakeCooldownMs: Number.isFinite(Number(stored.wakeCooldownMs)) ? Math.max(0, Math.min(15000, Math.round(Number(stored.wakeCooldownMs)))) : 1200,
+    wakeRequireSpeakerWhenEnabled: typeof stored.wakeRequireSpeakerWhenEnabled === 'boolean' ? stored.wakeRequireSpeakerWhenEnabled : true,
   }
   for (const key of VOICE_SECRET_KEYS) {
     result[key] = { configured: !!(stored[key]) }
@@ -713,6 +717,25 @@ export function setVoiceConfig(updates) {
     }
     if (key === 'speakerVerificationEnabled') {
       next.speakerVerificationEnabled = val === true || trimmed === 'true'
+      continue
+    }
+    if (key === 'wakeConfidenceThreshold') {
+      const threshold = Number(val)
+      if (Number.isFinite(threshold)) next.wakeConfidenceThreshold = Math.max(0.50, Math.min(0.98, threshold))
+      continue
+    }
+    if (key === 'wakeMinCommandChars') {
+      const chars = Number(val)
+      if (Number.isFinite(chars)) next.wakeMinCommandChars = Math.max(0, Math.min(20, Math.round(chars)))
+      continue
+    }
+    if (key === 'wakeCooldownMs') {
+      const ms = Number(val)
+      if (Number.isFinite(ms)) next.wakeCooldownMs = Math.max(0, Math.min(15000, Math.round(ms)))
+      continue
+    }
+    if (key === 'wakeRequireSpeakerWhenEnabled') {
+      next.wakeRequireSpeakerWhenEnabled = val === true || trimmed === 'true'
       continue
     }
     if (key === 'aliyunApiKey' && trimmed && !isValidAliyunAsrKey(trimmed)) {
