@@ -90,8 +90,6 @@ const VOICE_WHISPER_MODEL_KEY = 'bailongma-voice-whisper-model'; // 兼容旧版
 const VOICE_LOCAL_ASR_MODEL_KEY = 'bailongma-voice-local-asr-model';
 const VOICE_WAKE_ENABLED_KEY = 'bailongma-voice-wake-enabled';
 const VOICE_WAKE_WORDS_KEY = 'bailongma-voice-wake-words';
-const VOICE_SPEAKER_VERIFY_KEY = 'bailongma-voice-speaker-verify';
-const VOICE_SPEAKER_THRESHOLD_KEY = 'bailongma-voice-speaker-threshold';
 const VOICE_VIDEO_DUCK_KEY = 'bailongma-voice-video-duck';
 const VOICE_VIDEO_AEC_KEY = 'bailongma-voice-video-aec';
 
@@ -171,7 +169,7 @@ export function initVoicePanel({
       const sum = micData.dataArray.reduce((a, b) => a + b, 0);
       const vol = (sum / micData.dataArray.length) / 255;
 
-      // 视频播放中：检测到近场人声时通知媒体层先降音量/暂停，让唤醒词和声纹有机会听清。
+      // 视频播放中：检测到近场人声时通知媒体层先降音量/暂停，让唤醒词有机会听清。
       if (mediaModeActive && localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== 'false' && vol > BARGEIN_THRESHOLD) {
         const now = Date.now();
         if (now - lastMediaVoiceActivityAt > 900) {
@@ -506,8 +504,6 @@ export function initVoicePanel({
       ? {
           type: 'config',
           lang,
-          speakerVerification: localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === 'true',
-          speakerThreshold: parseFloat(localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) || '0.55'),
         }
       : { type: 'config', provider, lang };
     ws.send(JSON.stringify(payload));
@@ -553,7 +549,6 @@ export function initVoicePanel({
         scheduleAutoSend();
       } else if (msg.type === 'speaker_rejected') {
         setStatus('listening');
-        if (transcript) transcript.textContent = msg.reason || `已忽略非本人声音${msg.score != null ? `（声纹 ${msg.score}/${msg.threshold}）` : ''}`;
         return;
       } else if (msg.type === 'sound_event') {
         // 本地语音服务可选返回环境声音事件。这里保持静默，不干扰转写文本。

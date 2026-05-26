@@ -2120,8 +2120,6 @@ function initTTSSettings() {
   const VOICE_LOCAL_ASR_MODEL_KEY = "bailongma-voice-local-asr-model";
   const VOICE_WAKE_ENABLED_KEY = "bailongma-voice-wake-enabled";
   const VOICE_WAKE_WORDS_KEY = "bailongma-voice-wake-words";
-  const VOICE_SPEAKER_VERIFY_KEY = "bailongma-voice-speaker-verify";
-  const VOICE_SPEAKER_THRESHOLD_KEY = "bailongma-voice-speaker-threshold";
   const VOICE_VIDEO_DUCK_KEY = "bailongma-voice-video-duck";
   const VOICE_VIDEO_PTT_KEY = "bailongma-voice-video-ptt";
   const VOICE_VIDEO_AEC_KEY = "bailongma-voice-video-aec";
@@ -2172,9 +2170,6 @@ function initTTSSettings() {
     localStorage.setItem(VOICE_LOCAL_ASR_MODEL_KEY, savedLocalModel);
     const wakeEnabled = document.getElementById("voice-wake-enabled");
     const wakeWords = document.getElementById("voice-wake-words");
-    const speakerVerify = document.getElementById("voice-speaker-verify");
-    const speakerThreshold = document.getElementById("voice-speaker-threshold");
-    const speakerThresholdVal = document.getElementById("voice-speaker-threshold-val");
     const videoDuck = document.getElementById("voice-video-duck");
     const videoPtt = document.getElementById("voice-video-ptt");
     const videoAec = document.getElementById("voice-video-aec");
@@ -2182,14 +2177,8 @@ function initTTSSettings() {
     const savedWakeWords = Array.isArray(serverVoice?.wakeWords) ? serverVoice.wakeWords.join("，") : (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || "小龙马，龙马，白龙马");
     if (wakeEnabled) wakeEnabled.checked = savedWakeEnabled;
     if (wakeWords) wakeWords.value = savedWakeWords;
-    const savedSpeakerVerify = typeof serverVoice?.speakerVerificationEnabled === "boolean" ? serverVoice.speakerVerificationEnabled : localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === "true";
-    if (speakerVerify) speakerVerify.checked = savedSpeakerVerify;
     localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(savedWakeEnabled));
     localStorage.setItem(VOICE_WAKE_WORDS_KEY, savedWakeWords);
-    localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(savedSpeakerVerify));
-    const savedSpeakerThreshold = parseFloat(localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) || "0.55");
-    if (speakerThreshold) speakerThreshold.value = String(savedSpeakerThreshold);
-    if (speakerThresholdVal) speakerThresholdVal.textContent = savedSpeakerThreshold.toFixed(2);
     if (videoDuck) videoDuck.checked = localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== "false";
     if (videoPtt) videoPtt.checked = localStorage.getItem(VOICE_VIDEO_PTT_KEY) !== "false";
     if (videoAec) videoAec.checked = localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== "false";
@@ -2203,94 +2192,6 @@ function initTTSSettings() {
   }
 
 
-  async function ensureLocalAsrForEnrollment() {
-    const model = localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
-    await fetch(`${API}/voice/local/start`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ localAsrModel: model, model }),
-    });
-  }
-
-  async function enrollSpeakerVoice() {
-    const btn = document.getElementById("voice-enroll-speaker");
-    const fb = document.getElementById("voice-speaker-feedback");
-    if (!btn) return;
-    btn.disabled = true;
-    showFeedback(fb, "准备麦克风…");
-    let stream = null;
-    let ws = null;
-    let ctx = null;
-    let processor = null;
-    try {
-      await ensureLocalAsrForEnrollment();
-      stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, channelCount: 1 } });
-      ws = new WebSocket("ws://127.0.0.1:3723");
-      await new Promise((resolve, reject) => {
-        ws.onopen = resolve;
-        ws.onerror = () => reject(new Error("声纹服务连接失败"));
-      });
-      ws.binaryType = "arraybuffer";
-      const done = new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("声纹录入超时")), 15000);
-        ws.onmessage = (ev) => {
-          try {
-            const msg = JSON.parse(ev.data);
-            if (msg.type === "speaker_enroll_ok") { clearTimeout(timer); resolve(msg); }
-            if (msg.type === "error") { clearTimeout(timer); reject(new Error(msg.message || "声纹录入失败")); }
-          } catch {}
-        };
-      });
-      ws.send(JSON.stringify({ type: "speaker_enroll_start" }));
-      ctx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: 16000 });
-      const src = ctx.createMediaStreamSource(stream);
-      processor = ctx.createScriptProcessor(4096, 1, 1);
-      src.connect(processor);
-      processor.connect(ctx.destination);
-      processor.onaudioprocess = (e) => {
-        if (!ws || ws.readyState !== WebSocket.OPEN) return;
-        const f32 = e.inputBuffer.getChannelData(0);
-        const i16 = new Int16Array(f32.length);
-        for (let i = 0; i < f32.length; i++) i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
-        ws.send(i16.buffer);
-      };
-      showFeedback(fb, "请连续说 6 秒…");
-      await new Promise(r => setTimeout(r, 6500));
-      processor.onaudioprocess = null;
-      ws.send(JSON.stringify({ type: "speaker_enroll_finish" }));
-      const result = await done;
-      showFeedback(fb, `声纹已录入（${result.seconds || 6}s）`);
-      const speakerVerify = document.getElementById("voice-speaker-verify");
-      if (speakerVerify) speakerVerify.checked = true;
-      localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "true");
-      try {
-        await fetch(`${API}/settings/voice`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ speakerVerificationEnabled: true }),
-        });
-      } catch {}
-    } catch (err) {
-      showFeedback(fb, err?.message || "声纹录入失败", true);
-    } finally {
-      try { processor?.disconnect(); } catch {}
-      try { await ctx?.close(); } catch {}
-      try { stream?.getTracks().forEach(t => t.stop()); } catch {}
-      try { ws?.close(); } catch {}
-      btn.disabled = false;
-    }
-  }
-
-  const enrollSpeakerBtn = document.getElementById("voice-enroll-speaker");
-  if (enrollSpeakerBtn) enrollSpeakerBtn.addEventListener("click", enrollSpeakerVoice);
-
-  const speakerThresholdSlider = document.getElementById("voice-speaker-threshold");
-  const speakerThresholdVal = document.getElementById("voice-speaker-threshold-val");
-  if (speakerThresholdSlider && speakerThresholdVal) {
-    speakerThresholdSlider.addEventListener("input", () => {
-      speakerThresholdVal.textContent = parseFloat(speakerThresholdSlider.value).toFixed(2);
-    });
-  }
 
   if (saveVoiceBtn) {
     saveVoiceBtn.addEventListener("click", async () => {
@@ -2303,8 +2204,6 @@ function initTTSSettings() {
       const whisperModel = localAsrModel === "sensevoice-small" ? (localStorage.getItem(VOICE_WHISPER_MODEL_KEY) || "small") : localAsrModel;
       const wakeEnabled = document.getElementById("voice-wake-enabled")?.checked ?? true;
       const wakeWords = document.getElementById("voice-wake-words")?.value?.trim() || "小龙马，龙马，白龙马";
-      const speakerVerify = document.getElementById("voice-speaker-verify")?.checked ?? false;
-      const speakerThreshold = parseFloat(document.getElementById("voice-speaker-threshold")?.value || "0.55");
       const videoDuck = document.getElementById("voice-video-duck")?.checked ?? true;
       const videoPtt = document.getElementById("voice-video-ptt")?.checked ?? true;
       const videoAec = document.getElementById("voice-video-aec")?.checked ?? true;
@@ -2318,8 +2217,6 @@ function initTTSSettings() {
       localStorage.setItem(VOICE_WHISPER_MODEL_KEY, whisperModel);
       localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(wakeEnabled));
       localStorage.setItem(VOICE_WAKE_WORDS_KEY, wakeWords);
-      localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(speakerVerify));
-      localStorage.setItem(VOICE_SPEAKER_THRESHOLD_KEY, String(speakerThreshold));
       localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(videoDuck));
       localStorage.setItem(VOICE_VIDEO_PTT_KEY, String(videoPtt));
       localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(videoAec));
@@ -2333,7 +2230,7 @@ function initTTSSettings() {
         whisperModel,
         wakeWordEnabled: wakeEnabled,
         wakeWords: wakeWords.split(/[,，、\s]+/).map(w => w.trim()).filter(Boolean),
-        speakerVerificationEnabled: speakerVerify,
+        speakerVerificationEnabled: false,
       };
       const aliyunKey = document.getElementById("voice-aliyun-key")?.value?.trim();
       if (aliyunKey) body.aliyunApiKey = aliyunKey;

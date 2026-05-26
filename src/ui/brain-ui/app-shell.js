@@ -424,22 +424,6 @@ const createSettingsModal = () => `
               <input class="settings-input" type="text" id="voice-wake-words" placeholder="小龙马，龙马，白龙马">
             </div>
             <p class="settings-hint">启用后，普通说话/视频声音会被忽略；只有识别到唤醒词才会把指令发送给助手。可以说“龙马，帮我查天气”，或只说“龙马”后 8 秒内继续说指令。</p>
-            <div class="settings-row">
-              <label class="settings-label" for="voice-speaker-verify">只响应我的声音</label>
-              <input id="voice-speaker-verify" type="checkbox" style="width:auto;flex:none;">
-            </div>
-            <div class="settings-row">
-              <label class="settings-label">声纹录入</label>
-              <button class="settings-save-btn" id="voice-enroll-speaker" type="button">录入我的声纹</button>
-              <span class="settings-feedback" id="voice-speaker-feedback"></span>
-            </div>
-            <p class="settings-hint">声纹只保存在本机，用来过滤非你的声音。录入时请在安静环境下连续说 5–8 秒，例如“贾维斯，今天天气怎么样”。</p>
-            <div class="settings-row">
-              <label class="settings-label" for="voice-speaker-threshold">声纹严格度</label>
-              <input type="range" id="voice-speaker-threshold" min="0.45" max="0.80" step="0.01" value="0.55" style="flex:1;cursor:pointer;">
-              <span id="voice-speaker-threshold-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">0.55</span>
-            </div>
-            <p class="settings-hint">越低越不容易误拒绝你，越高越严格。建议先用 0.55；如果别人能唤醒再提高到 0.62–0.70。</p>
           </div>
 
 
@@ -675,10 +659,10 @@ const createSettingsModal = () => `
                   <span class="release-note-version">v2.1.208</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
-                <p class="release-note-summary">本地语音助手大版本：中文优先 ASR、唤醒词、声纹和视频抗干扰。</p>
+                <p class="release-note-summary">本地语音助手大版本：中文优先 ASR、唤醒词和视频抗干扰。</p>
                 <ul class="release-note-points">
                   <li>默认本地 ASR 改为 SenseVoiceSmall，Whisper 保留为备用模型。</li>
-                  <li>新增唤醒词开关、自定义唤醒词、本地声纹录入和声纹严格度设置。</li>
+                  <li>新增唤醒词开关、自定义唤醒词和视频抗干扰设置。</li>
                   <li>新增视频播放场景的自动降音/暂停、空格按住说话和系统 AEC 开关。</li>
                   <li>本地 ASR 增加静音门控、低置信度过滤和重复幻觉文本过滤。</li>
                   <li>新增 Mac 自部署与备份文档，说明模型、虚拟环境和个人数据如何恢复。</li>
