@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice server work by making the bundled `/voice/events` CLI debug client understand the new client identity/capability negotiation, so ESP32-style bridges and local debugging can identify themselves consistently.
 
 ## Current Phase
-GitHub release
+Complete
 
 ## Phases
 
@@ -27,11 +27,11 @@ GitHub release
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [ ] Commit changes
-- [ ] Tag and push v2.1.238
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag and push v2.1.238
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
