@@ -127,3 +127,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add `smoke:voice-config` coverage for new voice config fields.
 - [x] Verify brain-ui and voice-config smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 13: Wire wake guard settings into actual recognition gating
+- [x] Add shared wake guard helper for confidence scoring, min command length, cooldown, and speaker-gated wake decisions.
+- [x] Load new wake guard settings in Brain UI voice panel runtime.
+- [x] Apply guard to direct wake matches and wake-window follow-up commands.
+- [x] Emit rejection details for diagnostics/history.
+- [x] Add `smoke:wake-guard` coverage.
+- [x] Verify wake guard, voice config, and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

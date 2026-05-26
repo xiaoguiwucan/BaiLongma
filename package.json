@@ -24,7 +24,8 @@
     "smoke:voice-events": "node scripts/smoke-voice-events.mjs",
     "smoke:voice-mapping": "node scripts/smoke-voice-mapping.mjs",
     "smoke:voice-events-client": "node scripts/smoke-voice-events-client.mjs",
-    "smoke:voice-config": "node scripts/smoke-voice-config.mjs"
+    "smoke:voice-config": "node scripts/smoke-voice-config.mjs",
+    "smoke:wake-guard": "node scripts/smoke-wake-guard.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

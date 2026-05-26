@@ -1,5 +1,6 @@
 import { createVoiceStateMachine, VOICE_STATES } from '../../voice/voice-state-machine.js';
 import { emitVoiceEvent, VOICE_EVENT_TYPES } from '../../voice/voice-events.js';
+import { evaluateWakeGuard, normalizeWakeGuardConfig } from '../../voice/wake-guard.js';
 
 // 声波点云球 + ASR 语音输入面板
 // 默认本地 Whisper；也可切换云端 ASR（阿里云/腾讯云/讯飞），通过后端 WebSocket 代理
@@ -97,6 +98,10 @@ const VOICE_WAKE_WORDS_KEY = 'bailongma-voice-wake-words';
 const VOICE_WAKE_MODE_KEY = 'bailongma-voice-wake-mode';
 const VOICE_WAKE_WINDOW_KEY = 'bailongma-voice-wake-window-seconds';
 const VOICE_WAKE_REPEAT_SUPPRESS_KEY = 'bailongma-voice-wake-repeat-suppression';
+const VOICE_WAKE_CONFIDENCE_KEY = 'bailongma-voice-wake-confidence-threshold';
+const VOICE_WAKE_MIN_COMMAND_KEY = 'bailongma-voice-wake-min-command-chars';
+const VOICE_WAKE_COOLDOWN_KEY = 'bailongma-voice-wake-cooldown-ms';
+const VOICE_WAKE_REQUIRE_SPEAKER_KEY = 'bailongma-voice-wake-require-speaker';
 const VOICE_SPEAKER_VERIFY_KEY = 'bailongma-voice-speaker-verify';
 const VOICE_SPEAKER_THRESHOLD_KEY = 'bailongma-voice-speaker-threshold';
 const VOICE_VIDEO_DUCK_KEY = 'bailongma-voice-video-duck';
@@ -381,6 +386,8 @@ export function initVoicePanel({
   let accumulatedText = '';
   let wakeActiveUntil = 0;
   let lastWakeReject = { text: '', at: 0, count: 0 };
+  let lastWakeAcceptedAt = 0;
+  let lastSpeakerAcceptedAt = 0;
 
   async function startMic() {
     try {
@@ -439,20 +446,42 @@ export function initVoicePanel({
     const mode = localStorage.getItem(VOICE_WAKE_MODE_KEY) === 'loose' ? 'loose' : 'strict';
     const windowSeconds = Math.max(3, Math.min(30, Number(localStorage.getItem(VOICE_WAKE_WINDOW_KEY) || 8) || 8));
     const repeatSuppression = localStorage.getItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY) !== 'false';
-    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'], mode, windowSeconds, repeatSuppression };
+    const guard = normalizeWakeGuardConfig({
+      confidenceThreshold: localStorage.getItem(VOICE_WAKE_CONFIDENCE_KEY) || 0.72,
+      minCommandChars: localStorage.getItem(VOICE_WAKE_MIN_COMMAND_KEY) || 2,
+      cooldownMs: localStorage.getItem(VOICE_WAKE_COOLDOWN_KEY) || 1200,
+      requireSpeakerWhenEnabled: localStorage.getItem(VOICE_WAKE_REQUIRE_SPEAKER_KEY) !== 'false',
+    });
+    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'], mode, windowSeconds, repeatSuppression, guard };
   }
 
   function normalizeWakeText(text = '') {
     return String(text || '').replace(/[\s,，、。.！!？?：:；;"“”'‘’]/g, '').toLowerCase();
   }
 
-  function applyWakeWordGate(text = '') {
+  function applyWakeWordGate(text = '', source = {}) {
     const raw = String(text || '').trim();
     const cfg = getWakeConfig();
     if (!cfg.enabled) return { accepted: true, text: raw, wokeOnly: false, reason: 'wake disabled' };
 
     const now = Date.now();
-    if (wakeActiveUntil > now) return { accepted: true, text: raw, wokeOnly: false, reason: 'wake window active' };
+    if (wakeActiveUntil > now) {
+      const guard = evaluateWakeGuard({
+        accepted: true,
+        text: raw,
+        remainder: raw,
+        mode: cfg.mode,
+        now,
+        lastAcceptedAt: lastWakeAcceptedAt,
+        speakerVerificationEnabled: localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === 'true',
+        speakerAccepted: !cfg.guard.requireSpeakerWhenEnabled || lastSpeakerAcceptedAt > 0 && now - lastSpeakerAcceptedAt < Math.max(cfg.windowSeconds * 1000, 3000),
+        source,
+        config: cfg.guard,
+      });
+      if (!guard.accepted) return { accepted: false, text: '', wokeOnly: false, reason: guard.reason, guard };
+      lastWakeAcceptedAt = now;
+      return { accepted: true, text: raw, wokeOnly: false, reason: 'wake window active', confidence: guard.confidence };
+    }
 
     if (cfg.repeatSuppression) {
       const normalizedRaw = normalizeWakeText(raw);
@@ -476,10 +505,29 @@ export function initVoicePanel({
       if (directIdx >= 0) remainder = raw.slice(directIdx + word.length);
       else remainder = raw.replace(new RegExp(word.split('').map(ch => ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('[\\s,，、。.！!？?：:；;]*'), 'i'), '');
       remainder = remainder.replace(/^[\s,，、。.！!？?：:；;]+/, '').trim();
+      const guard = evaluateWakeGuard({
+        accepted: true,
+        wokeOnly: !remainder,
+        text: raw,
+        word,
+        mode: cfg.mode,
+        remainder,
+        now,
+        lastAcceptedAt: lastWakeAcceptedAt,
+        speakerVerificationEnabled: localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === 'true',
+        speakerAccepted: !cfg.guard.requireSpeakerWhenEnabled || lastSpeakerAcceptedAt > 0 && now - lastSpeakerAcceptedAt < 10000,
+        source,
+        config: cfg.guard,
+      });
+      if (!guard.accepted) {
+        if (cfg.repeatSuppression && normalized) lastWakeReject = { text: normalized, at: now, count: 1 };
+        return { accepted: false, text: '', wokeOnly: !remainder, reason: guard.reason, word, guard, confidence: guard.confidence, threshold: guard.threshold, minCommandChars: guard.minCommandChars, remainingMs: guard.remainingMs };
+      }
       wakeActiveUntil = Date.now() + cfg.windowSeconds * 1000;
+      lastWakeAcceptedAt = now;
       lastWakeReject = { text: '', at: 0, count: 0 };
-      if (!remainder) return { accepted: false, text: '', wokeOnly: true, reason: 'wake only', word, windowSeconds: cfg.windowSeconds };
-      return { accepted: true, text: remainder, wokeOnly: false, reason: 'wake matched', word, mode: cfg.mode };
+      if (!remainder) return { accepted: false, text: '', wokeOnly: true, reason: 'wake only', word, windowSeconds: cfg.windowSeconds, confidence: guard.confidence };
+      return { accepted: true, text: remainder, wokeOnly: false, reason: 'wake matched', word, mode: cfg.mode, confidence: guard.confidence };
     }
     const normalizedRaw = normalizeWakeText(raw);
     if (cfg.repeatSuppression && normalizedRaw) lastWakeReject = { text: normalizedRaw, at: now, count: 1 };
@@ -573,9 +621,9 @@ export function initVoicePanel({
         if (looksLikeAsrHallucination(text)) return;
         if (msg.is_final) {
           if (text === lastFinalTranscript) return;
-          const gated = applyWakeWordGate(text);
+          const gated = applyWakeWordGate(text, msg);
           if (!gated.accepted) {
-            emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_REJECTED, { text, reason: gated.reason, wokeOnly: gated.wokeOnly, repeatCount: gated.repeatCount });
+            emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_REJECTED, { text, reason: gated.reason, wokeOnly: gated.wokeOnly, repeatCount: gated.repeatCount, confidence: gated.confidence, threshold: gated.threshold, minCommandChars: gated.minCommandChars, remainingMs: gated.remainingMs });
             if (gated.wokeOnly) {
               if (transcript) transcript.textContent = `已唤醒，请在 ${gated.windowSeconds || 8} 秒内继续说指令…`;
               setStatus(VOICE_STATES.WAKE_DETECTED, { reason: 'wake word detected, waiting command', word: gated.word, windowSeconds: gated.windowSeconds });
@@ -584,7 +632,7 @@ export function initVoicePanel({
             }
             return;
           }
-          emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_ACCEPTED, { text: gated.text, word: gated.word, reason: gated.reason });
+          emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_ACCEPTED, { text: gated.text, word: gated.word, reason: gated.reason, confidence: gated.confidence });
           const acceptedText = gated.text;
           if (!acceptedText || looksLikeAsrHallucination(acceptedText)) return;
           lastFinalTranscript = acceptedText;
@@ -606,6 +654,10 @@ export function initVoicePanel({
         emitVoiceEvent(VOICE_EVENT_TYPES.SPEAKER_REJECTED, { score: msg.score, threshold: msg.threshold, reason: msg.reason });
         setStatus(VOICE_STATES.LISTENING, { reason: 'speaker rejected' });
         if (transcript) transcript.textContent = msg.reason || `已忽略非本人声音${msg.score != null ? `（声纹 ${msg.score}/${msg.threshold}）` : ''}`;
+        return;
+      } else if (msg.type === 'speaker_accepted') {
+        lastSpeakerAcceptedAt = Date.now();
+        emitVoiceEvent('speaker:accepted', { score: msg.score, threshold: msg.threshold });
         return;
       } else if (msg.type === 'sound_event') {
         // 本地语音服务可选返回环境声音事件。这里保持静默，不干扰转写文本。

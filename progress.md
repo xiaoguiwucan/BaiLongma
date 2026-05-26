@@ -118,3 +118,10 @@
 - Added `smoke:voice-config` covering clamping and boolean persistence for the new wake guard fields.
 - Verification passed: `npm run smoke:voice-config` 8/8 and `npm run smoke:brain-ui`.
 - This is a post-v2.2.0 development checkpoint only: committed/pushed for GitHub backup, no tag and no GitHub Release.
+- Connected the post-v2.2.0 wake guard tuning settings to the actual Brain UI recognition gating flow.
+- Added shared `src/voice/wake-guard.js` with normalized guard config, heuristic wake confidence scoring, command-length rejection, cooldown rejection, and optional speaker-gated wake validation.
+- Updated `voice-panel.js` to load wake confidence/min-command/cooldown/speaker-gate settings from localStorage, pass ASR message metadata into wake gating, emit confidence/threshold/rejection details, and remember recent speaker acceptance.
+- Wake-window commands now also pass through the guard, so noisy/video environments can reject too-short, low-confidence, cooldown, or non-speaker commands before they reach chat.
+- Added `smoke:wake-guard` with 7/7 checks for config clamping, strict-vs-loose confidence, minimum command length, confidence threshold, cooldown, speaker requirement, and speaker acceptance.
+- Verification passed: `npm run smoke:wake-guard` 7/7, `npm run smoke:voice-config` 8/8, and `npm run smoke:brain-ui`.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
