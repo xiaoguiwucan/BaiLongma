@@ -634,4 +634,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Render KWS model/dependency/runtime status in settings.
 - [x] Extend smoke tests for KWS setup endpoints and UI sync.
 - [x] Run validation checks and smoke suites.
-- [ ] Commit and push as a development checkpoint only, without tag/Release.
+- [x] Commit and push as a development checkpoint only, without tag/Release.
