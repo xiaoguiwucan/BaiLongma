@@ -4635,3 +4635,60 @@ body.person-card-mode .person-card-panel,
   border-color: rgba(143,240,179,0.30);
   background: rgba(143,240,179,0.07);
 }
+
+
+.voice-preset-panel {
+  margin-top: 14px;
+  padding: 14px;
+  border: 1px solid rgba(181, 154, 116, 0.20);
+  border-radius: 16px;
+  background: linear-gradient(145deg, rgba(181,154,116,0.08), rgba(95,128,105,0.05));
+}
+.voice-preset-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+.voice-preset-head strong { color: var(--ink); font-size: 14px; }
+.voice-preset-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 10px;
+}
+.voice-preset-card {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 142px;
+  padding: 12px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+  background: rgba(255,255,255,0.045);
+  transition: transform 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+}
+.voice-preset-card:hover {
+  transform: translateY(-1px);
+  border-color: rgba(181,154,116,0.45);
+  background: rgba(181,154,116,0.10);
+}
+.voice-preset-card strong { font-size: 14px; }
+.voice-preset-card p { margin: 0; color: var(--ink2); font-size: 12px; line-height: 1.55; }
+.voice-preset-patch {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: auto;
+}
+.voice-preset-patch span {
+  padding: 3px 7px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 11px;
+  background: rgba(0,0,0,0.12);
+}

@@ -273,3 +273,11 @@
 - Verification passed: syntax checks for API and voice-events smoke script; `npm run smoke:voice-events` 67/67.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Added Brain UI voice stability preset cards in the voice settings tab so users can choose complete scenario bundles instead of adjusting every wake/speaker/video option manually.
+- The UI now loads `/settings/voice/presets`, displays preset labels/descriptions plus chips for wake confidence, speaker threshold, video duck, PTT, and AEC.
+- Applying a preset calls `/settings/voice/preset/apply`, then immediately syncs returned wake mode, confidence, min command length, cooldown, speaker threshold, and video playback voice controls back into the page and localStorage.
+- Added preset-card styling for readable scenario selection inside settings.
+- Extended `smoke:brain-ui` to mock preset endpoints and verify the `video-guard` preset updates UI controls, labels, feedback, and localStorage.
+- Verification passed: `node --check src/api.js`; `node --check src/ui/brain-ui/app.js`; `node --check src/ui/brain-ui/app-shell.js`; `node --check scripts/smoke-brain-ui.mjs`; `npm run smoke:brain-ui`; `npm run smoke:voice-events` 67/67.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

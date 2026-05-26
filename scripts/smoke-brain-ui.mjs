@@ -142,8 +142,40 @@ function createServer() {
       return
     }
 
+    if (url.pathname === '/settings/voice/presets') {
+      sendJson(res, {
+        ok: true,
+        presets: [
+          { id: 'quiet-room', label: '安静房间', description: '普通近场聊天，保留较自然的唤醒体验。', patch: { wakeMode: 'strict', wakeConfidenceThreshold: 0.70, speakerThreshold: 0.55, videoVoiceDuckEnabled: false, videoVoicePttEnabled: false, videoVoiceAecEnabled: true } },
+          { id: 'video-guard', label: '视频抗干扰', description: '播放视频或别人说话时，优先避免误唤醒并打开降音/PTT/AEC。', patch: { wakeMode: 'strict', wakeConfidenceThreshold: 0.78, wakeMinCommandChars: 2, wakeCooldownMs: 1600, wakeRepeatSuppression: true, wakeRequireSpeakerWhenEnabled: true, speakerThreshold: 0.58, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.08, videoVoiceDuckHoldMs: 3200, videoVoiceDuckSensitivity: 0.85 } },
+        ],
+      })
+      return
+    }
 
-
+    if (url.pathname === '/settings/voice/preset/apply') {
+      sendJson(res, {
+        ok: true,
+        preset: { id: 'video-guard', label: '视频抗干扰', description: '播放视频或别人说话时使用。', patch: {} },
+        voice: {
+          wakeMode: 'strict',
+          wakeRepeatSuppression: true,
+          wakeConfidenceThreshold: 0.78,
+          wakeMinCommandChars: 2,
+          wakeCooldownMs: 1600,
+          wakeRequireSpeakerWhenEnabled: true,
+          speakerVerificationEnabled: true,
+          speakerThreshold: 0.58,
+          videoVoiceDuckEnabled: true,
+          videoVoicePttEnabled: true,
+          videoVoiceAecEnabled: true,
+          videoVoiceDuckLevel: 0.08,
+          videoVoiceDuckHoldMs: 3200,
+          videoVoiceDuckSensitivity: 0.85,
+        },
+      })
+      return
+    }
 
     if (url.pathname === '/voice/events/onboarding') {
       sendJson(res, {
@@ -589,6 +621,32 @@ try {
   if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35') throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
   if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
+  await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰'), null, { timeout: 5000 })
+  await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))
+  const presetSnapshot = await page.evaluate(() => ({
+    wakeConfidence: document.querySelector('#voice-wake-confidence')?.value,
+    wakeConfidenceLabel: document.querySelector('#voice-wake-confidence-val')?.textContent,
+    cooldown: document.querySelector('#voice-wake-cooldown')?.value,
+    cooldownLabel: document.querySelector('#voice-wake-cooldown-val')?.textContent,
+    speakerThreshold: document.querySelector('#voice-speaker-threshold')?.value,
+    speakerLabel: document.querySelector('#voice-speaker-threshold-val')?.textContent,
+    duckChecked: document.querySelector('#voice-video-duck')?.checked,
+    pttChecked: document.querySelector('#voice-video-ptt')?.checked,
+    aecChecked: document.querySelector('#voice-video-aec')?.checked,
+    duckLevel: document.querySelector('#voice-video-duck-level')?.value,
+    duckLabel: document.querySelector('#voice-video-duck-level-val')?.textContent,
+    storedConfidence: localStorage.getItem('bailongma-voice-wake-confidence-threshold'),
+    storedSpeakerThreshold: localStorage.getItem('bailongma-voice-speaker-threshold'),
+    storedDuck: localStorage.getItem('bailongma-voice-video-duck'),
+    storedDuckLevel: localStorage.getItem('bailongma-voice-video-duck-level'),
+  }))
+  if (presetSnapshot.wakeConfidence !== '0.78' || presetSnapshot.wakeConfidenceLabel !== '0.78' || presetSnapshot.storedConfidence !== '0.78') throw new Error(`voice preset did not sync wake confidence: ${JSON.stringify(presetSnapshot)}`)
+  if (presetSnapshot.cooldown !== '1600' || presetSnapshot.cooldownLabel !== '1.6s') throw new Error(`voice preset did not sync wake cooldown: ${JSON.stringify(presetSnapshot)}`)
+  if (presetSnapshot.speakerThreshold !== '0.58' || presetSnapshot.speakerLabel !== '0.58' || presetSnapshot.storedSpeakerThreshold !== '0.58') throw new Error(`voice preset did not sync speaker threshold: ${JSON.stringify(presetSnapshot)}`)
+  if (presetSnapshot.duckChecked !== true || presetSnapshot.pttChecked !== true || presetSnapshot.aecChecked !== true || presetSnapshot.storedDuck !== 'true') throw new Error(`voice preset did not sync video toggles: ${JSON.stringify(presetSnapshot)}`)
+  if (presetSnapshot.duckLevel !== '0.08' || presetSnapshot.duckLabel !== '8%' || presetSnapshot.storedDuckLevel !== '0.08') throw new Error(`voice preset did not sync video duck level: ${JSON.stringify(presetSnapshot)}`)
+
   await page.click('#settings-close')
   await page.waitForFunction(() => document.querySelector('#settings-overlay')?.hidden === true)
   const voiceClientSnapshot = await page.evaluate(() => ({

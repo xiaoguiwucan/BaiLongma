@@ -554,6 +554,19 @@ const createSettingsModal = () => `
               <span id="voice-speaker-threshold-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">0.55</span>
             </div>
             <p class="settings-hint">越低越不容易误拒绝你，越高越严格。建议先用 0.55；如果别人能唤醒再提高到 0.62–0.70。</p>
+            <div class="voice-preset-panel" id="voice-stability-presets">
+              <div class="voice-preset-head">
+                <div>
+                  <strong>语音稳定性预设</strong>
+                  <p class="settings-hint">一键切换整组参数：唤醒严格度、声纹门槛、视频降音/PTT/AEC 会一起调整。适合先选场景，再微调单项。</p>
+                </div>
+                <span class="settings-feedback" id="voice-preset-feedback"></span>
+              </div>
+              <div class="voice-preset-grid" id="voice-preset-list">
+                <div class="voice-clients-empty">正在读取推荐预设…</div>
+              </div>
+            </div>
+
           </div>
 
 

@@ -3011,7 +3011,147 @@ function initTTSSettings() {
     const debugEnabled = localStorage.getItem(VOICE_DEBUG_ENABLED_KEY) !== "false";
     if (voiceDebugEnabled) voiceDebugEnabled.checked = debugEnabled;
     if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
+
     applyVoiceProviderUI(savedProvider);
+  }
+
+  function hydrateVoiceControlsFromConfig(voice = {}) {
+    if (!voice || typeof voice !== "object") return false;
+    const hasServerField = [
+      "wakeMode", "wakeRepeatSuppression", "wakeRequireSpeakerWhenEnabled",
+      "speakerVerificationEnabled", "speakerThreshold", "wakeConfidenceThreshold",
+      "wakeMinCommandChars", "wakeCooldownMs", "videoVoiceDuckEnabled",
+      "videoVoicePttEnabled", "videoVoiceAecEnabled", "videoVoiceDuckLevel",
+      "videoVoiceDuckHoldMs", "videoVoiceDuckSensitivity",
+    ].some(field => voice[field] !== undefined && voice[field] !== null);
+    if (!hasServerField) return false;
+    if (["loose", "strict"].includes(voice.wakeMode)) localStorage.setItem(VOICE_WAKE_MODE_KEY, voice.wakeMode);
+    if (typeof voice.wakeRepeatSuppression === "boolean") localStorage.setItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY, String(voice.wakeRepeatSuppression));
+    if (typeof voice.wakeRequireSpeakerWhenEnabled === "boolean") localStorage.setItem(VOICE_WAKE_REQUIRE_SPEAKER_KEY, String(voice.wakeRequireSpeakerWhenEnabled));
+    if (typeof voice.speakerVerificationEnabled === "boolean") localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(voice.speakerVerificationEnabled));
+    if (typeof voice.videoVoiceDuckEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(voice.videoVoiceDuckEnabled));
+    if (typeof voice.videoVoicePttEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_PTT_KEY, String(voice.videoVoicePttEnabled));
+    if (typeof voice.videoVoiceAecEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(voice.videoVoiceAecEnabled));
+    [
+      ["wakeConfidenceThreshold", VOICE_WAKE_CONFIDENCE_KEY],
+      ["wakeMinCommandChars", VOICE_WAKE_MIN_COMMAND_KEY],
+      ["wakeCooldownMs", VOICE_WAKE_COOLDOWN_KEY],
+      ["speakerThreshold", VOICE_SPEAKER_THRESHOLD_KEY],
+      ["videoVoiceDuckLevel", VOICE_VIDEO_DUCK_LEVEL_KEY],
+      ["videoVoiceDuckHoldMs", VOICE_VIDEO_DUCK_HOLD_KEY],
+      ["videoVoiceDuckSensitivity", VOICE_VIDEO_DUCK_SENSITIVITY_KEY],
+    ].forEach(([field, key]) => {
+      const value = voice[field];
+      if (value !== undefined && value !== null && Number.isFinite(Number(value))) localStorage.setItem(key, String(value));
+    });
+    syncVoiceConfigToSettingsUi(voice);
+    return true;
+  }
+
+  function syncVoiceConfigToSettingsUi(voice = {}) {
+    if (!voice || typeof voice !== "object") return;
+    const setChecked = (id, value) => {
+      const el = document.getElementById(id);
+      if (el && typeof value === "boolean") el.checked = value;
+    };
+    const setValue = (id, value) => {
+      const el = document.getElementById(id);
+      if (el && value !== undefined && value !== null) el.value = String(value);
+    };
+    const wakeMode = ["loose", "strict"].includes(voice.wakeMode) ? voice.wakeMode : null;
+    if (wakeMode) {
+      setValue("voice-wake-mode", wakeMode);
+      localStorage.setItem(VOICE_WAKE_MODE_KEY, wakeMode);
+    }
+    setChecked("voice-wake-repeat-suppression", voice.wakeRepeatSuppression);
+    setChecked("voice-wake-require-speaker", voice.wakeRequireSpeakerWhenEnabled);
+    setChecked("voice-speaker-verify", voice.speakerVerificationEnabled);
+    setChecked("voice-video-duck", voice.videoVoiceDuckEnabled);
+    setChecked("voice-video-ptt", voice.videoVoicePttEnabled);
+    setChecked("voice-video-aec", voice.videoVoiceAecEnabled);
+    if (typeof voice.wakeRepeatSuppression === "boolean") localStorage.setItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY, String(voice.wakeRepeatSuppression));
+    if (typeof voice.wakeRequireSpeakerWhenEnabled === "boolean") localStorage.setItem(VOICE_WAKE_REQUIRE_SPEAKER_KEY, String(voice.wakeRequireSpeakerWhenEnabled));
+    if (typeof voice.speakerVerificationEnabled === "boolean") localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(voice.speakerVerificationEnabled));
+    if (typeof voice.videoVoiceDuckEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_DUCK_KEY, String(voice.videoVoiceDuckEnabled));
+    if (typeof voice.videoVoicePttEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_PTT_KEY, String(voice.videoVoicePttEnabled));
+    if (typeof voice.videoVoiceAecEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(voice.videoVoiceAecEnabled));
+    const numericBindings = [
+      ["wakeConfidenceThreshold", "voice-wake-confidence", "voice-wake-confidence-val", VOICE_WAKE_CONFIDENCE_KEY, v => Number(v).toFixed(2)],
+      ["wakeMinCommandChars", "voice-wake-min-command", "voice-wake-min-command-val", VOICE_WAKE_MIN_COMMAND_KEY, v => `${Math.round(Number(v) || 0)}字`],
+      ["wakeCooldownMs", "voice-wake-cooldown", "voice-wake-cooldown-val", VOICE_WAKE_COOLDOWN_KEY, v => `${(Math.round(Number(v) || 0) / 1000).toFixed(1)}s`],
+      ["speakerThreshold", "voice-speaker-threshold", "voice-speaker-threshold-val", VOICE_SPEAKER_THRESHOLD_KEY, v => Number(v).toFixed(2)],
+      ["videoVoiceDuckLevel", "voice-video-duck-level", "voice-video-duck-level-val", VOICE_VIDEO_DUCK_LEVEL_KEY, v => `${Math.round(Number(v) * 100)}%`],
+      ["videoVoiceDuckHoldMs", "voice-video-duck-hold", "voice-video-duck-hold-val", VOICE_VIDEO_DUCK_HOLD_KEY, v => `${(Number(v) / 1000).toFixed(1)}s`],
+      ["videoVoiceDuckSensitivity", "voice-video-duck-sensitivity", "voice-video-duck-sensitivity-val", VOICE_VIDEO_DUCK_SENSITIVITY_KEY, v => Number(v).toFixed(2)],
+    ];
+    numericBindings.forEach(([field, inputId, labelId, storageKey, format]) => {
+      const value = voice[field];
+      if (value === undefined || value === null || !Number.isFinite(Number(value))) return;
+      setValue(inputId, value);
+      const label = document.getElementById(labelId);
+      if (label) label.textContent = format(value);
+      localStorage.setItem(storageKey, String(value));
+    });
+  }
+
+  function voicePresetPatchSummary(patch = {}) {
+    const chips = [];
+    if (patch.wakeMode) chips.push(`唤醒:${patch.wakeMode === "strict" ? "严格" : "宽松"}`);
+    if (patch.wakeConfidenceThreshold != null) chips.push(`置信:${Number(patch.wakeConfidenceThreshold).toFixed(2)}`);
+    if (patch.speakerThreshold != null) chips.push(`声纹:${Number(patch.speakerThreshold).toFixed(2)}`);
+    if (patch.videoVoiceDuckEnabled) chips.push("视频降音");
+    if (patch.videoVoicePttEnabled) chips.push("按住说话");
+    if (patch.videoVoiceAecEnabled) chips.push("AEC");
+    return chips.slice(0, 6);
+  }
+
+  async function loadVoiceStabilityPresets() {
+    const list = document.getElementById("voice-preset-list");
+    const feedback = document.getElementById("voice-preset-feedback");
+    if (!list) return;
+    try {
+      const resp = await fetch(`${API}/settings/voice/presets`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "读取预设失败");
+      const presets = Array.isArray(data.presets) ? data.presets : [];
+      if (!presets.length) {
+        list.innerHTML = '<div class="voice-clients-empty">暂无可用语音预设。</div>';
+        return;
+      }
+      list.innerHTML = presets.map(preset => {
+        const chips = voicePresetPatchSummary(preset.patch || {}).map(chip => `<span>${escapeFocusText(chip)}</span>`).join("");
+        return `<button class="voice-preset-card" type="button" data-preset-id="${escapeFocusText(preset.id)}">
+          <strong>${escapeFocusText(preset.label || preset.id)}</strong>
+          <p>${escapeFocusText(preset.description || "一键应用这组语音稳定参数。")}</p>
+          <div class="voice-preset-patch">${chips}</div>
+        </button>`;
+      }).join("");
+      list.querySelectorAll(".voice-preset-card").forEach(card => {
+        card.addEventListener("click", async () => {
+          const id = card.dataset.presetId;
+          if (!id) return;
+          try {
+            card.disabled = true;
+            const applyResp = await fetch(`${API}/settings/voice/preset/apply`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ id }),
+            });
+            const applied = await applyResp.json();
+            if (!applyResp.ok || !applied?.ok) throw new Error(applied?.error || "应用预设失败");
+            const synced = hydrateVoiceControlsFromConfig(applied.voice || applied.preset?.patch || {});
+            if (!synced) syncVoiceConfigToSettingsUi(applied.voice || applied.preset?.patch || {});
+            showFeedback(feedback, `已应用：${applied.preset?.label || id}`);
+          } catch (err) {
+            showFeedback(feedback, err?.message || "应用预设失败", true);
+          } finally {
+            card.disabled = false;
+          }
+        });
+      });
+    } catch (err) {
+      list.innerHTML = `<div class="voice-clients-error">${escapeFocusText(err?.message || "读取预设失败")}</div>`;
+    }
   }
 
   if (voiceThreshSlider && voiceThreshVal) {
@@ -3420,6 +3560,7 @@ function initTTSSettings() {
     overlay.hidden = false;
     loadSettings();
     loadVoiceSettings();
+    loadVoiceStabilityPresets();
     if (tab) {
       overlay.querySelectorAll(".settings-nav-item").forEach(b => {
         b.classList.toggle("active", b.dataset.tab === tab);

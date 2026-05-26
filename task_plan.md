@@ -305,3 +305,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events smoke coverage for preset listing and application.
 - [x] Verify syntax plus voice-events smoke suite.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 31: Voice stability presets in settings UI
+- [x] Add a Brain UI “语音稳定性预设” panel inside voice settings.
+- [x] Fetch `/settings/voice/presets` and render scenario cards with human-readable parameter chips.
+- [x] Apply a selected preset through `POST /settings/voice/preset/apply`.
+- [x] Sync returned wake, speaker, and video voice settings back into controls and localStorage immediately.
+- [x] Style preset cards for clear scenario-based selection.
+- [x] Extend brain-ui smoke coverage for preset rendering, apply feedback, UI values, and localStorage sync.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.
