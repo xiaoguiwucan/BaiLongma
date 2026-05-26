@@ -384,3 +384,5 @@
 - Extended smoke coverage for backend self-test start/evaluate and Brain UI self-test rendering.
 - Verification passed: syntax checks for API/config/Brain UI scripts, `python3 -m py_compile src/voice/sensevoice_server.py`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
+- Pushed development checkpoint `851b17d feat: add local voice self test` to `origin/main`.
+- No tag/GitHub Release created; this remains part of the next large-version milestone bundle.

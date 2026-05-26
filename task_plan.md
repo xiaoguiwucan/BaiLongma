@@ -473,4 +473,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Show user-facing instruction and recent event summary.
 - [x] Extend backend and Brain UI smoke coverage for the self-test loop.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
-- [ ] Push as a development checkpoint only, without tag/Release.
+- [x] Push as a development checkpoint only, without tag/Release.
