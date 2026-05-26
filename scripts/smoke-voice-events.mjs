@@ -288,6 +288,8 @@ try {
     body: JSON.stringify({ enabled: true, minRejects: 2, cooldownMs: 60000, maxActionsPerHour: 2 }),
   }).then(r => r.json())
   assert(autoEnabled.ok === true && autoEnabled.enabled === true && autoEnabled.policy?.minRejects === 2, 'wake auto tuning policy can be enabled safely', JSON.stringify(autoEnabled))
+  const persistedAutoVoice = await fetch(`${API}/settings/voice`).then(r => r.json())
+  assert(persistedAutoVoice.voice?.wakeAutoTuningEnabled === true && persistedAutoVoice.voice?.wakeAutoTuningMinRejects === 2, 'wake auto tuning policy persists in voice config', JSON.stringify(persistedAutoVoice.voice))
   const rollbackTuning = await fetch(`${API}/voice/wake/tuning/rollback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

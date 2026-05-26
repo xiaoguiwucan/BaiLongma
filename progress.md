@@ -181,3 +181,11 @@
 - Extended `smoke:brain-ui` to verify the auto-tuning panel renders.
 - Verification passed: `npm run smoke:voice-events` 57/57, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
+- Persisted safe wake auto-tuning policy into the voice configuration layer instead of keeping it only in API process memory.
+- Added voice config fields for `wakeAutoTuningEnabled`, `wakeAutoTuningMinRejects`, `wakeAutoTuningCooldownMs`, `wakeAutoTuningMaxActionsPerHour`, and `wakeAutoTuningLastAppliedAt` with bounded clamping.
+- Updated `/voice/wake/tuning/auto` and `/voice/wake/tuning/auto/apply` so enable/disable, thresholds, cooldown, hourly limit, and last auto-apply timestamp survive app/API restart through `/settings/voice`.
+- Extended `smoke:voice-config` to 13/13 checks for persisted/clamped auto-tuning settings.
+- Extended `smoke:voice-events` to 58/58 checks including persisted auto-tuning policy verification via `/settings/voice`.
+- Verification passed: syntax checks for config/API/smoke scripts, `npm run smoke:voice-config` 13/13, `npm run smoke:voice-events` 58/58, `npm run smoke:brain-ui`, and `npm run smoke:wake-guard` 9/9.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

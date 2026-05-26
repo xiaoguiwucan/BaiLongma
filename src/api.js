@@ -45,8 +45,18 @@ const DEFAULT_AGENT_NAME = '小白龙'
 const DEFAULT_API_HOST = '127.0.0.1'
 
 const wakeTuningHistory = []
-const wakeAutoTuningState = { enabled: false, minRejects: 3, cooldownMs: 5 * 60 * 1000, maxActionsPerHour: 3, lastAppliedAt: 0 }
 
+
+function getWakeAutoTuningPolicy() {
+  const voice = getVoiceConfig()
+  return {
+    enabled: Boolean(voice.wakeAutoTuningEnabled),
+    minRejects: Number(voice.wakeAutoTuningMinRejects || 3),
+    cooldownMs: Number(voice.wakeAutoTuningCooldownMs || 5 * 60 * 1000),
+    maxActionsPerHour: Number(voice.wakeAutoTuningMaxActionsPerHour || 3),
+    lastAppliedAt: Number(voice.wakeAutoTuningLastAppliedAt || 0),
+  }
+}
 function countWakeAutoActionsSince(since = Date.now() - 3600000) {
   return wakeTuningHistory.filter(item => item.auto === true && Number(item.at || 0) >= since).length
 }
@@ -58,14 +68,15 @@ function evaluateWakeAutoTuning({ windowMs = 60000 } = {}) {
   const now = Date.now()
   const hourlyCount = countWakeAutoActionsSince(now - 3600000)
   const blocked = []
-  if (!wakeAutoTuningState.enabled) blocked.push('auto_disabled')
-  if (!topReason || topReason[1] < wakeAutoTuningState.minRejects) blocked.push('not_enough_rejections')
-  if (now - wakeAutoTuningState.lastAppliedAt < wakeAutoTuningState.cooldownMs) blocked.push('cooldown')
-  if (hourlyCount >= wakeAutoTuningState.maxActionsPerHour) blocked.push('hourly_limit')
+  const policy = getWakeAutoTuningPolicy()
+  if (!policy.enabled) blocked.push('auto_disabled')
+  if (!topReason || topReason[1] < policy.minRejects) blocked.push('not_enough_rejections')
+  if (now - policy.lastAppliedAt < policy.cooldownMs) blocked.push('cooldown')
+  if (hourlyCount >= policy.maxActionsPerHour) blocked.push('hourly_limit')
   if (!actions.length) blocked.push('no_safe_action')
   return {
-    enabled: wakeAutoTuningState.enabled,
-    policy: { minRejects: wakeAutoTuningState.minRejects, cooldownMs: wakeAutoTuningState.cooldownMs, maxActionsPerHour: wakeAutoTuningState.maxActionsPerHour },
+    enabled: policy.enabled,
+    policy: { minRejects: policy.minRejects, cooldownMs: policy.cooldownMs, maxActionsPerHour: policy.maxActionsPerHour, lastAppliedAt: policy.lastAppliedAt },
     topReason: topReason ? { reason: topReason[0], count: topReason[1] } : null,
     hourlyCount,
     blocked,
@@ -1212,10 +1223,12 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       req.on('end', () => {
         try {
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
-          if (typeof body.enabled === 'boolean') wakeAutoTuningState.enabled = body.enabled
-          if (Number.isFinite(Number(body.minRejects))) wakeAutoTuningState.minRejects = Math.max(2, Math.min(10, Math.round(Number(body.minRejects))))
-          if (Number.isFinite(Number(body.cooldownMs))) wakeAutoTuningState.cooldownMs = Math.max(60000, Math.min(30 * 60 * 1000, Math.round(Number(body.cooldownMs))))
-          if (Number.isFinite(Number(body.maxActionsPerHour))) wakeAutoTuningState.maxActionsPerHour = Math.max(1, Math.min(6, Math.round(Number(body.maxActionsPerHour))))
+          const patch = {}
+          if (typeof body.enabled === 'boolean') patch.wakeAutoTuningEnabled = body.enabled
+          if (Number.isFinite(Number(body.minRejects))) patch.wakeAutoTuningMinRejects = body.minRejects
+          if (Number.isFinite(Number(body.cooldownMs))) patch.wakeAutoTuningCooldownMs = body.cooldownMs
+          if (Number.isFinite(Number(body.maxActionsPerHour))) patch.wakeAutoTuningMaxActionsPerHour = body.maxActionsPerHour
+          if (Object.keys(patch).length) setVoiceConfig(patch)
           jsonResponse(res, 200, { ok: true, service: 'bailongma.voice.wake.auto_tuning', ...evaluateWakeAutoTuning({ windowMs: Number(body.windowMs || 60000) }) })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
@@ -1235,7 +1248,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       const before = getVoiceConfig()
       setVoiceConfig(decision.action.patch)
       const after = getVoiceConfig()
-      wakeAutoTuningState.lastAppliedAt = Date.now()
+      setVoiceConfig({ wakeAutoTuningLastAppliedAt: Date.now() })
       const record = pushWakeTuningRecord({ reason: decision.action.reason, label: `[自动] ${decision.action.label}`, before, after, applied: decision.action.patch, windowMs, beforeMetrics: decision.summary.recent, auto: true })
       jsonResponse(res, 200, { ok: true, applied: decision.action.patch, record, voice: after, decision: evaluateWakeAutoTuning({ windowMs }), history: publicWakeTuningHistory() })
       return

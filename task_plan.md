@@ -194,3 +194,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 20: Persist wake auto-tuning policy
+- [x] Move wake auto-tuning policy from process-only API state into persisted voice config.
+- [x] Clamp persisted auto-tuning enable, minimum rejection count, cooldown, hourly limit, and last-applied timestamp.
+- [x] Update `/voice/wake/tuning/auto` to persist policy updates through `setVoiceConfig()`.
+- [x] Update `/voice/wake/tuning/auto/apply` to persist the last automatic apply timestamp.
+- [x] Extend voice-config and voice-events smoke coverage for persisted auto-tuning policy.
+- [x] Verify config/API syntax plus voice-config, voice-events, brain-ui, and wake-guard smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.
