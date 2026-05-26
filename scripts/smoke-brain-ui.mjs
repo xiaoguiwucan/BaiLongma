@@ -130,6 +130,10 @@ function createServer() {
           asrProfile: 'balanced',
           wakeWordEnabled: true,
           wakeWords: ['小龙马', '龙马', '白龙马'],
+          wakeDetectionProvider: 'hybrid',
+          wakeKwsEngine: 'sherpa-onnx',
+          wakeKwsModelPath: 'models/kws/longma.onnx',
+          wakeKwsThreshold: 0.62,
           wakeMode: 'strict',
           wakeWindowSeconds: 8,
           wakeRepeatSuppression: true,
@@ -615,11 +619,13 @@ new WebSocket(url)`,
           { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
           { id: 'local_process', label: '本地服务启动', status: 'ok', detail: externalVoiceService ? '运行中：SenseVoice / sensevoice-small（复用已运行服务）' : '运行中：SenseVoice / sensevoice-small' },
           { id: 'wake_guard', label: '唤醒保护', status: 'ok', detail: '严格唤醒已开启。' },
+          { id: 'wake_kws', label: '本地 KWS 唤醒模型', status: 'info', detail: '当前稳定路径是 ASR 文本唤醒；KWS 预留。' },
           { id: 'speaker_voiceprint', label: '本人声纹', status: 'warn', detail: '还没有录入声纹。', uiAction: 'enroll_speaker' },
         ] : [
           { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
           { id: 'local_process', label: '本地服务启动', status: 'warn', detail: '本地语音服务尚未运行。', fixAction: 'start_local_voice' },
           { id: 'video_guard', label: '视频抗干扰', status: 'warn', detail: '播放视频时建议开启保护。', fixAction: 'apply_video_guard' },
+          { id: 'wake_kws', label: '本地 KWS 唤醒模型', status: 'info', detail: '当前稳定路径是 ASR 文本唤醒；KWS 预留。' },
           { id: 'speaker_voiceprint', label: '本人声纹', status: 'pending', detail: '本地服务启动后才能确认声纹。' },
           { id: 'speaker_gate_safe', label: '声纹门控安全', status: 'info', detail: '声纹门控未强制开启。' },
         ],
@@ -636,7 +642,7 @@ new WebSocket(url)`,
         ok: true,
         started: { status: 'running', engine: 'sensevoice', engineLabel: 'SenseVoice', model: 'sensevoice-small' },
         record: localDoctorFixHistory[0],
-        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', wakeWordEnabled: true, wakeMode: 'strict', wakeRepeatSuppression: true, wakeConfidenceThreshold: 0.72, wakeMinCommandChars: 2, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true, speakerVerificationEnabled: false, speakerThreshold: 0.55, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.10, videoVoiceDuckHoldMs: 2200, videoVoiceDuckSensitivity: 1.0, voiceLocalDoctorHistory: localDoctorFixHistory },
+        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', wakeWordEnabled: true, wakeDetectionProvider: 'text', wakeKwsEngine: 'none', wakeKwsModelPath: '', wakeKwsThreshold: 0.50, wakeMode: 'strict', wakeRepeatSuppression: true, wakeConfidenceThreshold: 0.72, wakeMinCommandChars: 2, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true, speakerVerificationEnabled: false, speakerThreshold: 0.55, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.10, videoVoiceDuckHoldMs: 2200, videoVoiceDuckSensitivity: 1.0, voiceLocalDoctorHistory: localDoctorFixHistory },
         readiness: { ok: true, level: 'ok' },
         speaker: { skipped: true },
       })
@@ -894,6 +900,15 @@ try {
     preRollMs: document.querySelector('#voice-video-preroll-ms')?.value,
     preRollLabel: document.querySelector('#voice-video-preroll-ms-val')?.textContent,
     speakerThreshold: document.querySelector('#voice-speaker-threshold')?.value,
+    wakeDetectionProvider: document.querySelector('#voice-wake-detection-provider')?.value,
+    kwsEngine: document.querySelector('#voice-kws-engine')?.value,
+    kwsModelPath: document.querySelector('#voice-kws-model-path')?.value,
+    kwsThreshold: document.querySelector('#voice-kws-threshold')?.value,
+    kwsThresholdLabel: document.querySelector('#voice-kws-threshold-val')?.textContent,
+    storedWakeDetectionProvider: localStorage.getItem('bailongma-voice-wake-detection-provider'),
+    storedKwsEngine: localStorage.getItem('bailongma-voice-kws-engine'),
+    storedKwsModelPath: localStorage.getItem('bailongma-voice-kws-model-path'),
+    storedKwsThreshold: localStorage.getItem('bailongma-voice-kws-threshold'),
     storedDuck: localStorage.getItem('bailongma-voice-video-duck'),
     storedPtt: localStorage.getItem('bailongma-voice-video-ptt'),
     storedAec: localStorage.getItem('bailongma-voice-video-aec'),
@@ -905,6 +920,8 @@ try {
     storedSpeakerThreshold: localStorage.getItem('bailongma-voice-speaker-threshold'),
   }))
   if (videoVoiceSnapshot.speakerThreshold !== '0.63' || videoVoiceSnapshot.storedSpeakerThreshold !== '0.63') throw new Error('server speaker threshold did not hydrate settings UI and localStorage')
+  if (videoVoiceSnapshot.wakeDetectionProvider !== 'hybrid' || videoVoiceSnapshot.kwsEngine !== 'sherpa-onnx' || videoVoiceSnapshot.kwsModelPath !== 'models/kws/longma.onnx' || videoVoiceSnapshot.kwsThreshold !== '0.62' || !videoVoiceSnapshot.kwsThresholdLabel.includes('0.62')) throw new Error(`server KWS wake settings did not hydrate settings UI: ${JSON.stringify(videoVoiceSnapshot)}`)
+  if (videoVoiceSnapshot.storedWakeDetectionProvider !== 'hybrid' || videoVoiceSnapshot.storedKwsEngine !== 'sherpa-onnx' || videoVoiceSnapshot.storedKwsModelPath !== 'models/kws/longma.onnx' || videoVoiceSnapshot.storedKwsThreshold !== '0.62') throw new Error('server KWS wake settings were not mirrored to localStorage')
   if (videoVoiceSnapshot.duckChecked !== false || videoVoiceSnapshot.pttChecked !== true || videoVoiceSnapshot.aecChecked !== false) throw new Error('server video voice booleans did not hydrate settings UI')
   if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35' || videoVoiceSnapshot.preRollMs !== '2800' || !videoVoiceSnapshot.preRollLabel.includes('2.8s')) throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
@@ -927,7 +944,7 @@ try {
   const diagnosticsClipboard = await page.evaluate(() => window.__voiceDiagnosticsClipboard || window.__lastVoiceDiagnosticsPackage || '')
   if (!diagnosticsClipboard.includes('bailongma.local_voice_diagnostics') || diagnosticsClipboard.includes('sk-')) throw new Error(`voice diagnostics export did not copy safe package: ${diagnosticsClipboard.slice(0, 200)}`)
   const readinessText = await page.textContent('#voice-readiness-list')
-  if (!readinessText.includes('本地中文识别') || !readinessText.includes('本地服务启动') || !readinessText.includes('本人声纹')) throw new Error(`voice readiness wizard did not render guided steps: ${readinessText}`)
+  if (!readinessText.includes('本地中文识别') || !readinessText.includes('本地服务启动') || !readinessText.includes('本人声纹') || !readinessText.includes('本地 KWS 唤醒模型')) throw new Error(`voice readiness wizard did not render guided steps: ${readinessText}`)
   await page.click('#voice-readiness-apply')
   await page.waitForFunction(() => document.querySelector('#voice-readiness-feedback')?.textContent.includes('已应用本地语音基线'))
   await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('运行中：SenseVoice'))

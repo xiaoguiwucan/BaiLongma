@@ -51,6 +51,10 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
     label: '安静环境',
     description: '响应更自然，适合近距离安静说话。',
     patch: {
+      wakeDetectionProvider: 'text',
+      wakeKwsEngine: 'none',
+      wakeKwsModelPath: '',
+      wakeKwsThreshold: 0.50,
       wakeMode: 'strict',
       wakeConfidenceThreshold: 0.68,
       wakeMinCommandChars: 1,
@@ -72,6 +76,10 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
     label: '视频抗干扰',
     description: '优先防止视频/别人说话误唤醒，并保留按住说话兜底。',
     patch: {
+      wakeDetectionProvider: 'text',
+      wakeKwsEngine: 'none',
+      wakeKwsModelPath: '',
+      wakeKwsThreshold: 0.50,
       wakeMode: 'strict',
       wakeConfidenceThreshold: 0.78,
       wakeMinCommandChars: 2,
@@ -94,6 +102,10 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
     label: '严格声纹',
     description: '只响应本人声音，适合多人环境；如果误拒绝请重新录入或切回均衡。',
     patch: {
+      wakeDetectionProvider: 'text',
+      wakeKwsEngine: 'none',
+      wakeKwsModelPath: '',
+      wakeKwsThreshold: 0.50,
       wakeMode: 'strict',
       wakeConfidenceThreshold: 0.76,
       wakeMinCommandChars: 2,
@@ -116,6 +128,10 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
     label: '均衡推荐',
     description: '默认推荐：兼顾速度、误唤醒和声纹误拒绝。',
     patch: {
+      wakeDetectionProvider: 'text',
+      wakeKwsEngine: 'none',
+      wakeKwsModelPath: '',
+      wakeKwsThreshold: 0.50,
       wakeMode: 'strict',
       wakeConfidenceThreshold: 0.72,
       wakeMinCommandChars: 2,
@@ -473,6 +489,22 @@ function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) 
     voice.wakeWordEnabled === false ? '开启唤醒词，并使用严格模式。' : '说“龙马，具体指令”进行测试。',
     voice.wakeWordEnabled === false ? 'enable_wake_guard' : null,
   )
+  const wakeDetectionProvider = ['text', 'hybrid', 'kws'].includes(voice.wakeDetectionProvider) ? voice.wakeDetectionProvider : 'text'
+  const wakeKwsEngine = ['none', 'sherpa-onnx', 'openwakeword'].includes(voice.wakeKwsEngine) ? voice.wakeKwsEngine : 'none'
+  const wakeKwsModelPath = typeof voice.wakeKwsModelPath === 'string' ? voice.wakeKwsModelPath.trim() : ''
+  const kwsEnabled = wakeDetectionProvider === 'hybrid' || wakeDetectionProvider === 'kws'
+  const kwsConfigured = wakeKwsEngine !== 'none' && wakeKwsModelPath.length > 0
+  add(
+    'wake_kws',
+    '本地 KWS 唤醒模型',
+    !kwsEnabled ? 'info' : kwsConfigured ? 'pending' : 'warn',
+    !kwsEnabled
+      ? '当前使用稳定的 ASR 文本唤醒；sherpa-onnx/openWakeWord 关键词模型未启用。'
+      : kwsConfigured
+        ? `已保存 ${wakeKwsEngine} / ${wakeKwsModelPath} / 阈值 ${voice.wakeKwsThreshold ?? 0.5}；运行时关键词模型接入仍待实现，不会伪装成已生效。`
+        : `已选择 ${wakeDetectionProvider === 'hybrid' ? '混合唤醒' : '本地 KWS'}，但还没有同时配置 KWS 引擎和模型路径。`,
+    !kwsEnabled ? '保持文本唤醒作为当前稳定路径。' : kwsConfigured ? '等待后续接入实际 KWS 推理；当前仍以文本唤醒兜底。' : '先保持“文本唤醒”，或补齐 sherpa-onnx/openWakeWord 模型后再启用。',
+  )
   const videoOk = voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled && voice.videoVoicePreRollEnabled
   add(
     'video_guard',
@@ -586,6 +618,17 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
       status: voice.wakeWordEnabled !== false && voice.wakeMode === 'strict' && voice.wakeRepeatSuppression !== false ? 'ok' : 'warn',
       detail: voice.wakeWordEnabled !== false ? `唤醒词开启，${voice.wakeMode === 'strict' ? '严格匹配' : '宽松匹配'}。` : '唤醒词关闭时，视频/别人说话更容易误触发。',
       fixAction: voice.wakeWordEnabled !== false && voice.wakeMode === 'strict' && voice.wakeRepeatSuppression !== false ? null : 'enable_wake_guard',
+    },
+    {
+      id: 'wake_kws',
+      label: '本地 KWS 唤醒模型',
+      status: (voice.wakeDetectionProvider || 'text') === 'text' ? 'info' : (voice.wakeKwsEngine && voice.wakeKwsEngine !== 'none' && voice.wakeKwsModelPath ? 'pending' : 'warn'),
+      detail: (voice.wakeDetectionProvider || 'text') === 'text'
+        ? '当前稳定路径是 ASR 文本唤醒；KWS/openWakeWord/sherpa-onnx 仅作为后续接入预留。'
+        : (voice.wakeKwsEngine && voice.wakeKwsEngine !== 'none' && voice.wakeKwsModelPath)
+          ? `KWS 配置已保存：${voice.wakeKwsEngine}，但运行时推理尚未接入。`
+          : '已选择 KWS/混合唤醒，但还缺少引擎或模型路径；建议先保持文本唤醒。',
+      action: (voice.wakeDetectionProvider || 'text') === 'text' ? '无需处理。' : '补齐模型并等待运行时接入，或切回文本唤醒。',
     },
     {
       id: 'video_guard',

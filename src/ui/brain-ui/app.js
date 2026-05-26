@@ -2856,6 +2856,10 @@ function initTTSSettings() {
   const VOICE_LOCAL_ASR_MODEL_KEY = "bailongma-voice-local-asr-model";
   const VOICE_ASR_PROFILE_KEY = "bailongma-voice-asr-profile";
   const VOICE_WAKE_ENABLED_KEY = "bailongma-voice-wake-enabled";
+  const VOICE_WAKE_DETECTION_PROVIDER_KEY = "bailongma-voice-wake-detection-provider";
+  const VOICE_KWS_ENGINE_KEY = "bailongma-voice-kws-engine";
+  const VOICE_KWS_MODEL_PATH_KEY = "bailongma-voice-kws-model-path";
+  const VOICE_KWS_THRESHOLD_KEY = "bailongma-voice-kws-threshold";
   const VOICE_WAKE_WORDS_KEY = "bailongma-voice-wake-words";
   const VOICE_WAKE_MODE_KEY = "bailongma-voice-wake-mode";
   const VOICE_WAKE_WINDOW_KEY = "bailongma-voice-wake-window-seconds";
@@ -3331,6 +3335,11 @@ function initTTSSettings() {
     localStorage.setItem(VOICE_ASR_PROFILE_KEY, savedAsrProfile);
     const wakeEnabled = document.getElementById("voice-wake-enabled");
     const wakeWords = document.getElementById("voice-wake-words");
+    const wakeDetectionProvider = document.getElementById("voice-wake-detection-provider");
+    const kwsEngine = document.getElementById("voice-kws-engine");
+    const kwsModelPath = document.getElementById("voice-kws-model-path");
+    const kwsThreshold = document.getElementById("voice-kws-threshold");
+    const kwsThresholdVal = document.getElementById("voice-kws-threshold-val");
     const wakeMode = document.getElementById("voice-wake-mode");
     const wakeWindow = document.getElementById("voice-wake-window");
     const wakeWindowVal = document.getElementById("voice-wake-window-val");
@@ -3363,6 +3372,15 @@ function initTTSSettings() {
     const savedWakeWords = Array.isArray(serverVoice?.wakeWords) ? serverVoice.wakeWords.join("，") : (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || "小龙马，龙马，白龙马");
     if (wakeEnabled) wakeEnabled.checked = savedWakeEnabled;
     if (wakeWords) wakeWords.value = savedWakeWords;
+    const savedWakeDetectionProvider = ["text", "hybrid", "kws"].includes(serverVoice?.wakeDetectionProvider) ? serverVoice.wakeDetectionProvider : (["text", "hybrid", "kws"].includes(localStorage.getItem(VOICE_WAKE_DETECTION_PROVIDER_KEY)) ? localStorage.getItem(VOICE_WAKE_DETECTION_PROVIDER_KEY) : "text");
+    const savedKwsEngine = ["none", "sherpa-onnx", "openwakeword"].includes(serverVoice?.wakeKwsEngine) ? serverVoice.wakeKwsEngine : (["none", "sherpa-onnx", "openwakeword"].includes(localStorage.getItem(VOICE_KWS_ENGINE_KEY)) ? localStorage.getItem(VOICE_KWS_ENGINE_KEY) : "none");
+    const savedKwsModelPath = typeof serverVoice?.wakeKwsModelPath === "string" ? serverVoice.wakeKwsModelPath : (localStorage.getItem(VOICE_KWS_MODEL_PATH_KEY) || "");
+    const savedKwsThreshold = Math.max(0.10, Math.min(0.99, Number(serverVoice?.wakeKwsThreshold ?? localStorage.getItem(VOICE_KWS_THRESHOLD_KEY) ?? 0.50) || 0.50));
+    if (wakeDetectionProvider) wakeDetectionProvider.value = savedWakeDetectionProvider;
+    if (kwsEngine) kwsEngine.value = savedKwsEngine;
+    if (kwsModelPath) kwsModelPath.value = savedKwsModelPath;
+    if (kwsThreshold) kwsThreshold.value = String(savedKwsThreshold);
+    if (kwsThresholdVal) kwsThresholdVal.textContent = savedKwsThreshold.toFixed(2);
     const savedWakeMode = ["loose", "strict"].includes(serverVoice?.wakeMode) ? serverVoice.wakeMode : (localStorage.getItem(VOICE_WAKE_MODE_KEY) || "strict");
     const savedWakeWindow = Math.max(3, Math.min(30, Number(serverVoice?.wakeWindowSeconds || localStorage.getItem(VOICE_WAKE_WINDOW_KEY) || 8) || 8));
     const savedWakeRepeatSuppression = typeof serverVoice?.wakeRepeatSuppression === "boolean" ? serverVoice.wakeRepeatSuppression : localStorage.getItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY) !== "false";
@@ -3385,6 +3403,10 @@ function initTTSSettings() {
     if (speakerVerify) speakerVerify.checked = savedSpeakerVerify;
     localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(savedWakeEnabled));
     localStorage.setItem(VOICE_WAKE_WORDS_KEY, savedWakeWords);
+    localStorage.setItem(VOICE_WAKE_DETECTION_PROVIDER_KEY, savedWakeDetectionProvider);
+    localStorage.setItem(VOICE_KWS_ENGINE_KEY, savedKwsEngine);
+    localStorage.setItem(VOICE_KWS_MODEL_PATH_KEY, savedKwsModelPath);
+    localStorage.setItem(VOICE_KWS_THRESHOLD_KEY, String(savedKwsThreshold));
     localStorage.setItem(VOICE_WAKE_MODE_KEY, savedWakeMode);
     localStorage.setItem(VOICE_WAKE_WINDOW_KEY, String(savedWakeWindow));
     localStorage.setItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY, String(savedWakeRepeatSuppression));
@@ -3440,7 +3462,7 @@ function initTTSSettings() {
   function hydrateVoiceControlsFromConfig(voice = {}) {
     if (!voice || typeof voice !== "object") return false;
     const hasServerField = [
-      "wakeMode", "wakeRepeatSuppression", "wakeRequireSpeakerWhenEnabled",
+      "wakeMode", "wakeDetectionProvider", "wakeKwsEngine", "wakeKwsModelPath", "wakeKwsThreshold", "wakeRepeatSuppression", "wakeRequireSpeakerWhenEnabled",
       "speakerVerificationEnabled", "speakerThreshold", "wakeConfidenceThreshold",
       "wakeMinCommandChars", "wakeCooldownMs", "videoVoiceDuckEnabled",
       "videoVoicePttEnabled", "videoVoiceAecEnabled", "videoVoiceDuckLevel",
@@ -3448,6 +3470,10 @@ function initTTSSettings() {
       "videoVoicePreRollMs",
     ].some(field => voice[field] !== undefined && voice[field] !== null);
     if (!hasServerField) return false;
+    if (["text", "hybrid", "kws"].includes(voice.wakeDetectionProvider)) localStorage.setItem(VOICE_WAKE_DETECTION_PROVIDER_KEY, voice.wakeDetectionProvider);
+    if (["none", "sherpa-onnx", "openwakeword"].includes(voice.wakeKwsEngine)) localStorage.setItem(VOICE_KWS_ENGINE_KEY, voice.wakeKwsEngine);
+    if (typeof voice.wakeKwsModelPath === "string") localStorage.setItem(VOICE_KWS_MODEL_PATH_KEY, voice.wakeKwsModelPath);
+    if (voice.wakeKwsThreshold !== undefined && voice.wakeKwsThreshold !== null && Number.isFinite(Number(voice.wakeKwsThreshold))) localStorage.setItem(VOICE_KWS_THRESHOLD_KEY, String(voice.wakeKwsThreshold));
     if (["loose", "strict"].includes(voice.wakeMode)) localStorage.setItem(VOICE_WAKE_MODE_KEY, voice.wakeMode);
     if (typeof voice.wakeRepeatSuppression === "boolean") localStorage.setItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY, String(voice.wakeRepeatSuppression));
     if (typeof voice.wakeRequireSpeakerWhenEnabled === "boolean") localStorage.setItem(VOICE_WAKE_REQUIRE_SPEAKER_KEY, String(voice.wakeRequireSpeakerWhenEnabled));
@@ -3457,6 +3483,7 @@ function initTTSSettings() {
     if (typeof voice.videoVoiceAecEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(voice.videoVoiceAecEnabled));
     if (typeof voice.videoVoicePreRollEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_PREROLL_ENABLED_KEY, String(voice.videoVoicePreRollEnabled));
     [
+      ["wakeKwsThreshold", VOICE_KWS_THRESHOLD_KEY],
       ["wakeConfidenceThreshold", VOICE_WAKE_CONFIDENCE_KEY],
       ["wakeMinCommandChars", VOICE_WAKE_MIN_COMMAND_KEY],
       ["wakeCooldownMs", VOICE_WAKE_COOLDOWN_KEY],
@@ -3483,6 +3510,20 @@ function initTTSSettings() {
       const el = document.getElementById(id);
       if (el && value !== undefined && value !== null) el.value = String(value);
     };
+    const wakeDetectionProvider = ["text", "hybrid", "kws"].includes(voice.wakeDetectionProvider) ? voice.wakeDetectionProvider : null;
+    const wakeKwsEngine = ["none", "sherpa-onnx", "openwakeword"].includes(voice.wakeKwsEngine) ? voice.wakeKwsEngine : null;
+    if (wakeDetectionProvider) {
+      setValue("voice-wake-detection-provider", wakeDetectionProvider);
+      localStorage.setItem(VOICE_WAKE_DETECTION_PROVIDER_KEY, wakeDetectionProvider);
+    }
+    if (wakeKwsEngine) {
+      setValue("voice-kws-engine", wakeKwsEngine);
+      localStorage.setItem(VOICE_KWS_ENGINE_KEY, wakeKwsEngine);
+    }
+    if (typeof voice.wakeKwsModelPath === "string") {
+      setValue("voice-kws-model-path", voice.wakeKwsModelPath);
+      localStorage.setItem(VOICE_KWS_MODEL_PATH_KEY, voice.wakeKwsModelPath);
+    }
     const wakeMode = ["loose", "strict"].includes(voice.wakeMode) ? voice.wakeMode : null;
     if (wakeMode) {
       setValue("voice-wake-mode", wakeMode);
@@ -3503,6 +3544,7 @@ function initTTSSettings() {
     if (typeof voice.videoVoiceAecEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_AEC_KEY, String(voice.videoVoiceAecEnabled));
     if (typeof voice.videoVoicePreRollEnabled === "boolean") localStorage.setItem(VOICE_VIDEO_PREROLL_ENABLED_KEY, String(voice.videoVoicePreRollEnabled));
     const numericBindings = [
+      ["wakeKwsThreshold", "voice-kws-threshold", "voice-kws-threshold-val", VOICE_KWS_THRESHOLD_KEY, v => Number(v).toFixed(2)],
       ["wakeConfidenceThreshold", "voice-wake-confidence", "voice-wake-confidence-val", VOICE_WAKE_CONFIDENCE_KEY, v => Number(v).toFixed(2)],
       ["wakeMinCommandChars", "voice-wake-min-command", "voice-wake-min-command-val", VOICE_WAKE_MIN_COMMAND_KEY, v => `${Math.round(Number(v) || 0)}字`],
       ["wakeCooldownMs", "voice-wake-cooldown", "voice-wake-cooldown-val", VOICE_WAKE_COOLDOWN_KEY, v => `${(Math.round(Number(v) || 0) / 1000).toFixed(1)}s`],
@@ -3524,6 +3566,7 @@ function initTTSSettings() {
 
   function voicePresetPatchSummary(patch = {}) {
     const chips = [];
+    if (patch.wakeDetectionProvider) chips.push(`检测:${patch.wakeDetectionProvider === "text" ? "文本" : patch.wakeDetectionProvider === "hybrid" ? "混合" : "KWS"}`);
     if (patch.wakeMode) chips.push(`唤醒:${patch.wakeMode === "strict" ? "严格" : "宽松"}`);
     if (patch.wakeConfidenceThreshold != null) chips.push(`置信:${Number(patch.wakeConfidenceThreshold).toFixed(2)}`);
     if (patch.speakerThreshold != null) chips.push(`声纹:${Number(patch.speakerThreshold).toFixed(2)}`);
@@ -3594,6 +3637,14 @@ function initTTSSettings() {
   if (voiceThreshSlider && voiceThreshVal) {
     voiceThreshSlider.addEventListener("input", () => {
       voiceThreshVal.textContent = parseFloat(voiceThreshSlider.value).toFixed(3);
+    });
+  }
+
+  const kwsThresholdSlider = document.getElementById("voice-kws-threshold");
+  const kwsThresholdVal = document.getElementById("voice-kws-threshold-val");
+  if (kwsThresholdSlider && kwsThresholdVal) {
+    kwsThresholdSlider.addEventListener("input", () => {
+      kwsThresholdVal.textContent = Number(kwsThresholdSlider.value || 0.50).toFixed(2);
     });
   }
 
@@ -4087,6 +4138,12 @@ function initTTSSettings() {
       const whisperModel = localAsrModel === "sensevoice-small" ? (localStorage.getItem(VOICE_WHISPER_MODEL_KEY) || "small") : localAsrModel;
       const wakeEnabled = document.getElementById("voice-wake-enabled")?.checked ?? true;
       const wakeWords = document.getElementById("voice-wake-words")?.value?.trim() || "小龙马，龙马，白龙马";
+      const wakeDetectionProviderRaw = document.getElementById("voice-wake-detection-provider")?.value || "text";
+      const wakeDetectionProvider = ["text", "hybrid", "kws"].includes(wakeDetectionProviderRaw) ? wakeDetectionProviderRaw : "text";
+      const wakeKwsEngineRaw = document.getElementById("voice-kws-engine")?.value || "none";
+      const wakeKwsEngine = ["none", "sherpa-onnx", "openwakeword"].includes(wakeKwsEngineRaw) ? wakeKwsEngineRaw : "none";
+      const wakeKwsModelPath = (document.getElementById("voice-kws-model-path")?.value || "").trim().slice(0, 500);
+      const wakeKwsThreshold = Math.max(0.10, Math.min(0.99, Number(document.getElementById("voice-kws-threshold")?.value || 0.50) || 0.50));
       const wakeMode = document.getElementById("voice-wake-mode")?.value === "loose" ? "loose" : "strict";
       const wakeWindowSeconds = Math.max(3, Math.min(30, Number(document.getElementById("voice-wake-window")?.value || 8) || 8));
       const wakeRepeatSuppression = document.getElementById("voice-wake-repeat-suppression")?.checked ?? true;
@@ -4116,6 +4173,10 @@ function initTTSSettings() {
       localStorage.setItem(VOICE_WHISPER_MODEL_KEY, whisperModel);
       localStorage.setItem(VOICE_WAKE_ENABLED_KEY, String(wakeEnabled));
       localStorage.setItem(VOICE_WAKE_WORDS_KEY, wakeWords);
+      localStorage.setItem(VOICE_WAKE_DETECTION_PROVIDER_KEY, wakeDetectionProvider);
+      localStorage.setItem(VOICE_KWS_ENGINE_KEY, wakeKwsEngine);
+      localStorage.setItem(VOICE_KWS_MODEL_PATH_KEY, wakeKwsModelPath);
+      localStorage.setItem(VOICE_KWS_THRESHOLD_KEY, String(wakeKwsThreshold));
       localStorage.setItem(VOICE_WAKE_MODE_KEY, wakeMode);
       localStorage.setItem(VOICE_WAKE_WINDOW_KEY, String(wakeWindowSeconds));
       localStorage.setItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY, String(wakeRepeatSuppression));
@@ -4145,6 +4206,10 @@ function initTTSSettings() {
         asrProfile,
         wakeWordEnabled: wakeEnabled,
         wakeWords: wakeWords.split(/[,，、\s]+/).map(w => w.trim()).filter(Boolean),
+        wakeDetectionProvider,
+        wakeKwsEngine,
+        wakeKwsModelPath,
+        wakeKwsThreshold,
         wakeMode,
         wakeWindowSeconds,
         wakeRepeatSuppression,

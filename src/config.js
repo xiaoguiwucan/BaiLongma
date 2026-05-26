@@ -629,7 +629,7 @@ export function setSocialConfig(updates) {
 }
 
 const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
-const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeTuningHistory', 'voiceLocalDoctorHistory', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', 'speakerThreshold', 'wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeAutoTuningEnabled', 'wakeAutoTuningMinRejects', 'wakeAutoTuningCooldownMs', 'wakeAutoTuningMaxActionsPerHour', 'wakeAutoTuningLastAppliedAt', 'videoVoiceDuckEnabled', 'videoVoicePttEnabled', 'videoVoiceAecEnabled', 'videoVoiceDuckLevel', 'videoVoiceDuckHoldMs', 'videoVoiceDuckSensitivity', 'videoVoicePreRollEnabled', 'videoVoicePreRollMs', ...VOICE_SECRET_KEYS]
+const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeTuningHistory', 'voiceLocalDoctorHistory', 'wakeWordEnabled', 'wakeWords', 'wakeDetectionProvider', 'wakeKwsEngine', 'wakeKwsModelPath', 'wakeKwsThreshold', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', 'speakerThreshold', 'wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeAutoTuningEnabled', 'wakeAutoTuningMinRejects', 'wakeAutoTuningCooldownMs', 'wakeAutoTuningMaxActionsPerHour', 'wakeAutoTuningLastAppliedAt', 'videoVoiceDuckEnabled', 'videoVoicePttEnabled', 'videoVoiceAecEnabled', 'videoVoiceDuckLevel', 'videoVoiceDuckHoldMs', 'videoVoiceDuckSensitivity', 'videoVoicePreRollEnabled', 'videoVoicePreRollMs', ...VOICE_SECRET_KEYS]
 const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
 const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
 const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
@@ -698,6 +698,10 @@ export function getVoiceConfig() {
     asrProfile: ['speed', 'balanced', 'accuracy'].includes(stored.asrProfile) ? stored.asrProfile : 'balanced',
     wakeWordEnabled: typeof stored.wakeWordEnabled === 'boolean' ? stored.wakeWordEnabled : true,
     wakeWords: Array.isArray(stored.wakeWords) && stored.wakeWords.length ? stored.wakeWords : ['小龙马', '龙马', '白龙马'],
+    wakeDetectionProvider: ['text', 'kws', 'hybrid'].includes(stored.wakeDetectionProvider) ? stored.wakeDetectionProvider : 'text',
+    wakeKwsEngine: ['none', 'sherpa-onnx', 'openwakeword'].includes(stored.wakeKwsEngine) ? stored.wakeKwsEngine : 'none',
+    wakeKwsModelPath: typeof stored.wakeKwsModelPath === 'string' ? stored.wakeKwsModelPath.slice(0, 500) : '',
+    wakeKwsThreshold: Number.isFinite(Number(stored.wakeKwsThreshold)) ? Math.max(0.10, Math.min(0.99, Number(stored.wakeKwsThreshold))) : 0.50,
     wakeMode: ['loose', 'strict'].includes(stored.wakeMode) ? stored.wakeMode : 'strict',
     wakeWindowSeconds: Number.isFinite(Number(stored.wakeWindowSeconds)) ? Math.max(3, Math.min(30, Number(stored.wakeWindowSeconds))) : 8,
     wakeRepeatSuppression: typeof stored.wakeRepeatSuppression === 'boolean' ? stored.wakeRepeatSuppression : true,
@@ -774,6 +778,23 @@ export function setVoiceConfig(updates) {
     if (key === 'wakeWords') {
       const words = Array.isArray(val) ? val : String(val || '').split(/[,，、\s]+/)
       next.wakeWords = [...new Set(words.map(w => String(w || '').trim()).filter(Boolean))].slice(0, 12)
+      continue
+    }
+    if (key === 'wakeDetectionProvider') {
+      if (['text', 'kws', 'hybrid'].includes(trimmed)) next.wakeDetectionProvider = trimmed
+      continue
+    }
+    if (key === 'wakeKwsEngine') {
+      if (['none', 'sherpa-onnx', 'openwakeword'].includes(trimmed)) next.wakeKwsEngine = trimmed
+      continue
+    }
+    if (key === 'wakeKwsModelPath') {
+      next.wakeKwsModelPath = trimmed.slice(0, 500)
+      continue
+    }
+    if (key === 'wakeKwsThreshold') {
+      const threshold = Number(val)
+      if (Number.isFinite(threshold)) next.wakeKwsThreshold = Math.max(0.10, Math.min(0.99, threshold))
       continue
     }
     if (key === 'wakeMode') {

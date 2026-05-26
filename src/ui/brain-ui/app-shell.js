@@ -550,7 +550,32 @@ const createSettingsModal = () => `
               <input class="settings-input" type="text" id="voice-wake-words" placeholder="小龙马，龙马，白龙马">
             </div>
             <div class="settings-row">
-              <label class="settings-label" for="voice-wake-mode">唤醒匹配模式</label>
+              <label class="settings-label" for="voice-wake-detection-provider">唤醒检测方式</label>
+              <select class="settings-select" id="voice-wake-detection-provider">
+                <option value="text">文本唤醒：ASR 文本匹配（当前稳定）</option>
+                <option value="hybrid">混合唤醒：KWS + 文本双保险（预留）</option>
+                <option value="kws">本地 KWS：关键词模型唤醒（预留）</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-kws-engine">本地 KWS 引擎</label>
+              <select class="settings-select" id="voice-kws-engine">
+                <option value="none">未接入</option>
+                <option value="sherpa-onnx">sherpa-onnx KWS</option>
+                <option value="openwakeword">openWakeWord</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-kws-threshold">KWS 触发阈值</label>
+              <input type="range" id="voice-kws-threshold" min="0.10" max="0.99" step="0.01" value="0.50" style="flex:1;cursor:pointer;">
+              <span id="voice-kws-threshold-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">0.50</span>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-kws-model-path">KWS 模型路径</label>
+              <input class="settings-input" type="text" id="voice-kws-model-path" placeholder="例如 models/kws/longma.onnx；未接入时留空">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-wake-mode">文本唤醒匹配模式</label>
               <select class="settings-select" id="voice-wake-mode">
                 <option value="strict">严格：必须以唤醒词开头，推荐</option>
                 <option value="loose">宽松：句中包含唤醒词即可</option>
@@ -584,7 +609,7 @@ const createSettingsModal = () => `
               <label class="settings-label" for="voice-wake-require-speaker">声纹开启时唤醒也必须通过声纹</label>
               <input id="voice-wake-require-speaker" type="checkbox" checked style="width:auto;flex:none;">
             </div>
-            <p class="settings-hint">严格模式更适合视频/聊天环境：必须说“龙马，帮我查天气”。只说“龙马”后，会在设定窗口内等待下一句指令；重复误识别文本会被静默忽略。v2.3 开始可调唤醒置信度、最短指令字数和冷却时间，降低视频/他人说话误唤醒。</p>
+            <p class="settings-hint">严格模式更适合视频/聊天环境：必须说“龙马，帮我查天气”。当前稳定路径仍是文本唤醒；KWS/sherpa-onnx/openWakeWord 是本地关键词模型预留配置，未安装模型时会在 readiness 中提示“未接入”，不会假装可用。</p>
             <div class="settings-row">
               <label class="settings-label" for="voice-speaker-verify">只响应我的声音</label>
               <input id="voice-speaker-verify" type="checkbox" style="width:auto;flex:none;">

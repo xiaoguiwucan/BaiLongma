@@ -512,3 +512,16 @@
 - Added `scripts/smoke-voice-panel-gating.mjs` and `npm run smoke:voice-panel-gating` to protect this invariant.
 - Verified syntax and the new smoke check. Broader suites should be run before the next Release.
 - This is a post-v2.3.1 development checkpoint only; no tag/Release yet.
+
+## Checkpoint 62 - Local KWS wake configuration base
+
+- Responded to the cadence issue by stopping the open-ended major-version work and preparing a meaningful development checkpoint for GitHub backup.
+- Added honest local KWS wake configuration foundations without claiming runtime KWS inference is complete:
+  - `wakeDetectionProvider`: text / hybrid / kws;
+  - `wakeKwsEngine`: none / sherpa-onnx / openwakeword;
+  - `wakeKwsModelPath` and `wakeKwsThreshold`.
+- Added Brain UI settings controls for selecting wake detection path, KWS engine, model path, and threshold.
+- Wired settings hydration, localStorage mirroring, save payload, preset sync helpers, and threshold label updates.
+- Added doctor/readiness diagnostics so users can clearly see when KWS is disabled, reserved, incomplete, or configured-but-runtime-pending.
+- Extended smoke coverage for KWS setting hydration and readiness/doctor visibility.
+- This is a post-v2.3.2 development checkpoint only; no tag/GitHub Release yet. It should be rolled into the next real large release after actual KWS runtime integration or another meaningful feature batch.

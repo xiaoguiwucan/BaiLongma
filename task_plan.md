@@ -602,3 +602,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add smoke coverage for the gating invariant.
 - [x] Run broader voice/UI smoke suites.
 - [x] Commit and push as a development checkpoint.
+
+## Checkpoint 62 plan - Local KWS wake configuration base
+
+- [x] Add backend config keys for wakeDetectionProvider / wakeKwsEngine / wakeKwsModelPath / wakeKwsThreshold.
+- [x] Add Brain UI controls for KWS wake configuration while labelling runtime KWS as reserved/not yet active.
+- [x] Wire settings hydration, localStorage persistence, save payload, and UI sync helpers.
+- [x] Add doctor/readiness steps that honestly report text wake vs incomplete/pending KWS.
+- [x] Extend smoke tests for KWS hydration and diagnostics visibility.
+- [x] Run validation checks and smoke suites.
+- [ ] Commit and push as a development checkpoint only, without tag/Release.
