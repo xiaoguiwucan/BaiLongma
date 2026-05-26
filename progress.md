@@ -248,3 +248,11 @@
 - Extended `smoke:brain-ui` to verify the tuning diff chips render for both wake command length and speaker threshold changes.
 - Verification passed: syntax checks for Brain UI app and smoke script; `npm run smoke:brain-ui`.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Persisted wake/speaker tuning history into voice config so recent tuning records survive API/app restarts.
+- `getVoiceConfig()` now returns sanitized `wakeTuningHistory`; `setVoiceConfig()` accepts and clamps it to the latest 30 records with bounded metadata.
+- API startup now restores `wakeTuningHistory` from voice config instead of always starting with an empty in-memory history.
+- Every `pushWakeTuningRecord()` now writes the updated history back through `setVoiceConfig()` for durable apply/rollback/auto-tune auditability.
+- Extended `smoke:voice-config` to 25/25 checks for history trimming, oldest-record dropping, and persisted tuning metadata.
+- Verification passed: syntax checks for config/API/voice-config smoke script; `npm run smoke:voice-config` 25/25.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

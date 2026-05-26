@@ -58,6 +58,27 @@ try {
   assert(auto.wakeAutoTuningLastAppliedAt === 12345, 'wake auto tuning last applied timestamp persists', JSON.stringify(auto))
 
   setVoiceConfig({
+    wakeTuningHistory: [
+      { id: 'keep-old', at: 1, label: 'old' },
+      ...Array.from({ length: 35 }, (_, index) => ({
+        id: `hist-${index}`,
+        at: index + 2,
+        reason: 'speaker rejected',
+        label: '降低声纹严格度',
+        before: { speakerThreshold: 0.63 },
+        after: { speakerThreshold: 0.50 },
+        applied: { speakerThreshold: 0.50 },
+        beforeMetrics: { speakerRejected: 3 },
+        auto: index % 2 === 0,
+      })),
+    ],
+  })
+  const history = getVoiceConfig().wakeTuningHistory
+  assert(history.length === 30, 'wake tuning history keeps latest 30 records', JSON.stringify(history))
+  assert(history[0].id === 'hist-5' && history[29].id === 'hist-34', 'wake tuning history drops oldest records', JSON.stringify(history.map(item => item.id)))
+  assert(history[29].applied?.speakerThreshold === 0.50 && history[29].beforeMetrics?.speakerRejected === 3, 'wake tuning history persists tuning metadata', JSON.stringify(history[29]))
+
+  setVoiceConfig({
     videoVoiceDuckEnabled: false,
     videoVoicePttEnabled: false,
     videoVoiceAecEnabled: false,

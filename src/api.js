@@ -44,7 +44,7 @@ const SANDBOX_PATH       = paths.sandboxDir
 const DEFAULT_AGENT_NAME = '小白龙'
 const DEFAULT_API_HOST = '127.0.0.1'
 
-const wakeTuningHistory = []
+const wakeTuningHistory = getVoiceConfig().wakeTuningHistory || []
 
 
 function getWakeAutoTuningPolicy() {
@@ -125,9 +125,13 @@ function enrichWakeTuningEvaluation(item) {
 function publicWakeTuningHistory() {
   return wakeTuningHistory.slice(-12).map(item => ({ ...item, before: { ...(item.before || {}) }, after: { ...(item.after || {}) }, applied: { ...(item.applied || {}) }, evaluation: enrichWakeTuningEvaluation(item) }))
 }
+function persistWakeTuningHistory() {
+  setVoiceConfig({ wakeTuningHistory })
+}
 function pushWakeTuningRecord(record) {
   wakeTuningHistory.push({ id: `wake_tune_${Date.now()}_${wakeTuningHistory.length + 1}`, at: Date.now(), ...record })
   if (wakeTuningHistory.length > 30) wakeTuningHistory.shift()
+  persistWakeTuningHistory()
   return wakeTuningHistory[wakeTuningHistory.length - 1]
 }
 

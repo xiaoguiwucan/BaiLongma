@@ -276,3 +276,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui smoke coverage for wake and speaker tuning diff rendering.
 - [x] Verify syntax plus brain-ui smoke suite.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 28: Persist voice tuning history
+- [x] Add persisted `wakeTuningHistory` to voice config.
+- [x] Sanitize tuning history records before returning/saving them.
+- [x] Limit persisted history to the latest 30 records.
+- [x] Restore tuning history from config on API startup.
+- [x] Persist tuning history whenever apply, rollback, or auto-tune creates a record.
+- [x] Extend voice-config smoke coverage for trimming and metadata persistence.
+- [x] Verify syntax plus voice-config smoke suite.
+- [x] Push as a development checkpoint only, without tag/Release.
