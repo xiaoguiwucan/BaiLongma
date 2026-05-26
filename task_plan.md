@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice server work by adding explicit audio capability negotiation to `/voice/events`, so ESP32-style clients that declare `binary_audio` or `base64_audio` receive a clear negotiated recommendation without changing old client behavior.
 
 ## Current Phase
-GitHub release
+Complete
 
 ## Phases
 
@@ -28,11 +28,11 @@ GitHub release
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [ ] Commit changes
-- [ ] Tag and push v2.1.239
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag and push v2.1.239
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
