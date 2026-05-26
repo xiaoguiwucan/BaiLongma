@@ -213,3 +213,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-config and brain-ui smoke coverage.
 - [x] Verify syntax plus voice-config and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 22: Persist speaker verification strictness
+- [x] Add backend voice config field for `speakerThreshold`.
+- [x] Clamp speaker threshold to the UI-supported 0.45–0.80 range.
+- [x] Hydrate the Brain UI “声纹严格度” slider from `/settings/voice`.
+- [x] Mirror server speaker threshold into localStorage so local ASR websocket config uses the persisted value immediately.
+- [x] Save speaker threshold through `/settings/voice` with the rest of voice settings.
+- [x] Persist the speaker enrollment recommended threshold when calibration returns one.
+- [x] Extend voice-config and brain-ui smoke coverage.
+- [x] Verify syntax plus voice-config and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

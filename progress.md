@@ -197,3 +197,12 @@
 - Verification passed: syntax checks for config, Brain UI app, and smoke scripts; `npm run smoke:voice-config` 19/19; `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Persisted speaker verification strictness (`speakerThreshold`) into backend voice config instead of keeping it only in browser localStorage.
+- Added bounded clamping for `speakerThreshold` in `/settings/voice` with the same UI range 0.45–0.80, defaulting to 0.55.
+- Brain UI now hydrates the “声纹严格度” slider from `/settings/voice`, mirrors it into localStorage for the local ASR websocket runtime, and saves it back with the rest of voice settings.
+- Speaker enrollment now persists the recommended calibrated threshold when available, so a successful re-enrollment does not lose its suggested value after restart.
+- Extended `smoke:voice-config` to 22/22 checks for speaker threshold persistence/clamping.
+- Extended `smoke:brain-ui` to verify server-provided speaker threshold hydrates both the settings UI and localStorage runtime key.
+- Verification passed: syntax checks for config, Brain UI app, and smoke scripts; `npm run smoke:voice-config` 22/22; `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

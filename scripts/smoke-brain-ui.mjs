@@ -130,6 +130,7 @@ function createServer() {
           wakeCooldownMs: 1200,
           wakeRequireSpeakerWhenEnabled: true,
           speakerVerificationEnabled: false,
+          speakerThreshold: 0.63,
           videoVoiceDuckEnabled: false,
           videoVoicePttEnabled: true,
           videoVoiceAecEnabled: false,
@@ -567,13 +568,16 @@ try {
     duckLevel: document.querySelector('#voice-video-duck-level')?.value,
     duckHold: document.querySelector('#voice-video-duck-hold')?.value,
     sensitivity: document.querySelector('#voice-video-duck-sensitivity')?.value,
+    speakerThreshold: document.querySelector('#voice-speaker-threshold')?.value,
     storedDuck: localStorage.getItem('bailongma-voice-video-duck'),
     storedPtt: localStorage.getItem('bailongma-voice-video-ptt'),
     storedAec: localStorage.getItem('bailongma-voice-video-aec'),
     storedLevel: localStorage.getItem('bailongma-voice-video-duck-level'),
     storedHold: localStorage.getItem('bailongma-voice-video-duck-hold'),
     storedSensitivity: localStorage.getItem('bailongma-voice-video-duck-sensitivity'),
+    storedSpeakerThreshold: localStorage.getItem('bailongma-voice-speaker-threshold'),
   }))
+  if (videoVoiceSnapshot.speakerThreshold !== '0.63' || videoVoiceSnapshot.storedSpeakerThreshold !== '0.63') throw new Error('server speaker threshold did not hydrate settings UI and localStorage')
   if (videoVoiceSnapshot.duckChecked !== false || videoVoiceSnapshot.pttChecked !== true || videoVoiceSnapshot.aecChecked !== false) throw new Error('server video voice booleans did not hydrate settings UI')
   if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35') throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')

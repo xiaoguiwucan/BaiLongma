@@ -33,6 +33,16 @@ try {
   assert(low.wakeCooldownMs === 0, 'wake cooldown clamps low', JSON.stringify(low))
   assert(low.wakeRequireSpeakerWhenEnabled === true, 'wake speaker gate can be enabled', JSON.stringify(low))
 
+  setVoiceConfig({ speakerThreshold: 0.99 })
+  const speakerHigh = getVoiceConfig()
+  assert(speakerHigh.speakerThreshold === 0.80, 'speaker threshold clamps high', JSON.stringify(speakerHigh))
+  setVoiceConfig({ speakerThreshold: 0.1 })
+  const speakerLow = getVoiceConfig()
+  assert(speakerLow.speakerThreshold === 0.45, 'speaker threshold clamps low', JSON.stringify(speakerLow))
+  setVoiceConfig({ speakerThreshold: 0.62 })
+  const speakerSaved = getVoiceConfig()
+  assert(speakerSaved.speakerThreshold === 0.62, 'speaker threshold persists', JSON.stringify(speakerSaved))
+
   setVoiceConfig({
     wakeAutoTuningEnabled: true,
     wakeAutoTuningMinRejects: 99,

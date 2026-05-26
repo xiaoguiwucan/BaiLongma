@@ -2929,9 +2929,10 @@ function initTTSSettings() {
     localStorage.setItem(VOICE_WAKE_COOLDOWN_KEY, String(savedWakeCooldown));
     localStorage.setItem(VOICE_WAKE_REQUIRE_SPEAKER_KEY, String(savedWakeRequireSpeaker));
     localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, String(savedSpeakerVerify));
-    const savedSpeakerThreshold = parseFloat(localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) || "0.55");
+    const savedSpeakerThreshold = Math.max(0.45, Math.min(0.80, Number(serverVoice?.speakerThreshold ?? localStorage.getItem(VOICE_SPEAKER_THRESHOLD_KEY) ?? 0.55) || 0.55));
     if (speakerThreshold) speakerThreshold.value = String(savedSpeakerThreshold);
     if (speakerThresholdVal) speakerThresholdVal.textContent = savedSpeakerThreshold.toFixed(2);
+    localStorage.setItem(VOICE_SPEAKER_THRESHOLD_KEY, String(savedSpeakerThreshold));
     const savedVideoDuck = typeof serverVoice?.videoVoiceDuckEnabled === "boolean" ? serverVoice.videoVoiceDuckEnabled : localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== "false";
     const savedVideoPtt = typeof serverVoice?.videoVoicePttEnabled === "boolean" ? serverVoice.videoVoicePttEnabled : localStorage.getItem(VOICE_VIDEO_PTT_KEY) !== "false";
     const savedVideoAec = typeof serverVoice?.videoVoiceAecEnabled === "boolean" ? serverVoice.videoVoiceAecEnabled : localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== "false";
@@ -3108,7 +3109,7 @@ function initTTSSettings() {
         await fetch(`${API}/settings/voice`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ speakerVerificationEnabled: true }),
+          body: JSON.stringify({ speakerVerificationEnabled: true, ...(recommended ? { speakerThreshold: recommended } : {}) }),
         });
       } catch {}
     } catch (err) {
@@ -3250,6 +3251,7 @@ function initTTSSettings() {
         wakeCooldownMs,
         wakeRequireSpeakerWhenEnabled,
         speakerVerificationEnabled: speakerVerify,
+        speakerThreshold,
         videoVoiceDuckEnabled: videoDuck,
         videoVoicePttEnabled: videoPtt,
         videoVoiceAecEnabled: videoAec,
