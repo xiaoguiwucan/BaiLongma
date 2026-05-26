@@ -738,6 +738,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.236</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增 /voice/events 外部客户端身份登记，便于 ESP32/调试客户端诊断。</p>
+                <ul class="release-note-points">
+                  <li>支持 client:hello / client:identify，并返回 client:accepted。</li>
+                  <li>/voice/events/status 新增 clientDetails 安全身份摘要。</li>
+                  <li>smoke:voice-mapping 增至 31 项，smoke:voice-events 增至 34 项。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.235</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

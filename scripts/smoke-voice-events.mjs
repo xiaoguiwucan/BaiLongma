@@ -75,11 +75,12 @@ try {
   assert(statusBefore.ok === true && statusBefore.version >= 3, 'status exposes voice event protocol version', JSON.stringify(statusBefore))
 
   const protocolMeta = await fetch(`${API}/voice/events/protocol`).then(r => r.json())
-  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
+  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits') && protocolMeta.capabilities?.includes('client_identity'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
   assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
   assert(protocolMeta.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocolMeta.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol endpoint exposes tts speak limits', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol endpoint exposes remote address tts speak scope', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.auth?.localhostExempt === true && protocolMeta.auth?.methods?.includes('?token=<token>'), 'protocol endpoint exposes auth metadata', JSON.stringify(protocolMeta.auth))
+  assert(protocolMeta.clientMessages?.includes('client:hello') && protocolMeta.identityFields?.includes('clientId'), 'protocol endpoint exposes client identity metadata', JSON.stringify(protocolMeta.identityFields))
 
   await fetch(`${API}/settings/tts`, {
     method: 'POST',
@@ -104,6 +105,26 @@ try {
     until: msg => msg.type === 'hello',
   })
   assert(tokenMessages.some(msg => msg.type === 'hello' && msg.auth?.methods?.includes('?token=<token>')), 'websocket accepts query token and sends auth metadata')
+
+  const identifyMessages = await connectAndCollect({
+    onOpen: ws => ws.send(JSON.stringify({ type: 'client:hello', clientId: 'esp32-smoke', device: 'xiaozhi-esp32', app: 'smoke-client', version: '1.0.0', platform: 'esp32' })),
+    until: msg => msg.type === 'client:accepted',
+  })
+  const acceptedIdentity = identifyMessages.find(msg => msg.type === 'client:accepted')?.identity
+  assert(acceptedIdentity?.clientId === 'esp32-smoke' && acceptedIdentity?.device === 'xiaozhi-esp32', 'client:hello receives sanitized client:accepted identity', JSON.stringify(acceptedIdentity))
+
+  const statusWithIdentityPromise = connectAndCollect({
+    onOpen: async ws => {
+      ws.send(JSON.stringify({ type: 'client:hello', clientId: 'status-client', app: 'smoke-status' }))
+      await new Promise(resolve => setTimeout(resolve, 80))
+      const status = await fetch(`${API}/voice/events/status`).then(r => r.json())
+      ws.send(JSON.stringify({ type: 'ping', statusSnapshot: status }))
+    },
+    until: (msg, messages) => msg.type === 'pong' && messages.some(item => item.type === 'client:accepted'),
+  })
+  await statusWithIdentityPromise
+  const statusWithIdentity = await fetch(`${API}/voice/events/status`).then(r => r.json())
+  assert(Array.isArray(statusWithIdentity.clientDetails), 'status exposes clientDetails array', JSON.stringify(statusWithIdentity))
 
   const pingMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'ping' })),

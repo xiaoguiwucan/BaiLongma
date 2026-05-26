@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.235 更新：tts:speak 远端地址级冷却）
+版本：v3（BaiLongma v2.1.236 更新：client:hello 客户端身份登记）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -91,6 +91,46 @@ ws://<mac-ip>:3721/voice/events?token=<token>
 ```json
 {"type":"pong","at":1710000000000}
 ```
+
+
+## 3.5 客户端身份登记：client:hello
+
+客户端可选发送身份信息，便于调试和后续设备配对：
+
+```json
+{
+  "type": "client:hello",
+  "clientId": "esp32-living-room",
+  "device": "xiaozhi-esp32",
+  "app": "bailongma-bridge",
+  "version": "0.1.0",
+  "platform": "esp32"
+}
+```
+
+兼容别名：
+
+```json
+{"type":"client:identify","clientId":"debug-cli"}
+```
+
+服务端返回：
+
+```json
+{
+  "type": "client:accepted",
+  "service": "bailongma.voice.events",
+  "identity": {
+    "clientId": "esp32-living-room",
+    "device": "xiaozhi-esp32",
+    "app": "bailongma-bridge",
+    "version": "0.1.0",
+    "platform": "esp32"
+  }
+}
+```
+
+字段会被服务端清洗和截断；不要在身份字段里放 token、密钥或隐私内容。
 
 ## 4. 被动订阅音频块
 
@@ -412,6 +452,7 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 
 - 优先解析 `hello.version` 和 `hello.capabilities`，不要硬编码能力。
 - 监听 `protocol_error`，把 `code/message/requestId/receivedType` 打进客户端日志。
+- 建议连接后先发送 `client:hello`，方便 `/voice/events/status` 显示设备身份。
 - 读取 `limits.ttsSpeak.maxTextChars/cooldownMs`，在客户端输入框或硬件逻辑中提前限制。
 - 如果是硬件端，建议使用 `binaryAudio=true`，避免 base64 体积膨胀。
 - `audio_chunk` metadata 和紧随其后的 binary frame 应按顺序消费。
@@ -426,4 +467,4 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 - 当前 `tts:cancel` 只取消同连接 active speak，不支持跨连接 session 管理。
 - 当前调试客户端是参考实现，不是正式 SDK。
 - 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本、单连接 speak 冷却和远端地址 speak 冷却；文本长度和冷却可配置。
-- `/voice/events` 已支持复用 `BAILONGMA_API_TOKEN` 的可选 token 鉴权，但还没有每设备配对或全局/IP 级限流。
+- `/voice/events` 已支持复用 `BAILONGMA_API_TOKEN` 的可选 token 鉴权，并支持可选客户端身份登记；但还没有每设备配对或完整滑动窗口限流。

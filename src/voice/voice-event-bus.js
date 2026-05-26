@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -39,7 +39,8 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
       envVar: 'BAILONGMA_API_TOKEN',
       localhostExempt: true,
     },
-    clientMessages: ['ping', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
+    clientMessages: ['ping', 'client:hello', 'client:identify', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
+    identityFields: ['clientId', 'device', 'app', 'version', 'platform'],
     errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text', 'text_too_long', 'rate_limited'],
     mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
     limits: {
@@ -58,6 +59,8 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
 
 const clients = new Set()
 const clientOptions = new WeakMap()
+const clientIdentities = new WeakMap()
+let clientSerial = 0
 const history = []
 
 export function sendVoiceEventClientJson(ws, payload) {
@@ -98,6 +101,33 @@ export function getVoiceEventClientOptions(ws) {
   return { ...getOptions(ws) }
 }
 
+function cleanIdentityValue(value, max = 80) {
+  return String(value || '').trim().replace(/[\r\n\t]+/g, ' ').slice(0, max)
+}
+
+export function sanitizeVoiceEventClientIdentity(msg = {}) {
+  const identity = {
+    clientId: cleanIdentityValue(msg.clientId || msg.id || msg.name || `client_${Date.now()}`, 96),
+    device: cleanIdentityValue(msg.device || msg.deviceName || msg.hardware, 96),
+    app: cleanIdentityValue(msg.app || msg.appName || msg.client || 'unknown', 96),
+    version: cleanIdentityValue(msg.version || msg.appVersion, 48),
+    platform: cleanIdentityValue(msg.platform || msg.os, 48),
+    identifiedAt: Date.now(),
+  }
+  return Object.fromEntries(Object.entries(identity).filter(([, value]) => value !== ''))
+}
+
+export function setVoiceEventClientIdentity(ws, identity = {}) {
+  const current = clientIdentities.get(ws) || {}
+  const next = { ...current, ...identity, updatedAt: Date.now() }
+  clientIdentities.set(ws, next)
+  return { ...next }
+}
+
+export function getVoiceEventClientIdentity(ws) {
+  return { ...(clientIdentities.get(ws) || {}) }
+}
+
 export function createVoiceEventProtocolError(code, message, extra = {}) {
   return {
     type: 'protocol_error',
@@ -123,7 +153,7 @@ export function validateVoiceEventClientMessage(msg, { limits = VOICE_EVENTS_TTS
   }
   const type = msg.type.trim()
   const requestId = msg.requestId || msg.id || undefined
-  const supported = new Set(['ping', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'])
+  const supported = new Set(['ping', 'client:hello', 'client:identify', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'])
   if (!supported.has(type)) {
     return { ok: false, code: 'unsupported_type', message: `Unsupported voice event client message type: ${type}`, receivedType: type, requestId }
   }
@@ -143,6 +173,8 @@ export function validateVoiceEventClientMessage(msg, { limits = VOICE_EVENTS_TTS
 export function addVoiceEventClient(ws, { ttsSpeakLimits, auth } = {}) {
   clients.add(ws)
   clientOptions.set(ws, { audio: false, binaryAudio: false })
+  clientSerial += 1
+  setVoiceEventClientIdentity(ws, { clientId: `ws_${clientSerial}`, app: 'unknown', connectedAt: Date.now() })
   ws.voiceEventsTTSSpeakLimits = normalizeVoiceEventsTTSSpeakLimits(ttsSpeakLimits)
   safeSend(ws, { type: 'hello', ...getVoiceEventsProtocolMetadata({ ttsSpeakLimits: ws.voiceEventsTTSSpeakLimits, auth }), history: history.slice(-20) })
 }
@@ -150,6 +182,7 @@ export function addVoiceEventClient(ws, { ttsSpeakLimits, auth } = {}) {
 export function removeVoiceEventClient(ws) {
   clients.delete(ws)
   clientOptions.delete(ws)
+  clientIdentities.delete(ws)
 }
 
 function parseClientMessage(raw) {
@@ -174,6 +207,11 @@ export function handleVoiceEventClientMessage(ws, raw) {
     safeSend(ws, { type: 'pong', at: Date.now() })
     return { handled: true }
   }
+  if (msg?.type === 'client:hello' || msg?.type === 'client:identify') {
+    const identity = setVoiceEventClientIdentity(ws, sanitizeVoiceEventClientIdentity(msg))
+    safeSend(ws, { type: 'client:accepted', service: 'bailongma.voice.events', identity })
+    return { handled: true, identity }
+  }
   if (msg?.type === 'subscribe' || msg?.type === 'voice:subscribe') {
     const options = setOptions(ws, {
       audio: msg.audio === true || msg.ttsAudio === true,
@@ -190,7 +228,7 @@ export function handleVoiceEventClientMessage(ws, raw) {
     safeSend(ws, { type: 'subscribed', service: 'bailongma.voice.events', options })
     return { handled: true, options }
   }
-  if (msg?.type === 'tts:speak' || msg?.type === 'speak' || msg?.type === 'tts:cancel' || msg?.type === 'cancel') {
+  if (msg?.type === 'client:hello' || msg?.type === 'client:identify' || msg?.type === 'tts:speak' || msg?.type === 'speak' || msg?.type === 'tts:cancel' || msg?.type === 'cancel') {
     return { handled: false, message: msg, validation }
   }
   const error = sendVoiceEventProtocolError(ws, 'unsupported_type', `Unsupported voice event client message type: ${msg?.type}`, { receivedType: msg?.type })
@@ -300,5 +338,16 @@ export function getVoiceEventBusStatus() {
     if (options.audio) audioSubscribers += 1
     if (options.audio && options.binaryAudio) binaryAudioSubscribers += 1
   }
-  return { clients: clients.size, history: history.length, audioSubscribers, binaryAudioSubscribers, version: VOICE_EVENTS_PROTOCOL_VERSION }
+  return {
+    clients: clients.size,
+    history: history.length,
+    audioSubscribers,
+    binaryAudioSubscribers,
+    version: VOICE_EVENTS_PROTOCOL_VERSION,
+    clientDetails: [...clients].map(ws => ({
+      audio: getOptions(ws).audio,
+      binaryAudio: getOptions(ws).binaryAudio,
+      identity: getVoiceEventClientIdentity(ws),
+    })),
+  }
 }

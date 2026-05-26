@@ -4,6 +4,52 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.236 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` 新增可选客户端身份登记消息：
+  - `client:hello`；
+  - `client:identify`。
+- 协议能力新增 `client_identity`。
+- `/voice/events/protocol` 新增：
+  - `client:hello` / `client:identify` in `clientMessages`；
+  - `identityFields`: `clientId/device/app/version/platform`。
+- 服务端会清洗并截断客户端传入的身份字段，避免换行/超长内容污染状态输出。
+- 客户端发送身份后，服务端返回：`client:accepted`。
+- `/voice/events/status` 新增 `clientDetails`，包含每个连接的订阅状态和安全身份摘要。
+- `scripts/smoke-voice-mapping.mjs` 从 28 项扩展到 31 项。
+- `scripts/smoke-voice-events.mjs` 从 31 项扩展到 34 项。
+
+### 改变原因
+
+- 外部硬件、ESP32、小智式客户端和调试 CLI 接入后，仅有连接数不够诊断问题。
+- `client:hello` 能让客户端声明自己是谁、运行在哪个平台、版本是多少，为后续设备配对 token、按设备授权、UI 客户端列表打基础。
+- 身份登记保持可选，旧客户端无需修改。
+
+### 影响范围
+
+- 既有客户端完全兼容，不发送 `client:hello` 也可以继续使用。
+- 新客户端可在连接 hello 后发送 `client:hello`，收到 `client:accepted` 后再开始订阅或 speak。
+- `/voice/events/status` 会返回 `clientDetails`，但不包含 token 或敏感信息。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 31/31 通过。
+- `npm run smoke:voice-events` 34/34 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端建议连接后先发送 `client:hello`：
+  `{ "type":"client:hello", "clientId":"esp32-living-room", "device":"xiaozhi-esp32", "app":"bailongma-bridge", "version":"0.1.0" }`。
+- 调试时可查看 `/voice/events/status` 的 `clientDetails`。
+
 ## v2.1.235 - 2026-05-26
 
 ### 更新内容

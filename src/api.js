@@ -1656,6 +1656,10 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         sendVoiceEventProtocolError(ws, validation.code, validation.message, { requestId: validation.requestId, receivedType: validation.receivedType, limit: validation.limit, actual: validation.actual })
         return
       }
+      if (msg?.type === 'client:hello' || msg?.type === 'client:identify') {
+        handleVoiceEventClientMessage(ws, msg)
+        return
+      }
       if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
         const now = Date.now()
         pruneVoiceEventsRemoteSpeakAt(now)

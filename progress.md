@@ -1,20 +1,16 @@
-# Progress: v2.1.235 Voice Events Remote Address TTS Speak Cooldown
+# Progress: v2.1.236 Voice Events Client Identity Hello
 
 ## 2026-05-26
-- Resumed after v2.1.234 release; git worktree was clean on `main`.
-- Inspected current `/voice/events` rate limiting and found it is per WebSocket connection only.
-- Started v2.1.235 plan to add remote-address-level `tts:speak` cooldown and protocol metadata.
-- Added `limits.ttsSpeak.scopes` metadata with `connection` and `remoteAddress`.
-- Added remote-address-level `tts:speak` cooldown map with stale-entry pruning.
-- Updated `rate_limited` protocol errors to include `scope: connection` or `scope: remote`.
-- Extended mapping smoke to 28 checks and voice-events smoke to 31 checks.
-- Bumped version to 2.1.235 and updated README, CHANGELOG, BACKUP, protocol docs, and Brain UI release notes.
+- Resumed after v2.1.235 release; git worktree was clean on `main`.
+- Inspected `src/voice/voice-event-bus.js`, `src/api.js`, and smoke tests.
+- Found `/voice/events/status` lacks per-client identity, making hardware/debug client diagnostics difficult.
+- Started v2.1.236 plan to add optional `client:hello` identity registration and status summaries.
+- Added optional `client:hello` / `client:identify` messages and `client_identity` protocol capability.
+- Added sanitized client identity storage and `client:accepted` acknowledgement.
+- Added `/voice/events/status` `clientDetails` with identity and subscription summaries.
+- Extended mapping smoke to 31 checks and voice-events smoke to 34 checks.
+- Bumped version to 2.1.236 and updated README, CHANGELOG, BACKUP, protocol docs, and Brain UI release notes.
 - Verification passed: JS syntax checks for touched protocol/API/smoke files.
-- Verification passed: `npm run smoke:voice-mapping` 28/28.
-- Verification passed: `npm run smoke:voice-events` 31/31.
+- Verification passed: `npm run smoke:voice-mapping` 31/31.
+- Verification passed: `npm run smoke:voice-events` 34/34.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
-- Committed v2.1.235 as `53ef5fc feat: add remote voice events speak cooldown`.
-- Tagged and pushed `v2.1.235` to origin.
-- Created local release assets: `backups/v2.1.235/BaiLongma-v2.1.235-source.tar.gz` and `backups/v2.1.235/BaiLongma-v2.1.235.bundle`.
-- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.235
-- Uploaded release assets via GitHub API: source tarball and git bundle.

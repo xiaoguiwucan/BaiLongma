@@ -1,4 +1,4 @@
-import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi, validateVoiceEventClientMessage, VOICE_EVENTS_TTS_SPEAK_LIMITS, normalizeVoiceEventsTTSSpeakLimits } from '../src/voice/voice-event-bus.js'
+import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi, validateVoiceEventClientMessage, VOICE_EVENTS_TTS_SPEAK_LIMITS, normalizeVoiceEventsTTSSpeakLimits, sanitizeVoiceEventClientIdentity } from '../src/voice/voice-event-bus.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -83,11 +83,15 @@ assert(protocol.endpoints?.protocol === '/voice/events/protocol' && protocol.end
 assert(protocol.auth?.localhostExempt === true && protocol.auth?.methods?.length >= 2, 'protocol metadata exposes auth methods')
 assert(protocol.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocol.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol metadata exposes tts speak limits')
 assert(protocol.limits?.ttsSpeak?.scopes?.includes('connection') && protocol.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol metadata exposes tts speak limit scopes')
+assert(protocol.capabilities.includes('client_identity') && protocol.clientMessages.includes('client:hello'), 'protocol metadata exposes client identity capability')
 const customProtocol = getVoiceEventsProtocolMetadata({ ttsSpeakLimits: { maxTextChars: 123, cooldownMs: 456 }, auth: { tokenConfigured: true } })
 assert(customProtocol.limits?.ttsSpeak?.maxTextChars === 123 && customProtocol.limits?.ttsSpeak?.cooldownMs === 456, 'protocol metadata accepts configured tts speak limits')
 assert(customProtocol.auth?.tokenConfigured === true && customProtocol.auth?.requiredForRemote === true, 'protocol metadata accepts auth configuration')
 assert(normalizeVoiceEventsTTSSpeakLimits({ maxTextChars: 99999, cooldownMs: -1 }).maxTextChars === 3000, 'tts speak limit normalization clamps max chars')
+const identity = sanitizeVoiceEventClientIdentity({ type: 'client:hello', clientId: '  dev-1  ', device: 'xiaozhi\nESP32', app: 'bridge' })
+assert(identity.clientId === 'dev-1' && identity.device === 'xiaozhi ESP32' && identity.app === 'bridge', 'client identity sanitizer trims and removes control whitespace')
 assert(validateVoiceEventClientMessage({ type: 'ping' }).ok === true, 'client validation accepts ping')
+assert(validateVoiceEventClientMessage({ type: 'client:hello', clientId: 'dev-1' }).ok === true, 'client validation accepts client hello')
 assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: '你好' }).ok === true, 'client validation accepts tts speak with text')
 assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: 'x'.repeat(VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars + 1) }).code === 'text_too_long', 'client validation rejects overlong tts speak')
 assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: 'x'.repeat(121) }, { limits: { maxTextChars: 120 } }).code === 'text_too_long', 'client validation uses configured max text chars')
