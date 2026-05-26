@@ -525,3 +525,21 @@
 - Added doctor/readiness diagnostics so users can clearly see when KWS is disabled, reserved, incomplete, or configured-but-runtime-pending.
 - Extended smoke coverage for KWS setting hydration and readiness/doctor visibility.
 - This is a post-v2.3.2 development checkpoint only; no tag/GitHub Release yet. It should be rolled into the next real large release after actual KWS runtime integration or another meaningful feature batch.
+
+## Checkpoint 63 - Local KWS runtime protocol hook
+
+- Continued from the KWS configuration base and connected an actual local runtime protocol path instead of leaving KWS as UI-only configuration.
+- Brain UI voice panel now:
+  - reads `wakeDetectionProvider`, `wakeKwsEngine`, `wakeKwsModelPath`, and `wakeKwsThreshold` during live recognition;
+  - sends `kws_detect` control messages to the local voice service when openWakeWord KWS is configured;
+  - consumes `kws_result` / `kws_status` responses;
+  - opens a short KWS wake window when local KWS fires, so the following final ASR text can be accepted as the command;
+  - blocks text-only activation in pure `kws` mode when KWS has not fired;
+  - emits observable `wake:kws` events for debugging.
+- Local `sensevoice_server.py` now keeps a rolling KWS audio buffer and implements `kws_detect`:
+  - openWakeWord `.onnx` models are loaded lazily and evaluated locally;
+  - missing `openwakeword` dependency or missing model file returns explicit `kws_status` unavailable messages;
+  - sherpa-onnx remains honest: it reports that a complete tokens/encoder/decoder/joiner configuration is required instead of pretending a single `.onnx` path is enough.
+- Doctor/readiness wording now distinguishes: stable text wake, openWakeWord runtime connected, missing model path, and unsupported/incomplete sherpa-onnx runtime.
+- Added `scripts/smoke-kws-runtime.mjs` and `npm run smoke:kws-runtime` to protect the protocol/runtime wiring.
+- This is still a development checkpoint only; no formal Release until a real model file/install flow and user-facing KWS test workflow are bundled.

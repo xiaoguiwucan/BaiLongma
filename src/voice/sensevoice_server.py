@@ -38,6 +38,11 @@ except Exception:
     VoiceEncoder = None
     preprocess_wav = None
 
+try:
+    from openwakeword.model import Model as OpenWakeWordModel
+except Exception:
+    OpenWakeWordModel = None
+
 SAMPLE_RATE = 16000
 CHUNK_SAMPLES = SAMPLE_RATE // 4
 
@@ -50,6 +55,9 @@ MIN_UTTERANCE_SECONDS = 0.45
 SILENCE_CHUNKS_TO_FLUSH = 5
 MAX_BUFFER_SECONDS = 20
 SPEAKER_VERIFY_THRESHOLD = 0.55
+KWS_WINDOW_SECONDS = 1.6
+KWS_MIN_SECONDS = 0.45
+KWS_COOLDOWN_SECONDS = 0.55
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
 VOICEPRINT_PATH = os.path.join(PROJECT_ROOT, "data", "voiceprint.json")
 
@@ -109,6 +117,7 @@ class SenseVoiceServer:
         self.model_name = model_name
         self.model = None
         self.speaker_encoder = None
+        self.kws_models = {}
         self.voiceprint_data = self._load_voiceprint()
         self.voiceprint = self.voiceprint_data.get("centroid")
         self._executor = ThreadPoolExecutor(max_workers=1)
@@ -298,6 +307,61 @@ class SenseVoiceServer:
         loop = asyncio.get_event_loop()
         return await loop.run_in_executor(self._executor, self._run_transcribe, audio_int16, lang)
 
+    def _resolve_kws_model_path(self, model_path: str) -> str:
+        raw = str(model_path or '').strip()
+        if not raw:
+            return ''
+        if os.path.isabs(raw):
+            return raw
+        return os.path.abspath(os.path.join(PROJECT_ROOT, raw))
+
+    def _load_openwakeword_model(self, model_path: str):
+        resolved = self._resolve_kws_model_path(model_path)
+        if OpenWakeWordModel is None:
+            raise RuntimeError('缺少 openwakeword 依赖，请先安装 openwakeword，或切回文本唤醒。')
+        if not resolved or not os.path.exists(resolved):
+            raise RuntimeError(f'找不到 openWakeWord 模型: {resolved or model_path}')
+        key = ('openwakeword', resolved)
+        if key not in self.kws_models:
+            print(f"[语音] 加载 openWakeWord 模型: {resolved}", flush=True)
+            self.kws_models[key] = OpenWakeWordModel(wakeword_models=[resolved], inference_framework='onnx')
+            print('[语音] openWakeWord 模型加载完成', flush=True)
+        return self.kws_models[key], resolved
+
+    def detect_kws(self, audio_int16: np.ndarray, engine='none', model_path='', threshold=0.5):
+        engine = str(engine or 'none').strip().lower()
+        threshold = max(0.10, min(0.99, float(threshold or 0.5)))
+        if len(audio_int16) < int(SAMPLE_RATE * KWS_MIN_SECONDS):
+            return {"type": "kws_result", "accepted": False, "engine": engine, "score": 0.0, "threshold": threshold, "reason": "kws audio too short"}
+        if engine == 'openwakeword':
+            model, resolved = self._load_openwakeword_model(model_path)
+            audio = audio_int16.astype(np.int16)
+            predictions = model.predict(audio)
+            if isinstance(predictions, dict) and predictions:
+                keyword, score = max(predictions.items(), key=lambda kv: float(kv[1] or 0.0))
+                score = float(score or 0.0)
+            else:
+                keyword, score = os.path.basename(resolved), 0.0
+            return {
+                "type": "kws_result",
+                "accepted": score >= threshold,
+                "engine": engine,
+                "word": keyword,
+                "score": round(score, 4),
+                "threshold": threshold,
+                "runtime": "openwakeword",
+                "reason": "kws matched" if score >= threshold else "kws below threshold",
+            }
+        if engine == 'sherpa-onnx':
+            # sherpa-onnx KWS requires a tokens file + encoder/decoder/joiner or a complete keyword model set.
+            # Keep the protocol explicit instead of pretending an arbitrary .onnx path is enough.
+            raise RuntimeError('sherpa-onnx KWS 运行时需要完整 tokens/encoder/decoder/joiner 配置；当前请使用 openWakeWord 模型或文本唤醒。')
+        raise RuntimeError('KWS 引擎未配置。')
+
+    async def detect_kws_async(self, audio_int16: np.ndarray, engine='none', model_path='', threshold=0.5):
+        loop = asyncio.get_event_loop()
+        return await loop.run_in_executor(self._executor, self.detect_kws, audio_int16, engine, model_path, threshold)
+
     async def handle(self, websocket):
         print("[语音] 客户端已连接", flush=True)
         buf = np.array([], dtype=np.int16)
@@ -309,6 +373,8 @@ class SenseVoiceServer:
         speaker_threshold = SPEAKER_VERIFY_THRESHOLD
         enrolling = False
         enroll_buf = np.array([], dtype=np.int16)
+        kws_buf = np.array([], dtype=np.int16)
+        kws_last_at = 0.0
 
         try:
             async for raw in websocket:
@@ -363,6 +429,27 @@ class SenseVoiceServer:
                             except Exception as e:
                                 await websocket.send(json.dumps({"type": "error", "message": f"声纹录入失败: {e}"}))
                             enroll_buf = np.array([], dtype=np.int16)
+                        elif msg.get("type") == "kws_detect":
+                            now = asyncio.get_event_loop().time()
+                            if now - kws_last_at < KWS_COOLDOWN_SECONDS:
+                                continue
+                            kws_last_at = now
+                            try:
+                                result = await self.detect_kws_async(
+                                    kws_buf,
+                                    msg.get("engine") or "none",
+                                    msg.get("modelPath") or msg.get("model_path") or "",
+                                    msg.get("threshold") or 0.5,
+                                )
+                                await websocket.send(json.dumps(result))
+                            except Exception as e:
+                                await websocket.send(json.dumps({
+                                    "type": "kws_status",
+                                    "ready": False,
+                                    "engine": msg.get("engine") or "none",
+                                    "threshold": msg.get("threshold") or 0.5,
+                                    "reason": str(e),
+                                }))
                         elif msg.get("type") == "flush":
                             if self._should_transcribe(buf, voiced_chunks, utterance_peak_rms):
                                 speaker = self.verify_speaker(buf, speaker_threshold) if speaker_verify_enabled else {"passed": True}
@@ -386,6 +473,11 @@ class SenseVoiceServer:
                 chunk = np.frombuffer(raw, dtype=np.int16)
                 if len(chunk) == 0:
                     continue
+                kws_buf = np.append(kws_buf, chunk)
+                kws_max = int(SAMPLE_RATE * KWS_WINDOW_SECONDS)
+                if len(kws_buf) > kws_max:
+                    kws_buf = kws_buf[-kws_max:]
+
                 if enrolling:
                     enroll_buf = np.append(enroll_buf, chunk)
                     continue

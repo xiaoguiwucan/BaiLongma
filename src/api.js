@@ -494,16 +494,21 @@ function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) 
   const wakeKwsModelPath = typeof voice.wakeKwsModelPath === 'string' ? voice.wakeKwsModelPath.trim() : ''
   const kwsEnabled = wakeDetectionProvider === 'hybrid' || wakeDetectionProvider === 'kws'
   const kwsConfigured = wakeKwsEngine !== 'none' && wakeKwsModelPath.length > 0
+  const kwsModelExists = wakeKwsModelPath ? fs.existsSync(path.isAbsolute(wakeKwsModelPath) ? wakeKwsModelPath : path.join(process.cwd(), wakeKwsModelPath)) : false
   add(
     'wake_kws',
     '本地 KWS 唤醒模型',
-    !kwsEnabled ? 'info' : kwsConfigured ? 'pending' : 'warn',
+    !kwsEnabled ? 'info' : kwsConfigured && kwsModelExists && wakeKwsEngine === 'openwakeword' ? 'ok' : kwsConfigured && kwsModelExists ? 'pending' : 'warn',
     !kwsEnabled
       ? '当前使用稳定的 ASR 文本唤醒；sherpa-onnx/openWakeWord 关键词模型未启用。'
-      : kwsConfigured
-        ? `已保存 ${wakeKwsEngine} / ${wakeKwsModelPath} / 阈值 ${voice.wakeKwsThreshold ?? 0.5}；运行时关键词模型接入仍待实现，不会伪装成已生效。`
-        : `已选择 ${wakeDetectionProvider === 'hybrid' ? '混合唤醒' : '本地 KWS'}，但还没有同时配置 KWS 引擎和模型路径。`,
-    !kwsEnabled ? '保持文本唤醒作为当前稳定路径。' : kwsConfigured ? '等待后续接入实际 KWS 推理；当前仍以文本唤醒兜底。' : '先保持“文本唤醒”，或补齐 sherpa-onnx/openWakeWord 模型后再启用。',
+      : kwsConfigured && kwsModelExists && wakeKwsEngine === 'openwakeword'
+        ? `openWakeWord 本地唤醒运行时已接通：${wakeKwsModelPath}，阈值 ${voice.wakeKwsThreshold ?? 0.5}。前端会向本地语音服务发送 kws_detect。`
+        : kwsConfigured && kwsModelExists
+          ? `已保存 ${wakeKwsEngine} / ${wakeKwsModelPath}，但 sherpa-onnx 还需要完整 tokens/encoder/decoder/joiner 配置；当前不会伪装成已生效。`
+          : kwsConfigured
+            ? `KWS 模型路径不存在：${wakeKwsModelPath}。`
+            : `已选择 ${wakeDetectionProvider === 'hybrid' ? '混合唤醒' : '本地 KWS'}，但还没有同时配置 KWS 引擎和模型路径。`,
+    !kwsEnabled ? '保持文本唤醒作为当前稳定路径。' : kwsConfigured && kwsModelExists && wakeKwsEngine === 'openwakeword' ? '可以测试“本地 KWS + 文本/纯 KWS”唤醒路径。' : '先保持“文本唤醒”，或补齐 openWakeWord 模型文件后再启用。',
   )
   const videoOk = voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled && voice.videoVoicePreRollEnabled
   add(
@@ -622,13 +627,13 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
     {
       id: 'wake_kws',
       label: '本地 KWS 唤醒模型',
-      status: (voice.wakeDetectionProvider || 'text') === 'text' ? 'info' : (voice.wakeKwsEngine && voice.wakeKwsEngine !== 'none' && voice.wakeKwsModelPath ? 'pending' : 'warn'),
+      status: (voice.wakeDetectionProvider || 'text') === 'text' ? 'info' : (voice.wakeKwsEngine === 'openwakeword' && voice.wakeKwsModelPath ? 'ok' : 'warn'),
       detail: (voice.wakeDetectionProvider || 'text') === 'text'
-        ? '当前稳定路径是 ASR 文本唤醒；KWS/openWakeWord/sherpa-onnx 仅作为后续接入预留。'
-        : (voice.wakeKwsEngine && voice.wakeKwsEngine !== 'none' && voice.wakeKwsModelPath)
-          ? `KWS 配置已保存：${voice.wakeKwsEngine}，但运行时推理尚未接入。`
-          : '已选择 KWS/混合唤醒，但还缺少引擎或模型路径；建议先保持文本唤醒。',
-      action: (voice.wakeDetectionProvider || 'text') === 'text' ? '无需处理。' : '补齐模型并等待运行时接入，或切回文本唤醒。',
+        ? '当前稳定路径是 ASR 文本唤醒；如需更像小智的快速唤醒，可配置 openWakeWord 本地模型。'
+        : (voice.wakeKwsEngine === 'openwakeword' && voice.wakeKwsModelPath)
+          ? `openWakeWord KWS 运行时已接线：${voice.wakeKwsModelPath}。若依赖或模型不可用，前端会显示 KWS 不可用并可切回文本唤醒。`
+          : '已选择 KWS/混合唤醒，但还缺少 openWakeWord 引擎或模型路径；建议先保持文本唤醒。',
+      action: (voice.wakeDetectionProvider || 'text') === 'text' ? '无需处理。' : '用 openWakeWord 模型测试，或切回文本唤醒。',
     },
     {
       id: 'video_guard',

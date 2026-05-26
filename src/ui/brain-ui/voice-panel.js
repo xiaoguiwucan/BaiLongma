@@ -97,6 +97,10 @@ const VOICE_WHISPER_MODEL_KEY = 'bailongma-voice-whisper-model'; // 兼容旧版
 const VOICE_LOCAL_ASR_MODEL_KEY = 'bailongma-voice-local-asr-model';
 const VOICE_ASR_PROFILE_KEY = 'bailongma-voice-asr-profile';
 const VOICE_WAKE_ENABLED_KEY = 'bailongma-voice-wake-enabled';
+const VOICE_WAKE_DETECTION_PROVIDER_KEY = 'bailongma-voice-wake-detection-provider';
+const VOICE_KWS_ENGINE_KEY = 'bailongma-voice-kws-engine';
+const VOICE_KWS_MODEL_PATH_KEY = 'bailongma-voice-kws-model-path';
+const VOICE_KWS_THRESHOLD_KEY = 'bailongma-voice-kws-threshold';
 const VOICE_WAKE_WORDS_KEY = 'bailongma-voice-wake-words';
 const VOICE_WAKE_MODE_KEY = 'bailongma-voice-wake-mode';
 const VOICE_WAKE_WINDOW_KEY = 'bailongma-voice-wake-window-seconds';
@@ -469,6 +473,9 @@ export function initVoicePanel({
   let lastWakeReject = { text: '', at: 0, count: 0 };
   let lastWakeAcceptedAt = 0;
   let lastSpeakerAcceptedAt = 0;
+  let kwsWakeActiveUntil = 0;
+  let kwsLastDecision = { status: 'idle', reason: 'not started', at: 0 };
+  let kwsLastRequestAt = 0;
 
   async function startMic() {
     try {
@@ -524,6 +531,12 @@ export function initVoicePanel({
       .split(/[,，、\s]+/)
       .map(w => w.trim())
       .filter(Boolean);
+    const detectionProviderRaw = localStorage.getItem(VOICE_WAKE_DETECTION_PROVIDER_KEY) || 'text';
+    const detectionProvider = ['text', 'hybrid', 'kws'].includes(detectionProviderRaw) ? detectionProviderRaw : 'text';
+    const kwsEngineRaw = localStorage.getItem(VOICE_KWS_ENGINE_KEY) || 'none';
+    const kwsEngine = ['none', 'sherpa-onnx', 'openwakeword'].includes(kwsEngineRaw) ? kwsEngineRaw : 'none';
+    const kwsModelPath = (localStorage.getItem(VOICE_KWS_MODEL_PATH_KEY) || '').trim();
+    const kwsThreshold = Math.max(0.10, Math.min(0.99, Number(localStorage.getItem(VOICE_KWS_THRESHOLD_KEY) || 0.50) || 0.50));
     const mode = localStorage.getItem(VOICE_WAKE_MODE_KEY) === 'loose' ? 'loose' : 'strict';
     const windowSeconds = Math.max(3, Math.min(30, Number(localStorage.getItem(VOICE_WAKE_WINDOW_KEY) || 8) || 8));
     const repeatSuppression = localStorage.getItem(VOICE_WAKE_REPEAT_SUPPRESS_KEY) !== 'false';
@@ -533,11 +546,71 @@ export function initVoicePanel({
       cooldownMs: localStorage.getItem(VOICE_WAKE_COOLDOWN_KEY) || 1200,
       requireSpeakerWhenEnabled: localStorage.getItem(VOICE_WAKE_REQUIRE_SPEAKER_KEY) !== 'false',
     });
-    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'], mode, windowSeconds, repeatSuppression, guard };
+    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'], detectionProvider, kwsEngine, kwsModelPath, kwsThreshold, mode, windowSeconds, repeatSuppression, guard };
   }
 
   function normalizeWakeText(text = '') {
     return String(text || '').replace(/[\s,，、。.！!？?：:；;"“”'‘’]/g, '').toLowerCase();
+  }
+
+  function kwsEnabledForConfig(cfg = getWakeConfig()) {
+    return cfg.enabled && (cfg.detectionProvider === 'kws' || cfg.detectionProvider === 'hybrid');
+  }
+
+  function kwsRuntimeConfigured(cfg = getWakeConfig()) {
+    return kwsEnabledForConfig(cfg) && cfg.kwsEngine !== 'none' && cfg.kwsModelPath.length > 0;
+  }
+
+  function emitKwsDecision(detail = {}) {
+    kwsLastDecision = { status: detail.accepted ? 'accepted' : detail.status || 'rejected', reason: detail.reason || '', at: Date.now(), ...detail };
+    emitVoiceEvent('wake:kws', kwsLastDecision);
+    window.dispatchEvent(new CustomEvent('bailongma:kws-wake', { detail: { ...kwsLastDecision } }));
+  }
+
+  function requestKwsDetection(audioChunk) {
+    const cfg = getWakeConfig();
+    if (!kwsRuntimeConfigured(cfg) || !cloudWs || cloudWs.readyState !== WebSocket.OPEN) return;
+    const now = Date.now();
+    if (now - kwsLastRequestAt < 180) return;
+    kwsLastRequestAt = now;
+    try {
+      cloudWs.send(JSON.stringify({
+        type: 'kws_detect',
+        engine: cfg.kwsEngine,
+        modelPath: cfg.kwsModelPath,
+        threshold: cfg.kwsThreshold,
+        windowSeconds: cfg.windowSeconds,
+      }));
+    } catch {}
+  }
+
+  function applyKwsResult(msg = {}) {
+    const cfg = getWakeConfig();
+    if (!kwsEnabledForConfig(cfg)) return false;
+    const accepted = msg.accepted === true || msg.detected === true || Number(msg.score || msg.confidence || 0) >= cfg.kwsThreshold;
+    const score = Number(msg.score ?? msg.confidence ?? 0);
+    const detail = {
+      accepted,
+      engine: msg.engine || cfg.kwsEngine,
+      score: Number.isFinite(score) ? score : null,
+      threshold: Number(msg.threshold ?? cfg.kwsThreshold),
+      word: msg.word || msg.keyword || '',
+      reason: msg.reason || (accepted ? 'kws matched' : 'kws below threshold'),
+      runtime: msg.runtime || msg.provider || 'local',
+    };
+    emitKwsDecision(detail);
+    if (!accepted) return false;
+    kwsWakeActiveUntil = Date.now() + cfg.windowSeconds * 1000;
+    wakeActiveUntil = Math.max(wakeActiveUntil, kwsWakeActiveUntil);
+    lastWakeAcceptedAt = Date.now();
+    setStatus(VOICE_STATES.WAKE_DETECTED, { reason: 'local kws wake matched', engine: detail.engine, score: detail.score, threshold: detail.threshold });
+    if (transcript) transcript.textContent = `本地唤醒已命中，请在 ${cfg.windowSeconds} 秒内继续说指令…`;
+    emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_ACCEPTED, { text: '', word: detail.word || 'KWS', reason: 'kws matched', confidence: detail.score, engine: detail.engine });
+    return true;
+  }
+
+  function kwsAllowsCommand(cfg = getWakeConfig()) {
+    return kwsEnabledForConfig(cfg) && kwsWakeActiveUntil > Date.now();
   }
 
   function applyWakeWordGate(text = '', source = {}) {
@@ -546,6 +619,27 @@ export function initVoicePanel({
     if (!cfg.enabled) return { accepted: true, text: raw, wokeOnly: false, reason: 'wake disabled' };
 
     const now = Date.now();
+    if (kwsAllowsCommand(cfg)) {
+      const guard = evaluateWakeGuard({
+        accepted: true,
+        text: raw,
+        remainder: raw,
+        mode: cfg.mode,
+        now,
+        lastAcceptedAt: 0,
+        speakerVerificationEnabled: localStorage.getItem(VOICE_SPEAKER_VERIFY_KEY) === 'true',
+        speakerAccepted: !cfg.guard.requireSpeakerWhenEnabled || lastSpeakerAcceptedAt > 0 && now - lastSpeakerAcceptedAt < Math.max(cfg.windowSeconds * 1000, 3000),
+        source: { ...source, confidence: Math.max(Number(source.confidence || 0), Number(kwsLastDecision.score || 0)) },
+        config: cfg.guard,
+      });
+      if (!guard.accepted) return { accepted: false, text: '', wokeOnly: false, reason: guard.reason, guard, confidence: guard.confidence };
+      return { accepted: true, text: raw, wokeOnly: false, reason: 'kws window active', word: kwsLastDecision.word || 'KWS', confidence: Math.max(Number(kwsLastDecision.score || 0), guard.confidence || 0) };
+    }
+    if (cfg.detectionProvider === 'kws') {
+      if (!kwsRuntimeConfigured(cfg)) return { accepted: false, text: '', wokeOnly: false, reason: 'kws not configured' };
+      return { accepted: false, text: '', wokeOnly: false, reason: 'kws not matched' };
+    }
+
     if (wakeActiveUntil > now) {
       const guard = evaluateWakeGuard({
         accepted: true,
@@ -625,6 +719,8 @@ export function initVoicePanel({
       'wake confidence too low': '已忽略：唤醒置信度过低',
       'wake cooldown': '已忽略：唤醒冷却中',
       'speaker verification required for wake': '已忽略：唤醒未通过声纹',
+      'kws not configured': '已忽略：本地 KWS 未配置模型',
+      'kws not matched': '已忽略：本地 KWS 尚未命中唤醒词',
     };
     return labels[key] || `已忽略：${key || '唤醒未通过'}`;
   }
@@ -708,6 +804,14 @@ export function initVoicePanel({
         emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_START, { engine: msg.engine, speaker: msg.speaker });
         setStatus(VOICE_STATES.LISTENING, { reason: 'recognition config ok' });
         if (transcript && transcript.textContent === '正在启动本地语音模型…') transcript.textContent = '';
+        return;
+      }
+      if (msg.type === 'kws_result') {
+        applyKwsResult(msg);
+        return;
+      }
+      if (msg.type === 'kws_status') {
+        emitKwsDecision({ accepted: false, status: msg.ready ? 'ready' : 'unavailable', reason: msg.reason || msg.detail || (msg.ready ? 'kws ready' : 'kws unavailable'), engine: msg.engine, threshold: msg.threshold });
         return;
       }
       if (msg.type === 'transcript') {
@@ -848,6 +952,7 @@ export function initVoicePanel({
         i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
       }
       appendMediaPreRollChunk(i16);
+      requestKwsDetection(i16);
       if (bargeinBuffering) {
         // TTS 播放中：写入环形缓冲而非发送，供打断时回放
         bargeinBuffer.push(i16);

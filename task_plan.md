@@ -612,3 +612,15 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend smoke tests for KWS hydration and diagnostics visibility.
 - [x] Run validation checks and smoke suites.
 - [x] Commit and push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 63 plan - Local KWS runtime protocol hook
+
+- [x] Wire Brain UI live recognition to send KWS detection requests when configured.
+- [x] Add KWS result handling and wake-window authorization for the following ASR command.
+- [x] Make pure KWS mode reject text-only wake when no KWS hit occurred.
+- [x] Add local Python service `kws_detect` protocol with lazy openWakeWord runtime loading.
+- [x] Keep sherpa-onnx unsupported path honest until full model-set configuration exists.
+- [x] Update diagnostics/readiness wording for runtime-connected vs missing/incomplete KWS.
+- [x] Add KWS runtime smoke coverage.
+- [x] Run broader validation checks and smoke suites.
+- [ ] Commit and push as a development checkpoint only, without tag/Release.
