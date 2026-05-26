@@ -3,6 +3,25 @@
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
 
+
+## v0.1.1 - 2026-05-27
+
+### 修复内容
+
+- 修复语音输入发送后，下一次识别会带上上一次语音内容的问题。
+- 发送语音识别结果前后统一清空 `lastTranscriptText`、`accumulatedText`、`lastFinalTranscript` 和自动发送计时器。
+- 语音输入改为明确走 `voice` 通道，避免本地语音被当作 TUI/外部消息处理。
+- 为本地语音通道增加回复协议提示：直接输出助手正文，由运行时显示和 TTS 播放；不要强制使用 `send_message` 工具。
+- 重启验证后确认之前运行进程中的 `voiceSentenceEmitter is not defined` 报错已消失。
+
+### 验证结果
+
+- `node --check src/index.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `npm run smoke:brain-ui` 通过。
+- 本地启动后 API `3721` 和 ASR WebSocket `3723` 正常。
+- voice channel 测试消息可以正常得到回复。
+
 ## v0.1.0 - 2026-05-26
 
 ### 更新内容

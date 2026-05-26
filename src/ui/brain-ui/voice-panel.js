@@ -385,18 +385,30 @@ export function initVoicePanel({
   }
 
   // ─── 语音识别结果发送 ───
+  function resetRecognitionText({ clearInput = false } = {}) {
+    lastTranscriptText = '';
+    accumulatedText = '';
+    lastFinalTranscript = '';
+    if (autoSendTimer) { clearTimeout(autoSendTimer); autoSendTimer = null; }
+    if (transcript) transcript.textContent = '';
+    if (clearInput) {
+      const input = getChatInput?.();
+      if (input) input.value = '';
+    }
+  }
+
   function sendRecognizedVoiceText() {
-    if (!lastTranscriptText) return;
-    if (looksLikeAsrHallucination(lastTranscriptText)) {
-      lastTranscriptText = '';
-      accumulatedText = '';
-      if (transcript) transcript.textContent = '';
+    const textToSend = String(lastTranscriptText || '').trim();
+    if (!textToSend) return;
+    if (looksLikeAsrHallucination(textToSend)) {
+      resetRecognitionText({ clearInput: true });
       setStatus('listening');
       return;
     }
     const input = getChatInput?.();
-    if (input) input.value = lastTranscriptText;
-    getSendMessage?.({ channel: '语音识别', label: 'You · 语音识别' });
+    if (input) input.value = textToSend;
+    resetRecognitionText({ clearInput: false });
+    getSendMessage?.({ channel: 'voice', label: 'You · 语音识别' });
   }
 
   function getWakeConfig() {
@@ -607,8 +619,7 @@ export function initVoicePanel({
     }
 
     // 首次启动清空累积文字；重连时由 connectCloudWs 直接调用，不经过此处
-    accumulatedText = '';
-    if (transcript) transcript.textContent = '';
+    resetRecognitionText({ clearInput: true });
     connectCloudWs();
   }
 
@@ -679,7 +690,7 @@ export function initVoicePanel({
     duckActive = false;
     duckHighFrames = 0;
     duckLowFrames = 0;
-    lastTranscriptText = '';
+    resetRecognitionText({ clearInput: true });
     micActive = false;
     if (!keepIntent) userWantedMic = false;
     btn?.classList.toggle('active', Boolean(keepIntent && userWantedMic));
@@ -725,8 +736,7 @@ export function initVoicePanel({
       // barge-in 触发的恢复：等待真实语音，超时则续播
       if (fromBargein) startBargeinNoSpeechTimer();
 
-      accumulatedText = '';
-      if (transcript) transcript.textContent = '';
+      resetRecognitionText({ clearInput: true });
       let bargeinWs, bargeinProvider;
       try {
         ({ ws: bargeinWs, provider: bargeinProvider } = await createRecognitionWs());
@@ -790,8 +800,7 @@ export function initVoicePanel({
   async function pttStart() {
     // 让 release 时不会发出旧的累积识别结果
     pttHolding = true;
-    lastTranscriptText = '';
-    if (autoSendTimer) { clearTimeout(autoSendTimer); autoSendTimer = null; }
+    resetRecognitionText({ clearInput: true });
 
     if (suspendedByMedia) {
       // mic 硬件仍在，只是 ASR WS 被 TTS 暂停 → 重连即可，不算 PTT 开的 mic

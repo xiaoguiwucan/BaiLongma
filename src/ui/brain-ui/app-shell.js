@@ -648,6 +648,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.1.1</span>
+                  <span class="release-note-date">2026-05-27</span>
+                </div>
+                <p class="release-note-summary">修复语音输入不回复、以及下一次识别带上上一轮内容的问题。</p>
+                <ul class="release-note-points">
+                  <li>语音识别结果发送后会立刻清空缓存和自动发送计时器。</li>
+                  <li>本地语音输入统一走 voice 通道，避免被错当成 TUI/外部消息。</li>
+                  <li>语音通道默认直接回复正文，由运行时负责显示和播报。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.1.0</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
