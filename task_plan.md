@@ -509,3 +509,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and Brain UI smoke coverage.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 52: Local voice diagnostics export
+- [x] Add backend `GET /voice/local/diagnostics/package` to aggregate local voice troubleshooting state.
+- [x] Include overview, readiness, doctor, speaker status, backup metadata, self-test metrics, recent voice events, app/runtime metadata, and sanitized voice settings.
+- [x] Keep the export privacy-safe: no API key values, no raw audio, and no voiceprint file contents.
+- [x] Add Brain UI “导出诊断包” action that copies the JSON package for troubleshooting.
+- [x] Extend voice-events and Brain UI smoke coverage for the diagnostics package and copy flow.
+- [x] Verify syntax plus smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

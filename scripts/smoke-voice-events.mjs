@@ -134,6 +134,9 @@ try {
   assert(checkBefore.service === 'bailongma.voice.events' && checkBefore.steps?.some(step => step.id === 'clients') && checkBefore.nextActions?.length >= 1 && checkBefore.commands?.local?.includes('npm run voice:events'), 'check endpoint exposes one-click self-check steps and onboarding command', JSON.stringify(checkBefore))
   const packageBefore = await fetch(`${API}/voice/events/package?clientId=esp32-smoke&device=xiaozhi-esp32&platform=esp32`).then(r => r.json())
   assert(packageBefore.ok === true && packageBefore.profile?.clientId === 'esp32-smoke' && packageBefore.files?.['README.md']?.includes('client:hello') && packageBefore.files?.['node-client-example.mjs']?.includes('new WebSocket'), 'package endpoint exposes copyable onboarding files', JSON.stringify(packageBefore.profile))
+  const diagnosticsPackage = await fetch(`${API}/voice/local/diagnostics/package?windowMs=60000`).then(r => r.json())
+  assert(diagnosticsPackage.ok === true && diagnosticsPackage.kind === 'bailongma.local_voice_diagnostics' && diagnosticsPackage.privacy?.secretsIncluded === false && diagnosticsPackage.overview?.ok === true && diagnosticsPackage.readiness?.ok === true && diagnosticsPackage.doctor?.ok === true && diagnosticsPackage.speaker?.status && Array.isArray(diagnosticsPackage.events?.recent), 'local voice diagnostics package exports safe aggregate troubleshooting data', JSON.stringify({ kind: diagnosticsPackage.kind, privacy: diagnosticsPackage.privacy, app: diagnosticsPackage.app }))
+  assert(diagnosticsPackage.voice?.aliyunApiKey?.configured !== undefined && !JSON.stringify(diagnosticsPackage.voice).includes('sk-'), 'local voice diagnostics package does not expose secret values', JSON.stringify(diagnosticsPackage.voice?.aliyunApiKey))
 
   await fetch(`${API}/settings/tts`, {
     method: 'POST',

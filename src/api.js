@@ -527,6 +527,63 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
 }
 
 
+function getAppVersion() {
+  try {
+    return JSON.parse(fs.readFileSync(path.join(process.cwd(), 'package.json'), 'utf-8'))?.version || 'unknown'
+  } catch (_) {
+    return 'unknown'
+  }
+}
+
+function sanitizeDiagnosticVoiceConfig(voice = getVoiceConfig()) {
+  const secretKeys = new Set(['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret'])
+  const sanitized = {}
+  for (const [key, value] of Object.entries(voice || {})) {
+    if (secretKeys.has(key)) {
+      sanitized[key] = typeof value === 'object' && value ? { configured: Boolean(value.configured), invalidFormat: Boolean(value.invalidFormat) } : { configured: Boolean(value) }
+    } else if (key === 'wakeTuningHistory' || key === 'voiceLocalDoctorHistory') {
+      sanitized[key] = Array.isArray(value) ? value.slice(-10) : []
+    } else {
+      sanitized[key] = value
+    }
+  }
+  return sanitized
+}
+
+async function buildLocalVoiceDiagnosticsPackage({ windowMs = 60000 } = {}) {
+  const checkedAt = Date.now()
+  const voice = getVoiceConfig()
+  const [overview, readiness, speakerStatus] = await Promise.all([
+    buildLocalVoiceOverview({ windowMs }).catch(err => ({ ok: false, error: err?.message || 'overview_failed' })),
+    buildVoiceReadinessWizard({ windowMs }).catch(err => ({ ok: false, error: err?.message || 'readiness_failed' })),
+    queryLocalSpeakerStatus().catch(err => ({ ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' })),
+  ])
+  const local = getVoiceStatus()
+  const doctor = buildVoiceLocalDoctor({ windowMs, speakerStatus })
+  const selfTest = buildLocalVoiceSelfTest({ since: checkedAt - windowMs })
+  const eventBus = getVoiceEventBusStatus()
+  const events = getVoiceEventHistory({ limit: 50 })
+  const eventSummary = getVoiceEventLinkSummary({ windowMs })
+  const backups = listLocalSpeakerVoiceprintBackups().map(item => ({ name: item.name, size: item.size, mtimeMs: item.mtimeMs }))
+  return {
+    ok: true,
+    kind: 'bailongma.local_voice_diagnostics',
+    schemaVersion: 1,
+    generatedAt: checkedAt,
+    app: { name: 'BaiLongma', version: getAppVersion(), platform: process.platform, arch: process.arch, node: process.version },
+    windowMs,
+    privacy: { secretsIncluded: false, audioIncluded: false, voiceprintIncluded: false, note: '仅包含配置摘要、状态、最近事件类型和声纹备份元数据，不包含 API Key、原始音频或声纹文件内容。' },
+    voice: sanitizeDiagnosticVoiceConfig(voice),
+    local,
+    overview,
+    readiness,
+    doctor,
+    speaker: { status: speakerStatus, backups },
+    selfTest,
+    events: { status: eventBus, summary: eventSummary, recent: events },
+  }
+}
+
 async function buildLocalVoiceOverview({ windowMs = 60000 } = {}) {
   const readiness = await buildVoiceReadinessWizard({ windowMs })
   const selfTest = buildLocalVoiceSelfTest({ since: Date.now() - windowMs })
@@ -2180,6 +2237,15 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     if (req.method === 'GET' && url.pathname === '/voice/local/self-test') {
       const since = Number(url.searchParams.get('since') || Date.now() - 60000) || Date.now() - 60000
       jsonResponse(res, 200, buildLocalVoiceSelfTest({ since }))
+      return
+    }
+
+    // GET /voice/local/diagnostics/package — export copyable local voice diagnostics without secrets/audio/voiceprint contents
+    if (req.method === 'GET' && url.pathname === '/voice/local/diagnostics/package') {
+      const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))
+      buildLocalVoiceDiagnosticsPackage({ windowMs }).then(result => jsonResponse(res, 200, result)).catch(err => {
+        jsonResponse(res, 500, { ok: false, error: err.message || 'Failed to build local voice diagnostics package.' })
+      })
       return
     }
 

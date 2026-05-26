@@ -445,6 +445,10 @@ const createSettingsModal = () => `
                 </div>
                 <p id="voice-local-overview-summary">正在读取本地语音状态…</p>
                 <div id="voice-local-overview-actions" class="voice-local-overview-actions"></div>
+                <div class="voice-local-diagnostics-actions">
+                  <button class="voice-readiness-action" id="voice-diagnostics-export" type="button">导出诊断包</button>
+                  <span class="settings-feedback" id="voice-diagnostics-feedback"></span>
+                </div>
               </div>
               <div class="settings-row voice-local-service-actions">
                 <label class="settings-label">本地服务控制</label>

@@ -418,3 +418,10 @@
 - Verification passed: syntax checks for API/Brain UI scripts, `npm run smoke:voice-events` 88/88, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
 - Pushed development checkpoint `aa26816 feat: add local voice overview` to `origin/main`.
 - No tag/GitHub Release created; this remains part of the next large-version milestone bundle.
+
+- Continued the larger post-v2.2.0 local-voice milestone with a privacy-safe diagnostics export instead of a small Release.
+- Added backend `GET /voice/local/diagnostics/package` to aggregate local service status, readiness wizard, doctor checks, speaker status, voiceprint backup metadata, self-test metrics, recent voice events, app/runtime metadata, and sanitized voice configuration.
+- The diagnostics package explicitly excludes API key values, raw audio, and voiceprint file contents, so it can be copied for troubleshooting without leaking secrets or biometric data.
+- Brain UI now shows “导出诊断包” in the local voice overview card and copies the JSON package to clipboard with clear feedback.
+- Extended smoke coverage for backend diagnostics shape/privacy and Brain UI copy feedback.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

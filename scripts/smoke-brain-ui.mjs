@@ -516,6 +516,23 @@ new WebSocket(url)`,
       return
     }
 
+    if (url.pathname === '/voice/local/diagnostics/package') {
+      sendJson(res, {
+        ok: true,
+        kind: 'bailongma.local_voice_diagnostics',
+        schemaVersion: 1,
+        generatedAt: Date.now(),
+        app: { name: 'BaiLongma', version: '2.2.0', platform: 'darwin' },
+        privacy: { secretsIncluded: false, audioIncluded: false, voiceprintIncluded: false },
+        overview: { ok: true, level: readinessApplied ? 'ok' : 'pending' },
+        readiness: { ok: true, level: readinessApplied ? 'ok' : 'warn' },
+        doctor: { ok: true, level: readinessApplied ? 'ok' : 'warn' },
+        speaker: { status: { reachable: readinessApplied, configured: localDoctorFixed }, backups: [] },
+        events: { recent: [{ event: { type: 'wake:accepted' } }], summary: { level: 'ok' } },
+      })
+      return
+    }
+
     if (url.pathname === '/voice/local/overview') {
       sendJson(res, {
         ok: true,
@@ -865,6 +882,11 @@ try {
   await page.waitForFunction(() => document.querySelector('#voice-local-overview')?.textContent.includes('本地语音'))
   const overviewInitial = await page.textContent('#voice-local-overview')
   if (!overviewInitial.includes('一键准备') && !overviewInitial.includes('等待实测')) throw new Error(`voice overview did not render initial action: ${overviewInitial}`)
+  await page.evaluate(() => { window.__voiceDiagnosticsClipboard = ''; navigator.clipboard = { writeText: async text => { window.__voiceDiagnosticsClipboard = text; } } })
+  await page.click('#voice-diagnostics-export')
+  await page.waitForFunction(() => document.querySelector('#voice-diagnostics-feedback')?.textContent.includes('诊断包已复制'))
+  const diagnosticsClipboard = await page.evaluate(() => window.__voiceDiagnosticsClipboard || window.__lastVoiceDiagnosticsPackage || '')
+  if (!diagnosticsClipboard.includes('bailongma.local_voice_diagnostics') || diagnosticsClipboard.includes('sk-')) throw new Error(`voice diagnostics export did not copy safe package: ${diagnosticsClipboard.slice(0, 200)}`)
   const readinessText = await page.textContent('#voice-readiness-list')
   if (!readinessText.includes('本地中文识别') || !readinessText.includes('本地服务启动') || !readinessText.includes('本人声纹')) throw new Error(`voice readiness wizard did not render guided steps: ${readinessText}`)
   await page.click('#voice-readiness-apply')

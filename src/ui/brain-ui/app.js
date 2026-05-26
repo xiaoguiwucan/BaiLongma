@@ -2896,6 +2896,7 @@ function initTTSSettings() {
   document.getElementById("voice-local-overview-actions")?.addEventListener("click", handleVoiceOverviewAction);
   document.getElementById("voice-local-stop")?.addEventListener("click", stopLocalVoiceService);
   document.getElementById("voice-local-restart")?.addEventListener("click", restartLocalVoiceService);
+  document.getElementById("voice-diagnostics-export")?.addEventListener("click", exportLocalVoiceDiagnostics);
   let voiceSelfTestSince = 0;
 
 
@@ -2934,6 +2935,53 @@ function initTTSSettings() {
     if (action === "prepare") document.getElementById("voice-readiness-apply")?.click();
     else if (action === "self_test") document.getElementById("voice-self-test-start")?.click();
     else if (action === "enroll_speaker") document.getElementById("voice-enroll-speaker")?.click();
+  }
+
+  async function exportLocalVoiceDiagnostics() {
+    const btn = document.getElementById("voice-diagnostics-export");
+    const fb = document.getElementById("voice-diagnostics-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在生成本地语音诊断包…");
+    try {
+      const resp = await fetch(`${API}/voice/local/diagnostics/package?windowMs=60000`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "诊断包生成失败");
+      const text = JSON.stringify(data, null, 2);
+      window.__lastVoiceDiagnosticsPackage = text;
+      let copied = false;
+      if (navigator.clipboard?.writeText) {
+        try {
+          await navigator.clipboard.writeText(text);
+          copied = true;
+        } catch (_) {}
+      }
+      if (!copied) {
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = text;
+          ta.setAttribute("readonly", "readonly");
+          ta.style.position = "fixed";
+          ta.style.left = "-9999px";
+          document.body.appendChild(ta);
+          ta.select();
+          copied = document.execCommand?.("copy") !== false;
+          ta.remove();
+        } catch (_) {}
+      }
+      if (copied) {
+        showFeedback(fb, `诊断包已复制：${data.app?.version || "unknown"} · ${data.events?.recent?.length || 0} 条事件`);
+      } else {
+        const blob = new Blob([text], { type: "application/json" });
+        const url = URL.createObjectURL(blob);
+        window.open(url, "_blank");
+        setTimeout(() => URL.revokeObjectURL(url), 30000);
+        showFeedback(fb, "诊断包已打开新窗口，请复制保存");
+      }
+    } catch (err) {
+      showFeedback(fb, err?.message || "诊断包导出失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
   }
 
   async function stopLocalVoiceService() {

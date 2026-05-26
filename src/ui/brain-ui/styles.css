@@ -4970,3 +4970,6 @@ body.person-card-mode .person-card-panel,
 .voice-local-overview-actions em { color: var(--dim); font-style: normal; font-size: 11px; }
 .voice-local-overview-issues { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
 .voice-local-overview-issues span { padding:3px 7px; border-radius:999px; color:var(--warm); background:rgba(211,152,114,0.10); font-size:11px; }
+
+.voice-local-diagnostics-actions { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin-top:2px; }
+.voice-local-diagnostics-actions .settings-feedback { font-size:11px; }
