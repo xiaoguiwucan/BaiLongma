@@ -483,3 +483,11 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add voice manager smoke coverage for port reuse.
 - [x] Verify syntax plus voice manager, brain-ui, and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 49: Visible reused local voice service status
+- [x] Show reused-service source in backend local doctor/readiness/self-test details.
+- [x] Show reused-service source in Brain UI readiness, self-test, local doctor, speaker status, and start feedback.
+- [x] Add user guidance that reused service will not be duplicate-started and should be stopped before model switching.
+- [x] Extend Brain UI and voice-events smoke coverage for service source metadata.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [ ] Push as a development checkpoint only, without tag/Release.

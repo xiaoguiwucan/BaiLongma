@@ -2899,8 +2899,9 @@ function initTTSSettings() {
     const steps = Array.isArray(test.steps) ? test.steps : [];
     if (!steps.length) return '<div class="voice-clients-empty">还没有开始实测。</div>';
     const header = `<div class="voice-readiness-helper">${escapeFocusText(test.instruction || "请说：龙马，测试一下")}</div>`;
+    const external = test.local?.external ? '<div class="voice-readiness-helper voice-readiness-external">本地服务：复用已运行服务。</div>' : "";
     const eventHint = Array.isArray(test.events) && test.events.length ? `<div class="voice-self-test-events">最近事件：${test.events.slice(-5).map(item => escapeFocusText(item.event?.type || item.type || "event")).join(" / ")}</div>` : "";
-    return header + steps.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status || "pending")}">
+    return header + external + steps.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status || "pending")}">
       <span>${escapeFocusText(item.status || "pending")}</span>
       <div><strong>${escapeFocusText(item.label || item.id || "检查项")}</strong><em>${escapeFocusText(item.detail || item.action || "")}</em></div>
     </div>`).join("") + eventHint;
@@ -2950,7 +2951,8 @@ function initTTSSettings() {
     if (!steps.length) return '<div class="voice-clients-empty">暂无一键准备检查数据。</div>';
     const preset = readiness.recommendedPreset;
     const helper = preset?.label ? `<div class="voice-readiness-helper">推荐基线：${escapeFocusText(preset.label)} · ${escapeFocusText(preset.reason || "先建立稳定语音基线，再微调声纹。")}</div>` : "";
-    return helper + steps.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status || "pending")}">
+    const external = readiness.local?.external ? '<div class="voice-readiness-helper voice-readiness-external">本地服务：复用已运行服务。不会重复启动；如需切换模型，请先停止旧服务。</div>' : "";
+    return helper + external + steps.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status || "pending")}">
       <span>${escapeFocusText(item.status || "pending")}</span>
       <div><strong>${escapeFocusText(item.label || item.id || "步骤")}</strong><em>${escapeFocusText(item.detail || item.action || "")}</em></div>
       ${item.uiAction === "enroll_speaker" ? '<button class="voice-readiness-action" data-action="enroll_speaker" type="button">去录入</button>' : ""}
@@ -3051,10 +3053,12 @@ function initTTSSettings() {
       ${item.fixAction ? `<button class="voice-local-doctor-fix" data-action="${escapeFocusText(item.fixAction)}" type="button">一键修复</button>` : ""}
     </div>`).join("");
     const speaker = doctor.speakerStatus;
+    const local = doctor.local || {};
+    const localHtml = local.external ? `<div class="voice-local-speaker-runtime"><strong>本地服务来源</strong><span>复用中</span><em>检测到 127.0.0.1:${escapeFocusText(local.port || 3723)} 已有语音服务，当前不会重复启动。切换模型前请先停止旧服务。</em></div>` : "";
     const speakerHtml = speaker ? `<div class="voice-local-speaker-runtime"><strong>声纹服务</strong><span>${escapeFocusText(speaker.reachable === false ? "不可达" : speaker.configured ? "已录入" : "未录入")}</span><em>${escapeFocusText(speaker.detail || "")}</em></div>` : "";
     const fixes = Array.isArray(doctor.recentFixes) ? doctor.recentFixes : [];
     const fixHtml = fixes.length ? `<div class="voice-local-doctor-history"><strong>最近修复</strong>${fixes.map((item, index) => `<span>${escapeFocusText(item.label || item.action || "修复")} · ${escapeFocusText(new Date(item.at || Date.now()).toLocaleTimeString())}${index === 0 && item.before && Object.keys(item.before).length ? `<button class="voice-local-doctor-rollback" data-id="${escapeFocusText(item.id || "")}" type="button">回滚</button>` : ""}</span>`).join("")}</div>` : "";
-    return checkHtml + speakerHtml + fixHtml;
+    return checkHtml + localHtml + speakerHtml + fixHtml;
   }
 
   function bindVoiceLocalDoctorFixes() {
@@ -3523,10 +3527,10 @@ function initTTSSettings() {
         el.textContent = `服务不可达：${speaker.detail || speaker.reason || "本地语音服务未运行"}`;
         updateSpeakerStatusActions({ showStart: true });
       } else if (speaker.configured) {
-        el.textContent = `已录入（${speaker.sampleCount || 1} 个样本，阈值 ${speaker.threshold ?? "—"}）`;
+        el.textContent = `已录入（${speaker.sampleCount || 1} 个样本，阈值 ${speaker.threshold ?? "—"}${data.local?.external ? "，复用服务" : ""}）`;
         updateSpeakerStatusActions();
       } else {
-        el.textContent = "未录入（本地服务可达）";
+        el.textContent = data.local?.external ? "未录入（本地服务可达，复用服务）" : "未录入（本地服务可达）";
         updateSpeakerStatusActions({ showEnroll: true });
       }
     } catch (err) {
@@ -3550,7 +3554,7 @@ function initTTSSettings() {
       });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || data?.ok === false) throw new Error(data?.error || "启动失败");
-      showFeedback(fb, `已请求启动：${data.engineLabel || data.engine || model}`);
+      showFeedback(fb, data.external ? `已复用运行中的本地语音服务：${data.engineLabel || data.engine || model}` : `已请求启动：${data.engineLabel || data.engine || model}`);
       setTimeout(refreshSpeakerStatus, 800);
       setTimeout(refreshVoiceLocalDoctor, 1000);
     } catch (err) {

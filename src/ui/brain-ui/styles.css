@@ -4938,3 +4938,9 @@ body.person-card-mode .person-card-panel,
   font-size: 11px;
   line-height: 1.5;
 }
+
+.voice-readiness-external {
+  border-color: rgba(181,154,116,0.24);
+  color: var(--warm);
+  background: rgba(181,154,116,0.07);
+}

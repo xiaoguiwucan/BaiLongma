@@ -54,6 +54,7 @@ function createServer() {
   let localDoctorRollback = false
   let speakerBackupAvailable = false
   let readinessApplied = false
+  let externalVoiceService = false
   let speakerGateLocked = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
@@ -495,6 +496,12 @@ new WebSocket(url)`,
 
 
 
+    if (url.pathname === '/__smoke/external-voice-service') {
+      externalVoiceService = true
+      sendJson(res, { ok: true })
+      return
+    }
+
     if (url.pathname === '/voice/local/self-test/start') {
       sendJson(res, {
         ok: true,
@@ -504,7 +511,7 @@ new WebSocket(url)`,
           level: 'pending',
           instruction: '请说：龙马，测试一下',
           steps: [
-            { id: 'local_process', label: '本地服务', status: 'ok', detail: '运行中：SenseVoice / sensevoice-small' },
+            { id: 'local_process', label: '本地服务', status: 'ok', detail: externalVoiceService ? '运行中：SenseVoice / sensevoice-small（复用已运行服务）' : '运行中：SenseVoice / sensevoice-small' },
             { id: 'wake_event', label: '唤醒事件', status: 'pending', detail: '等待唤醒事件。' },
           ],
           events: [],
@@ -519,7 +526,7 @@ new WebSocket(url)`,
         level: readinessApplied ? 'ok' : 'pending',
         instruction: '请说：龙马，测试一下',
         steps: readinessApplied ? [
-          { id: 'local_process', label: '本地服务', status: 'ok', detail: '运行中：SenseVoice / sensevoice-small' },
+          { id: 'local_process', label: '本地服务', status: 'ok', detail: externalVoiceService ? '运行中：SenseVoice / sensevoice-small（复用已运行服务）' : '运行中：SenseVoice / sensevoice-small' },
           { id: 'wake_event', label: '唤醒事件', status: 'ok', detail: '已接受 1 次，拒绝 0 次。' },
           { id: 'asr_final', label: '识别结果', status: 'ok', detail: '收到 1 条最终识别结果。' },
           { id: 'tts_loop', label: '播报闭环', status: 'ok', detail: 'TTS 已完成 1 次。' },
@@ -527,6 +534,7 @@ new WebSocket(url)`,
           { id: 'local_process', label: '本地服务', status: 'pending', detail: '等待开始实测。' },
           { id: 'wake_event', label: '唤醒事件', status: 'pending', detail: '等待唤醒事件。' },
         ],
+        local: { external: externalVoiceService, port: 3723 },
         events: readinessApplied ? [{ event: { type: 'wake:accepted' } }, { event: { type: 'asr:final' } }, { event: { type: 'tts:stop' } }] : [],
       })
       return
@@ -544,7 +552,7 @@ new WebSocket(url)`,
         level: readinessApplied ? 'ok' : 'warn',
         recommendedPreset: { id: 'balanced', label: '均衡推荐', reason: '建立稳定语音基线。' },
         speakerStatus: { reachable: readinessApplied, configured: localDoctorFixed, sampleCount: localDoctorFixed ? 3 : 0, detail: readinessApplied ? '本地服务可达。' : '本地服务未运行。' },
-        local: { status: readinessApplied ? 'running' : 'stopped', engine: 'sensevoice', model: 'sensevoice-small' },
+        local: { status: readinessApplied ? 'running' : 'stopped', engine: 'sensevoice', model: 'sensevoice-small', external: externalVoiceService, port: 3723 },
         voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', wakeWordEnabled: true, speakerVerificationEnabled: speakerGateLocked },
         steps: speakerGateLocked ? [
           { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
@@ -552,7 +560,7 @@ new WebSocket(url)`,
           { id: 'speaker_gate_safe', label: '声纹门控安全', status: 'error', detail: '已开启“只响应我的声音”，但本地服务没有可用声纹；这会导致你也唤不醒。', fixAction: 'disable_speaker_gate' },
         ] : readinessApplied ? [
           { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
-          { id: 'local_process', label: '本地服务启动', status: 'ok', detail: '运行中：SenseVoice / sensevoice-small' },
+          { id: 'local_process', label: '本地服务启动', status: 'ok', detail: externalVoiceService ? '运行中：SenseVoice / sensevoice-small（复用已运行服务）' : '运行中：SenseVoice / sensevoice-small' },
           { id: 'wake_guard', label: '唤醒保护', status: 'ok', detail: '严格唤醒已开启。' },
           { id: 'speaker_voiceprint', label: '本人声纹', status: 'warn', detail: '还没有录入声纹。', uiAction: 'enroll_speaker' },
         ] : [
@@ -588,7 +596,7 @@ new WebSocket(url)`,
         speaker: localDoctorFixed
           ? { ok: true, reachable: true, configured: true, sampleCount: 3, threshold: 0.58, detail: '已录入 3 个声纹样本。' }
           : { ok: false, reachable: false, configured: false, reason: 'local_voice_not_running', detail: '本地语音服务未运行，无法读取声纹状态。' },
-        local: { status: localDoctorFixed ? 'running' : 'stopped', model: 'sensevoice-small' },
+        local: { status: localDoctorFixed ? 'running' : 'stopped', model: 'sensevoice-small', external: externalVoiceService, port: 3723 },
         voice: { speakerVerificationEnabled: false, speakerThreshold: 0.63 },
       })
       return
@@ -622,7 +630,7 @@ new WebSocket(url)`,
         recentFixes: localDoctorFixHistory,
         checks: localDoctorFixed ? [
           { id: 'provider', label: '识别服务商', status: 'ok', detail: '当前使用本地 ASR，音频不会上传云端。', action: '保持本地模式。' },
-          { id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723', action: '可以开始麦克风测试。' },
+          { id: 'process', label: '本地 ASR 进程', status: 'ok', detail: externalVoiceService ? '运行中：sensevoice / sensevoice-small / port 3723（复用已运行服务）' : '运行中：sensevoice / sensevoice-small / port 3723', action: '可以开始麦克风测试。' },
         ] : [
           { id: 'provider', label: '识别服务商', status: 'ok', detail: '当前使用本地 ASR，音频不会上传云端。', action: '保持本地模式。' },
           { id: 'process', label: '本地 ASR 进程', status: 'warn', detail: 'stopped：本地语音服务未运行', action: '点击启动本地语音服务。', fixAction: 'start_local_voice' },
@@ -651,7 +659,7 @@ new WebSocket(url)`,
           action: 'start_local_voice',
           record: localDoctorFixHistory[0],
           voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
-          doctor: { ok: true, level: 'ok', speakerStatus: { ok: true, reachable: true, configured: true, sampleCount: 3, detail: '已录入 3 个声纹样本。' }, recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
+          doctor: { ok: true, level: 'ok', local: { external: externalVoiceService, port: 3723 }, speakerStatus: { ok: true, reachable: true, configured: true, sampleCount: 3, detail: '已录入 3 个声纹样本。' }, recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: externalVoiceService ? '运行中：sensevoice / sensevoice-small / port 3723（复用已运行服务）' : '运行中：sensevoice / sensevoice-small / port 3723' }] },
         })
       })
       return
@@ -829,6 +837,11 @@ try {
   await page.click('#voice-readiness-apply')
   await page.waitForFunction(() => document.querySelector('#voice-readiness-feedback')?.textContent.includes('已应用本地语音基线'))
   await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('运行中：SenseVoice'))
+  await fetch(`${baseUrl}/__smoke/external-voice-service`, { method: 'POST' })
+  await page.click('#voice-local-doctor-refresh')
+  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('复用') || document.querySelector('#voice-local-doctor-list')?.textContent.includes('本地 ASR 进程'))
+  await page.click('#voice-readiness-apply')
+  await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('复用已运行服务'))
   const selfTestInitial = await page.textContent('#voice-self-test-list')
   if (!selfTestInitial.includes('语音实测') && !selfTestInitial.includes('本地服务')) throw new Error(`voice self-test panel did not initialize: ${selfTestInitial}`)
   await page.click('#voice-self-test-start')

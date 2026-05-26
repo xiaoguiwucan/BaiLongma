@@ -396,3 +396,8 @@
 - Verification passed: `npm run smoke:voice-manager`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
 - Pushed development checkpoint `1c63d67 feat: reuse existing local voice service` to `origin/main`.
 - No tag/GitHub Release created; this remains part of the next large-version milestone bundle.
+- Made reused local voice service status visible to users instead of only internal: local doctor, readiness wizard, self-test, speaker status, and start feedback now distinguish “复用已运行服务” from app-started service.
+- Backend diagnostics now include source wording for local ASR process/readiness/self-test when `local.external` is true.
+- Brain UI renders a warm hint for reused services and explains that it will not duplicate-start; model switching should stop the old service first.
+- Extended smoke coverage so Brain UI verifies external-service hints and voice-events verifies self-test/readiness responses report service source metadata.
+- Verification passed: `node --check src/api.js`, `node --check src/ui/brain-ui/app.js`, `node --check scripts/smoke-brain-ui.mjs`, `node --check scripts/smoke-voice-events.mjs`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.

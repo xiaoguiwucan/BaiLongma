@@ -357,8 +357,8 @@ function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) 
     'process',
     '本地 ASR 进程',
     local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn',
-    local.status === 'running' ? `运行中：${local.engine || 'engine'} / ${local.model || 'model'} / port ${local.port}` : `${local.status || 'stopped'}：${local.message || '本地语音服务未运行'}`,
-    local.status === 'running' ? '可以开始麦克风测试。' : '点击“启动本地语音服务”或重新保存语音设置后再试。',
+    local.status === 'running' ? `运行中：${local.engine || 'engine'} / ${local.model || 'model'} / port ${local.port}${local.external ? '（复用已运行服务）' : '（本应用启动）'}` : `${local.status || 'stopped'}：${local.message || '本地语音服务未运行'}`,
+    local.status === 'running' ? (local.external ? '正在复用已运行服务；如需切换模型，请先停止旧服务再启动。' : '可以开始麦克风测试。') : '点击“启动本地语音服务”或重新保存语音设置后再试。',
     local.status === 'running' ? null : 'start_local_voice',
   )
   add(
@@ -432,7 +432,7 @@ function buildLocalVoiceSelfTest({ since = Date.now() - 60000 } = {}) {
   const events = getVoiceEventHistorySince(startedAt)
   const steps = []
   const add = (id, label, status, detail, action = '') => steps.push({ id, label, status, detail, action })
-  add('local_process', '本地服务', local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn', local.status === 'running' ? `运行中：${local.engineLabel || local.engine || 'local'} / ${local.model || voice.localAsrModel || 'sensevoice-small'}` : (local.message || '本地语音服务未运行'), local.status === 'running' ? '保持本地服务运行。' : '先点击一键准备或启动本地语音服务。')
+  add('local_process', '本地服务', local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn', local.status === 'running' ? `运行中：${local.engineLabel || local.engine || 'local'} / ${local.model || voice.localAsrModel || 'sensevoice-small'}${local.external ? '（复用已运行服务）' : '（本应用启动）'}` : (local.message || '本地语音服务未运行'), local.status === 'running' ? (local.external ? '保持复用服务运行；不要重复启动。' : '保持本地服务运行。') : '先点击一键准备或启动本地语音服务。')
   add('wake_event', '唤醒事件', metrics.wakeAccepted > 0 ? 'ok' : metrics.wakeRejected > 0 ? 'warn' : 'pending', `已接受 ${metrics.wakeAccepted} 次，拒绝 ${metrics.wakeRejected} 次。`, '请说“龙马，测试一下”。')
   add('speaker_event', '声纹事件', voice.speakerVerificationEnabled ? metrics.speakerAccepted > 0 ? 'ok' : metrics.speakerRejected > 0 ? 'warn' : 'pending' : 'info', voice.speakerVerificationEnabled ? `通过 ${metrics.speakerAccepted} 次，拒绝 ${metrics.speakerRejected} 次。` : '声纹门控未开启，本项仅在“只响应我的声音”开启后检查。', voice.speakerVerificationEnabled ? '如果本人被拒绝，请降低严格度或重录声纹。' : '如需只响应本人，请先录入声纹再开启。')
   add('asr_final', '识别结果', metrics.asrFinal > 0 ? 'ok' : metrics.wakeAccepted > 0 ? 'warn' : 'pending', metrics.asrFinal > 0 ? `收到 ${metrics.asrFinal} 条最终识别结果。` : '还没有最终识别文本。', '唤醒后说一句完整指令，例如“打开设置”。')
@@ -473,7 +473,7 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
       id: 'local_process',
       label: '本地服务启动',
       status: local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn',
-      detail: local.status === 'running' ? `运行中：${local.engineLabel || local.engine || 'local'} / ${local.model || voice.localAsrModel || 'sensevoice-small'}` : (local.message || '本地语音服务尚未运行。'),
+      detail: local.status === 'running' ? `运行中：${local.engineLabel || local.engine || 'local'} / ${local.model || voice.localAsrModel || 'sensevoice-small'}${local.external ? '（复用已运行服务）' : '（本应用启动）'}` : (local.message || '本地语音服务尚未运行。'),
       fixAction: local.status === 'running' ? null : 'start_local_voice',
     },
     {
