@@ -345,3 +345,8 @@
 - Offline clear still disables speaker verification afterward, preventing a missing voiceprint from blocking all wake attempts.
 - Updated smoke coverage so stopped-service clear is now expected to succeed via `offline_file` mode.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added a safety net for voiceprint clearing: existing `data/voiceprint.json` is backed up before deletion and the latest 5 backups are retained.
+- New backend `POST /voice/local/speaker/restore` restores the latest voiceprint backup and re-enables speaker verification.
+- Brain UI now has a “恢复备份” action beside enroll/test/clear, and clear feedback distinguishes “声纹已备份并清除”.
+- Extended smoke coverage for missing-backup restore errors and UI clear→restore flow.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

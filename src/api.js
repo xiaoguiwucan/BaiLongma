@@ -233,11 +233,54 @@ async function queryLocalSpeakerStatus({ timeoutMs = 900 } = {}) {
 }
 
 
+
+function backupLocalSpeakerVoiceprint(filePath = path.join(paths.dataDir, 'voiceprint.json')) {
+  if (!fs.existsSync(filePath)) return null
+  const backupDir = path.join(paths.dataDir, 'voiceprint-backups')
+  fs.mkdirSync(backupDir, { recursive: true })
+  const backupPath = path.join(backupDir, `voiceprint-${Date.now()}.json`)
+  fs.copyFileSync(filePath, backupPath)
+  try {
+    const backups = fs.readdirSync(backupDir).filter(name => name.startsWith('voiceprint-') && name.endsWith('.json')).sort()
+    for (const name of backups.slice(0, Math.max(0, backups.length - 5))) {
+      try { fs.unlinkSync(path.join(backupDir, name)) } catch (_) {}
+    }
+  } catch (_) {}
+  return { path: backupPath, name: path.basename(backupPath), at: Date.now() }
+}
+
+function latestLocalSpeakerVoiceprintBackup() {
+  const backupDir = path.join(paths.dataDir, 'voiceprint-backups')
+  try {
+    const backups = fs.readdirSync(backupDir).filter(name => name.startsWith('voiceprint-') && name.endsWith('.json')).sort()
+    const name = backups[backups.length - 1]
+    return name ? { path: path.join(backupDir, name), name } : null
+  } catch (_) {
+    return null
+  }
+}
+
+function restoreLocalSpeakerVoiceprintBackup() {
+  const backup = latestLocalSpeakerVoiceprintBackup()
+  if (!backup || !fs.existsSync(backup.path)) {
+    const err = new Error('No voiceprint backup available.')
+    err.statusCode = 404
+    err.code = 'voiceprint_backup_missing'
+    throw err
+  }
+  const filePath = path.join(paths.dataDir, 'voiceprint.json')
+  fs.mkdirSync(path.dirname(filePath), { recursive: true })
+  fs.copyFileSync(backup.path, filePath)
+  setVoiceConfig({ speakerVerificationEnabled: true })
+  return { ok: true, restored: true, backup: { name: backup.name }, filePath, voice: getVoiceConfig() }
+}
+
 function clearLocalSpeakerVoiceprintOffline() {
   const filePath = path.join(paths.dataDir, 'voiceprint.json')
   let existed = false
   try {
     existed = fs.existsSync(filePath)
+    const backup = existed ? backupLocalSpeakerVoiceprint(filePath) : null
     if (existed) fs.unlinkSync(filePath)
   } catch (err) {
     const error = new Error(`Failed to delete local voiceprint file: ${err.message}`)
@@ -245,7 +288,7 @@ function clearLocalSpeakerVoiceprintOffline() {
     error.code = 'voiceprint_file_delete_failed'
     throw error
   }
-  return { ok: true, mode: 'offline_file', configured: false, sampleCount: 0, filePath, existed }
+  return { ok: true, mode: 'offline_file', configured: false, sampleCount: 0, filePath, existed, backup: typeof backup !== 'undefined' ? backup : null }
 }
 
 async function clearLocalSpeakerVoiceprint({ timeoutMs = 1200 } = {}) {
@@ -1870,6 +1913,18 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return
     }
 
+
+
+    // POST /voice/local/speaker/restore — restore latest local voiceprint backup
+    if (req.method === 'POST' && url.pathname === '/voice/local/speaker/restore') {
+      try {
+        const result = restoreLocalSpeakerVoiceprintBackup()
+        jsonResponse(res, 200, { ok: true, ...result })
+      } catch (err) {
+        jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message, code: err.code || 'speaker_restore_failed' })
+      }
+      return
+    }
 
     // POST /voice/local/speaker/clear — clear local voiceprint from local ASR service
     if (req.method === 'POST' && url.pathname === '/voice/local/speaker/clear') {

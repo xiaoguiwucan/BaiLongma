@@ -506,7 +506,13 @@ new WebSocket(url)`,
 
     if (url.pathname === '/voice/local/speaker/clear') {
       localDoctorFixed = false
-      sendJson(res, { ok: true, cleared: true, speaker: { ok: true, reachable: true, configured: false, sampleCount: 0, threshold: 0.55 }, voice: { speakerVerificationEnabled: false } })
+      sendJson(res, { ok: true, cleared: true, speaker: { ok: true, mode: 'runtime', reachable: true, configured: false, sampleCount: 0, threshold: 0.55, backup: { name: 'voiceprint-smoke.json' } }, voice: { speakerVerificationEnabled: false } })
+      return
+    }
+
+    if (url.pathname === '/voice/local/speaker/restore') {
+      localDoctorFixed = true
+      sendJson(res, { ok: true, restored: true, backup: { name: 'voiceprint-smoke.json' }, voice: { speakerVerificationEnabled: true } })
       return
     }
 
@@ -544,6 +550,7 @@ new WebSocket(url)`,
 
     if (url.pathname === '/voice/local/doctor/rollback') {
       localDoctorRollback = true
+      localDoctorFixed = false
       localDoctorFixHistory = [{ id: 'voice_doctor_rollback', at: Date.now(), action: 'rollback_local_doctor_fix', label: '回滚：启动本地语音服务', status: 'ok', rollbackOf: 'voice_doctor_smoke' }]
       sendJson(res, {
         ok: true,
@@ -707,18 +714,22 @@ try {
     refreshHidden: document.querySelector('#voice-speaker-refresh-status')?.hidden,
   }))
   if (speakerActionVisible.startHidden !== false || speakerActionVisible.enrollHidden !== true || speakerActionVisible.refreshHidden !== false) throw new Error(`speaker status action buttons not shown for unreachable service: ${JSON.stringify(speakerActionVisible)}`)
-  await page.click('#voice-speaker-start-service')
-  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已请求启动'))
-  await page.waitForFunction(() => document.querySelector('#voice-speaker-status')?.textContent.includes('已录入'))
-  await page.click('#voice-clear-speaker')
-  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('声纹已清除'))
-  await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-verify') === 'false')
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('最近修复') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('启动本地语音服务') && document.querySelector('.voice-local-doctor-rollback')?.textContent.includes('回滚'))
   await page.evaluate(() => document.querySelector('.voice-local-doctor-rollback')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('回滚：启动本地语音服务'))
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-start-service')?.hidden === false)
+  await page.click('#voice-speaker-start-service')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已请求启动'))
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-status')?.textContent.includes('已录入'))
+  await page.click('#voice-clear-speaker')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('声纹已备份并清除'))
+  await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-verify') === 'false')
+  await page.click('#voice-restore-speaker')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已恢复最近声纹备份'))
+  await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-verify') === 'true')
   await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰') && document.querySelector('#voice-preset-list')?.textContent.includes('建议：视频抗干扰'), null, { timeout: 5000 })
   await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
   await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))

@@ -426,3 +426,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events smoke coverage for offline clear success while local service is stopped.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 43: Voiceprint clear backup and restore
+- [x] Backup `data/voiceprint.json` before offline/runtime clear removes it.
+- [x] Retain the latest 5 voiceprint backups under `data/voiceprint-backups`.
+- [x] Add backend `POST /voice/local/speaker/restore` to restore the latest voiceprint backup.
+- [x] Re-enable speaker verification after a successful restore.
+- [x] Show clearer clear feedback when a backup was created.
+- [x] Add Brain UI “恢复备份” action beside voiceprint controls.
+- [x] Extend brain-ui and voice-events smoke coverage for missing backup and restore flow.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

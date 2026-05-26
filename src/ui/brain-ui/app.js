@@ -3480,11 +3480,34 @@ function initTTSSettings() {
       const speakerVerify = document.getElementById("voice-speaker-verify");
       if (speakerVerify) speakerVerify.checked = false;
       localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "false");
-      showFeedback(fb, "声纹已清除，请重新录入");
+      showFeedback(fb, data.speaker?.backup ? "声纹已备份并清除，请重新录入" : "声纹已清除，请重新录入");
       await refreshSpeakerStatus();
       try { await refreshVoiceLocalDoctor(); } catch {}
     } catch (err) {
       showFeedback(fb, err?.message || "清除失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+
+  async function restoreSpeakerVoice() {
+    const btn = document.getElementById("voice-restore-speaker");
+    const fb = document.getElementById("voice-speaker-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在恢复最近声纹备份…");
+    try {
+      const resp = await fetch(`${API}/voice/local/speaker/restore`, { method: "POST" });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "恢复失败");
+      const speakerVerify = document.getElementById("voice-speaker-verify");
+      if (speakerVerify) speakerVerify.checked = true;
+      localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "true");
+      showFeedback(fb, "已恢复最近声纹备份");
+      await refreshSpeakerStatus();
+      try { await refreshVoiceLocalDoctor(); } catch {}
+    } catch (err) {
+      showFeedback(fb, err?.message || "恢复失败", true);
     } finally {
       if (btn) btn.disabled = false;
     }
@@ -3498,6 +3521,7 @@ function initTTSSettings() {
   const testSpeakerBtn = document.getElementById("voice-test-speaker");
   if (testSpeakerBtn) testSpeakerBtn.addEventListener("click", testSpeakerVoice);
   document.getElementById("voice-clear-speaker")?.addEventListener("click", clearSpeakerVoice);
+  document.getElementById("voice-restore-speaker")?.addEventListener("click", restoreSpeakerVoice);
   refreshSpeakerStatus();
 
   const speakerThresholdSlider = document.getElementById("voice-speaker-threshold");
