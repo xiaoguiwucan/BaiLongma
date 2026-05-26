@@ -40,7 +40,8 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
       localhostExempt: true,
     },
     clientMessages: ['ping', 'client:hello', 'client:identify', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
-    identityFields: ['clientId', 'device', 'app', 'version', 'platform'],
+    identityFields: ['clientId', 'device', 'app', 'version', 'platform', 'capabilities'],
+    clientCapabilityExamples: ['binary_audio', 'base64_audio', 'tts_speak', 'wake', 'display'],
     errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text', 'text_too_long', 'rate_limited'],
     mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
     limits: {
@@ -105,6 +106,11 @@ function cleanIdentityValue(value, max = 80) {
   return String(value || '').trim().replace(/[\r\n\t]+/g, ' ').slice(0, max)
 }
 
+function sanitizeClientCapabilities(value) {
+  const items = Array.isArray(value) ? value : String(value || '').split(/[,，、\s]+/)
+  return [...new Set(items.map(item => cleanIdentityValue(item, 40).toLowerCase()).filter(Boolean))].slice(0, 16)
+}
+
 export function sanitizeVoiceEventClientIdentity(msg = {}) {
   const identity = {
     clientId: cleanIdentityValue(msg.clientId || msg.id || msg.name || `client_${Date.now()}`, 96),
@@ -112,6 +118,7 @@ export function sanitizeVoiceEventClientIdentity(msg = {}) {
     app: cleanIdentityValue(msg.app || msg.appName || msg.client || 'unknown', 96),
     version: cleanIdentityValue(msg.version || msg.appVersion, 48),
     platform: cleanIdentityValue(msg.platform || msg.os, 48),
+    capabilities: sanitizeClientCapabilities(msg.capabilities || msg.features),
     identifiedAt: Date.now(),
   }
   return Object.fromEntries(Object.entries(identity).filter(([, value]) => value !== ''))
@@ -119,13 +126,20 @@ export function sanitizeVoiceEventClientIdentity(msg = {}) {
 
 export function setVoiceEventClientIdentity(ws, identity = {}) {
   const current = clientIdentities.get(ws) || {}
-  const next = { ...current, ...identity, updatedAt: Date.now() }
+  const next = { ...current, ...identity, updatedAt: Date.now(), lastSeenAt: Date.now() }
   clientIdentities.set(ws, next)
   return { ...next }
 }
 
 export function getVoiceEventClientIdentity(ws) {
   return { ...(clientIdentities.get(ws) || {}) }
+}
+
+export function touchVoiceEventClient(ws) {
+  const current = clientIdentities.get(ws) || {}
+  const next = { ...current, lastSeenAt: Date.now() }
+  clientIdentities.set(ws, next)
+  return { ...next }
 }
 
 export function createVoiceEventProtocolError(code, message, extra = {}) {
@@ -204,6 +218,7 @@ export function handleVoiceEventClientMessage(ws, raw) {
     return { handled: true, error }
   }
   if (msg?.type === 'ping') {
+    touchVoiceEventClient(ws)
     safeSend(ws, { type: 'pong', at: Date.now() })
     return { handled: true }
   }
@@ -213,6 +228,7 @@ export function handleVoiceEventClientMessage(ws, raw) {
     return { handled: true, identity }
   }
   if (msg?.type === 'subscribe' || msg?.type === 'voice:subscribe') {
+    touchVoiceEventClient(ws)
     const options = setOptions(ws, {
       audio: msg.audio === true || msg.ttsAudio === true,
       binaryAudio: msg.binaryAudio === true || msg.binary === true,
@@ -221,6 +237,7 @@ export function handleVoiceEventClientMessage(ws, raw) {
     return { handled: true, options }
   }
   if (msg?.type === 'unsubscribe' || msg?.type === 'voice:unsubscribe') {
+    touchVoiceEventClient(ws)
     const options = setOptions(ws, {
       audio: msg.audio === false ? false : getOptions(ws).audio,
       binaryAudio: msg.binaryAudio === false || msg.binary === false ? false : getOptions(ws).binaryAudio,

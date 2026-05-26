@@ -738,6 +738,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.237</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">增强外部客户端诊断：client:hello 支持 capabilities，并记录 lastSeenAt。</p>
+                <ul class="release-note-points">
+                  <li>client:accepted 返回清洗后的 capabilities。</li>
+                  <li>/voice/events/status 显示 clientDetails.identity.lastSeenAt。</li>
+                  <li>smoke:voice-mapping 增至 33 项，smoke:voice-events 增至 37 项。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.236</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

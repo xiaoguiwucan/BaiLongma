@@ -81,6 +81,7 @@ try {
   assert(protocolMeta.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol endpoint exposes remote address tts speak scope', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.auth?.localhostExempt === true && protocolMeta.auth?.methods?.includes('?token=<token>'), 'protocol endpoint exposes auth metadata', JSON.stringify(protocolMeta.auth))
   assert(protocolMeta.clientMessages?.includes('client:hello') && protocolMeta.identityFields?.includes('clientId'), 'protocol endpoint exposes client identity metadata', JSON.stringify(protocolMeta.identityFields))
+  assert(protocolMeta.identityFields?.includes('capabilities') && protocolMeta.clientCapabilityExamples?.includes('binary_audio'), 'protocol endpoint exposes client capability metadata', JSON.stringify(protocolMeta.clientCapabilityExamples))
 
   await fetch(`${API}/settings/tts`, {
     method: 'POST',
@@ -107,11 +108,12 @@ try {
   assert(tokenMessages.some(msg => msg.type === 'hello' && msg.auth?.methods?.includes('?token=<token>')), 'websocket accepts query token and sends auth metadata')
 
   const identifyMessages = await connectAndCollect({
-    onOpen: ws => ws.send(JSON.stringify({ type: 'client:hello', clientId: 'esp32-smoke', device: 'xiaozhi-esp32', app: 'smoke-client', version: '1.0.0', platform: 'esp32' })),
+    onOpen: ws => ws.send(JSON.stringify({ type: 'client:hello', clientId: 'esp32-smoke', device: 'xiaozhi-esp32', app: 'smoke-client', version: '1.0.0', platform: 'esp32', capabilities: ['binary_audio', 'tts_speak', 'tts_speak'] })),
     until: msg => msg.type === 'client:accepted',
   })
   const acceptedIdentity = identifyMessages.find(msg => msg.type === 'client:accepted')?.identity
   assert(acceptedIdentity?.clientId === 'esp32-smoke' && acceptedIdentity?.device === 'xiaozhi-esp32', 'client:hello receives sanitized client:accepted identity', JSON.stringify(acceptedIdentity))
+  assert(acceptedIdentity?.capabilities?.includes('binary_audio') && acceptedIdentity?.capabilities?.includes('tts_speak'), 'client:accepted includes sanitized capabilities', JSON.stringify(acceptedIdentity))
 
   const statusWithIdentityPromise = connectAndCollect({
     onOpen: async ws => {
@@ -125,6 +127,7 @@ try {
   await statusWithIdentityPromise
   const statusWithIdentity = await fetch(`${API}/voice/events/status`).then(r => r.json())
   assert(Array.isArray(statusWithIdentity.clientDetails), 'status exposes clientDetails array', JSON.stringify(statusWithIdentity))
+  assert(statusWithIdentity.clientDetails.every(item => item.identity?.lastSeenAt), 'status clientDetails include lastSeenAt diagnostics', JSON.stringify(statusWithIdentity.clientDetails))
 
   const pingMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'ping' })),

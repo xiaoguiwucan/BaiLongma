@@ -4,6 +4,52 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.237 - 2026-05-26
+
+### 更新内容
+
+- `client:hello` / `client:identify` 支持客户端能力声明：`capabilities`。
+- `/voice/events/protocol` 新增 `clientCapabilityExamples`，给外部客户端参考：
+  - `binary_audio`；
+  - `base64_audio`；
+  - `tts_speak`；
+  - `wake`；
+  - `display`。
+- `identityFields` 增加 `capabilities`。
+- 服务端会清洗、去重、截断 capabilities，最多保留 16 项。
+- `/voice/events/status` 的 `clientDetails.identity` 现在包含 `lastSeenAt`，用于判断连接是否仍有控制消息活动。
+- `ping`、`client:hello`、`subscribe`、`unsubscribe` 会刷新客户端 `lastSeenAt`。
+- `client:accepted` 会返回清洗后的 capabilities。
+- `scripts/smoke-voice-mapping.mjs` 从 31 项扩展到 33 项。
+- `scripts/smoke-voice-events.mjs` 从 34 项扩展到 37 项。
+
+### 改变原因
+
+- 不同外部客户端能力不同：有的支持二进制音频，有的只支持 base64，有的能显示文字，有的只负责唤醒。
+- `capabilities` 可以帮助服务端状态页和调试日志解释客户端行为，为后续自动协商音频格式、按设备授权打基础。
+- `lastSeenAt` 能辅助判断连接是否只是还没断开，还是最近确实有活动。
+
+### 影响范围
+
+- 旧客户端兼容，不发送 capabilities 也能继续使用。
+- 新客户端可在 `client:hello` 里声明 `capabilities` 数组或逗号/空格分隔字符串。
+- `capabilities` 当前仅用于诊断，不用于授权。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 33/33 通过。
+- `npm run smoke:voice-events` 37/37 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端建议在 `client:hello` 里增加：`"capabilities": ["binary_audio", "tts_speak"]`。
+- 调试时查看 `/voice/events/status` 的 `clientDetails[].identity.capabilities` 和 `lastSeenAt`。
+
 ## v2.1.236 - 2026-05-26
 
 ### 更新内容

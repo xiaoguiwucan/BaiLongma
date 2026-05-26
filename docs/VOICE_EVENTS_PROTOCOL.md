@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.236 更新：client:hello 客户端身份登记）
+版本：v3（BaiLongma v2.1.237 更新：client capabilities 与 lastSeenAt）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -104,7 +104,8 @@ ws://<mac-ip>:3721/voice/events?token=<token>
   "device": "xiaozhi-esp32",
   "app": "bailongma-bridge",
   "version": "0.1.0",
-  "platform": "esp32"
+  "platform": "esp32",
+  "capabilities": ["binary_audio", "tts_speak", "wake"]
 }
 ```
 
@@ -125,12 +126,14 @@ ws://<mac-ip>:3721/voice/events?token=<token>
     "device": "xiaozhi-esp32",
     "app": "bailongma-bridge",
     "version": "0.1.0",
-    "platform": "esp32"
+    "platform": "esp32",
+    "capabilities": ["binary_audio", "tts_speak", "wake"],
+    "lastSeenAt": 1710000000000
   }
 }
 ```
 
-字段会被服务端清洗和截断；不要在身份字段里放 token、密钥或隐私内容。
+字段会被服务端清洗和截断；不要在身份字段里放 token、密钥或隐私内容。`capabilities` 可用数组或逗号/空格分隔字符串，服务端会转小写、去重并最多保留 16 项。`lastSeenAt` 会在 ping、client:hello、subscribe、unsubscribe 等控制消息时刷新。
 
 ## 4. 被动订阅音频块
 
