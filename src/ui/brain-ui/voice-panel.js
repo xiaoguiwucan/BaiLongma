@@ -206,7 +206,7 @@ export function initVoicePanel({
                 // 声音持续高振幅 → 语音 → 真正打断
                 duckActive = false;
                 duckHighFrames = 0;
-                window.stopTTS?.();
+                abortSpeaking('user_speech');
                 resumeVoiceInputFromMedia(true);
                 bargeinFastCheckActive = true;
                 bargeinFastCheckStart = Date.now();
@@ -351,6 +351,44 @@ export function initVoicePanel({
   let accumulatedText = '';
   let wakeActiveUntil = 0;
 
+  const voiceSession = {
+    activeTurnId: '',
+    state: 'idle',
+    updatedAt: 0,
+  };
+
+  function makeVoiceTurnId(prefix = 'voice') {
+    return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  function setVoiceSessionState(state, detail = {}) {
+    voiceSession.state = state || voiceSession.state || 'idle';
+    voiceSession.updatedAt = Date.now();
+    window.dispatchEvent(new CustomEvent('bailongma:voice-session-state', {
+      detail: { turnId: voiceSession.activeTurnId || null, state: voiceSession.state, ...detail },
+    }));
+  }
+
+  function beginVoiceTurn(reason = 'speech') {
+    if (voiceSession.activeTurnId) abortSpeaking('new_turn');
+    voiceSession.activeTurnId = makeVoiceTurnId(reason);
+    setVoiceSessionState('listening', { reason });
+    return voiceSession.activeTurnId;
+  }
+
+  function ensureVoiceTurn(reason = 'speech') {
+    return voiceSession.activeTurnId || beginVoiceTurn(reason);
+  }
+
+  function isCurrentVoiceTurn(turnId) {
+    return !!turnId && !!voiceSession.activeTurnId && turnId === voiceSession.activeTurnId;
+  }
+
+  function abortSpeaking(reason = 'user_speech') {
+    setVoiceSessionState('interrupted', { reason });
+    window.stopTTS?.({ reason, voiceTurnId: voiceSession.activeTurnId || null });
+  }
+
   async function startMic() {
     try {
       const useAec = localStorage.getItem(VOICE_VIDEO_AEC_KEY) !== 'false';
@@ -385,7 +423,7 @@ export function initVoicePanel({
   }
 
   // ─── 语音识别结果发送 ───
-  function resetRecognitionText({ clearInput = false } = {}) {
+  function resetRecognitionText({ clearInput = false, endTurn = false } = {}) {
     lastTranscriptText = '';
     accumulatedText = '';
     lastFinalTranscript = '';
@@ -394,6 +432,10 @@ export function initVoicePanel({
     if (clearInput) {
       const input = getChatInput?.();
       if (input) input.value = '';
+    }
+    if (endTurn) {
+      voiceSession.activeTurnId = '';
+      setVoiceSessionState(micActive ? 'listening' : 'idle', { reason: 'reset' });
     }
   }
 
@@ -405,10 +447,12 @@ export function initVoicePanel({
       setStatus('listening');
       return;
     }
+    const turnId = ensureVoiceTurn('send');
     const input = getChatInput?.();
     if (input) input.value = textToSend;
     resetRecognitionText({ clearInput: false });
-    getSendMessage?.({ channel: 'voice', label: 'You · 语音识别' });
+    setVoiceSessionState('thinking', { reason: 'sent', text: textToSend });
+    getSendMessage?.({ channel: 'voice', label: 'You · 语音识别', voiceTurnId: turnId });
   }
 
   function getWakeConfig() {
@@ -521,8 +565,9 @@ export function initVoicePanel({
     ws.send(JSON.stringify(payload));
   }
 
-  function handleRecognitionMessage(ev, ws) {
+  function handleRecognitionMessage(ev, ws, turnId = voiceSession.activeTurnId) {
     if (cloudWs !== ws) return;
+    if (!isCurrentVoiceTurn(turnId)) return;
     try {
       const msg = JSON.parse(ev.data);
       if (msg.type === 'config_ok') {
@@ -531,6 +576,8 @@ export function initVoicePanel({
         return;
       }
       if (msg.type === 'transcript') {
+        ensureVoiceTurn('transcript');
+        setVoiceSessionState(msg.is_final ? 'recognizing' : 'listening', { source: 'asr' });
         const text = (msg.text || '').trim();
         if (!text) return;
         if (looksLikeAsrHallucination(text)) return;
@@ -571,7 +618,7 @@ export function initVoicePanel({
     } catch {}
   }
 
-  async function connectCloudWs() {
+  async function connectCloudWs(turnId = voiceSession.activeTurnId) {
     cloudWsIntentional = false; // 新连接建立时清除上一次主动关闭的标记
     let ws, provider;
     try {
@@ -591,7 +638,7 @@ export function initVoicePanel({
       // 注意：此处不重置 accumulatedText，由调用方在首次启动时负责清空
     };
 
-    ws.onmessage = (ev) => handleRecognitionMessage(ev, ws);
+    ws.onmessage = (ev) => handleRecognitionMessage(ev, ws, turnId);
 
     ws.onerror = () => { if (cloudWs === ws) setStatus('error'); };
 
@@ -600,7 +647,7 @@ export function initVoicePanel({
       cloudWs = null;
       if (!cloudWsIntentional && micActive) {
         // 非主动断开（超时/网络抖动）且用户仍在录音 → 自动重连，保留已识别文字
-        setTimeout(() => { if (micActive) connectCloudWs(); }, 800);
+        setTimeout(() => { if (micActive) connectCloudWs(turnId); }, 800);
       } else {
         cloudWsIntentional = false;
         if (micActive) setStatus('idle');
@@ -608,7 +655,7 @@ export function initVoicePanel({
     };
   }
 
-  function startCloudStream(stream) {
+  function startCloudStream(stream, preferredTurnId = null) {
     const targetSR = 16000;
     if (micData?.actx?.sampleRate !== targetSR) {
       cloudAudioCtx = new (window.AudioContext || window.webkitAudioContext)({ sampleRate: targetSR });
@@ -620,7 +667,9 @@ export function initVoicePanel({
 
     // 首次启动清空累积文字；重连时由 connectCloudWs 直接调用，不经过此处
     resetRecognitionText({ clearInput: true });
-    connectCloudWs();
+    const turnId = preferredTurnId || beginVoiceTurn('mic_start');
+    if (preferredTurnId) setVoiceSessionState('listening', { reason: 'mic_start' });
+    connectCloudWs(turnId);
   }
 
   function setupCloudProcessor(srcNode, audioCtx) {
@@ -666,7 +715,7 @@ export function initVoicePanel({
   }
 
   // ─── 统一开关 ───
-  async function toggleVoice() {
+  async function toggleVoice(preferredTurnId = null) {
     if (!micActive) {
       micActive = true;
       userWantedMic = true;
@@ -674,13 +723,13 @@ export function initVoicePanel({
       btn?.classList.add('active');
       const stream = await startMic();
       if (!stream) { micActive = false; userWantedMic = false; btn?.classList.remove('active'); return; }
-      startCloudStream(stream);
+      startCloudStream(stream, preferredTurnId);
     } else {
       stopVoiceInput();
     }
   }
 
-  function stopVoiceInput({ keepIntent = false, reason = '' } = {}) {
+  function stopVoiceInput({ keepIntent = false, reason = '', endTurn = true } = {}) {
     pttHolding = false;
     if (doneTimer) { clearTimeout(doneTimer); doneTimer = null; }
     if (autoSendTimer) { clearTimeout(autoSendTimer); autoSendTimer = null; }
@@ -690,7 +739,7 @@ export function initVoicePanel({
     duckActive = false;
     duckHighFrames = 0;
     duckLowFrames = 0;
-    resetRecognitionText({ clearInput: true });
+    resetRecognitionText({ clearInput: true, endTurn });
     micActive = false;
     if (!keepIntent) userWantedMic = false;
     btn?.classList.toggle('active', Boolean(keepIntent && userWantedMic));
@@ -719,7 +768,7 @@ export function initVoicePanel({
     }, BARGEIN_NO_SPEECH_MS);
   }
 
-  async function resumeVoiceInputFromMedia(fromBargein = false) {
+  async function resumeVoiceInputFromMedia(fromBargein = false, preferredTurnId = null) {
     if (!suspendedByMedia || !userWantedMic) return;
     suspendedByMedia = false;
     bargeinFrames = 0;
@@ -737,6 +786,8 @@ export function initVoicePanel({
       if (fromBargein) startBargeinNoSpeechTimer();
 
       resetRecognitionText({ clearInput: true });
+      const resumeTurnId = preferredTurnId || beginVoiceTurn(fromBargein ? 'bargein' : 'resume');
+      if (resumeTurnId && voiceSession.activeTurnId !== resumeTurnId) voiceSession.activeTurnId = resumeTurnId;
       let bargeinWs, bargeinProvider;
       try {
         ({ ws: bargeinWs, provider: bargeinProvider } = await createRecognitionWs());
@@ -765,14 +816,14 @@ export function initVoicePanel({
             clearBargeinNoSpeechTimer();
           }
         } catch {}
-        handleRecognitionMessage(ev, bargeinWs);
+        handleRecognitionMessage(ev, bargeinWs, resumeTurnId);
       };
       bargeinWs.onerror = () => { if (cloudWs === bargeinWs) setStatus('error'); };
       bargeinWs.onclose = () => {
         if (cloudWs !== bargeinWs) return;
         cloudWs = null;
         if (!cloudWsIntentional && micActive) {
-          setTimeout(() => { if (micActive) connectCloudWs(); }, 800);
+          setTimeout(() => { if (micActive) connectCloudWs(turnId); }, 800);
         } else {
           cloudWsIntentional = false;
           if (micActive) setStatus('idle');
@@ -801,11 +852,12 @@ export function initVoicePanel({
     // 让 release 时不会发出旧的累积识别结果
     pttHolding = true;
     resetRecognitionText({ clearInput: true });
+    beginVoiceTurn('ptt');
 
     if (suspendedByMedia) {
       // mic 硬件仍在，只是 ASR WS 被 TTS 暂停 → 重连即可，不算 PTT 开的 mic
       pttStartedMic = false;
-      await resumeVoiceInputFromMedia(false);
+      await resumeVoiceInputFromMedia(false, voiceSession.activeTurnId);
       return;
     }
     if (micActive) {
@@ -814,7 +866,7 @@ export function initVoicePanel({
       return;
     }
     pttStartedMic = true;
-    await toggleVoice();
+    await toggleVoice(voiceSession.activeTurnId);
   }
 
   function pttEnd() {
@@ -887,11 +939,13 @@ export function initVoicePanel({
     suspendForMedia: () => {
       if (!micActive) return;
       suspendedByMedia = true;
-      stopVoiceInput({ keepIntent: true, reason: '视频模式中，语音已暂停' });
+      stopVoiceInput({ keepIntent: true, reason: '视频模式中，语音已暂停', endTurn: false });
     },
     // TTS 模式：只停云端 ASR WebSocket，保持 mic 硬件 + ScriptProcessor
     // 开启预缓冲：打断时可回放最近 1.5s 的音频，避免开头几个字丢失
-    suspendForTTS: () => {
+    suspendForTTS: (turnId = null) => {
+      if (turnId && voiceSession.activeTurnId && turnId !== voiceSession.activeTurnId) return;
+      if (turnId && !voiceSession.activeTurnId) voiceSession.activeTurnId = turnId;
       if (!micActive) return;
       suspendedByMedia = true;
       ttsStartTime = Date.now();
@@ -908,6 +962,15 @@ export function initVoicePanel({
       clearBargeinNoSpeechTimer(); // TTS 正常结束，不需要续播
       resumeVoiceInputFromMedia(false);
     },
+    abortSpeaking,
+    syncTurn: (turnId, state = 'event') => {
+      if (turnId && voiceSession.activeTurnId && turnId !== voiceSession.activeTurnId) return false;
+      if (turnId && !voiceSession.activeTurnId) voiceSession.activeTurnId = turnId;
+      setVoiceSessionState(state, { source: 'runtime' });
+      return true;
+    },
+    getTurnId: () => voiceSession.activeTurnId || null,
+    isCurrentTurn: (turnId) => isCurrentVoiceTurn(turnId),
     stop: () => stopVoiceInput(),
     pttStart,
     pttEnd,

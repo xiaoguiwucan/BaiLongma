@@ -265,11 +265,12 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       req.on('end', () => {
         try {
           const body = Buffer.concat(chunks).toString('utf-8')
-          const { from_id = 'ID:000001', content, channel = 'API' } = JSON.parse(body)
+          const { from_id = 'ID:000001', content, channel = 'API', voice_turn_id = null, voiceTurnId = null } = JSON.parse(body)
           if (!content?.trim()) return jsonResponse(res, 400, { error: 'content required' })
           const trimmed = content.trim()
-          pushMessage(from_id, trimmed, channel)
-          emitEvent('message_in', { from_id, content: trimmed, channel, timestamp: new Date().toISOString() })
+          const resolvedVoiceTurnId = voice_turn_id || voiceTurnId || null
+          pushMessage(from_id, trimmed, channel, resolvedVoiceTurnId ? { voiceTurnId: resolvedVoiceTurnId } : {})
+          emitEvent('message_in', { from_id, content: trimmed, channel, voiceTurnId: resolvedVoiceTurnId, timestamp: new Date().toISOString() })
           jsonResponse(res, 200, { ok: true, agent_name: getAgentName() })
         } catch (e) {
           jsonResponse(res, 400, { error: e.message })

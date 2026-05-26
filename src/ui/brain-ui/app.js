@@ -1142,6 +1142,7 @@ function handle({ type, data = {} }) {
   switch (type) {
     case "message_received": {
       currentPath = "l1";
+      window.bailongmaVoice?.syncTurn?.(data.voiceTurnId || null, 'thinking');
       L1.beginRound();
       const parsed = parseUserMessageInput(data.input);
       L1.newLine("user message received", {
@@ -1160,6 +1161,7 @@ function handle({ type, data = {} }) {
       L2.startThinkingSession();
       break;
     case "stream_start":
+      window.bailongmaVoice?.syncTurn?.(data.voiceTurnId || null, data.mode === 'text' ? 'speaking_pending' : 'thinking');
       currentStream().startThinkingSession();
       break;
     case "stream_chunk":
@@ -1168,6 +1170,7 @@ function handle({ type, data = {} }) {
       bumpTokens(data.text);
       break;
     case "stream_end":
+      window.bailongmaVoice?.syncTurn?.(data.voiceTurnId || null, 'stream_end');
       currentStream().stopThinking();
       break;
     case "tool_preparing": {
@@ -1305,8 +1308,11 @@ function handle({ type, data = {} }) {
         audioEl.play().catch(() => {});
       }
       break;
+    case "voice_turn_state":
+      window.bailongmaVoice?.syncTurn?.(data.voiceTurnId || null, data.state || 'event');
+      break;
     case "tts_reply":
-      if (data.text) playTTSReply(data.text);
+      if (data.text) playTTSReply(data.text, { voiceTurnId: data.voiceTurnId || null });
       break;
     case "key_configured":
       chat.deleteLastUserMsg();
@@ -1403,6 +1409,8 @@ let ttsActiveUrl = '';
 const VOICE_FAST_MODE_STORAGE_KEY = 'bailongma-voice-fast-mode';
 const TTS_SENTENCE_BOUNDARY_RE = /[^。！？!?；;\n]{6,}[。！？!?；;]|[^\n]{18,}[，,]/g;
 const ttsFastState = { state: 'idle', updatedAt: 0 };
+let ttsActiveVoiceTurnId = null;
+let ttsQueueVoiceTurnId = null;
 
 function isFastVoiceModeEnabled() {
   return localStorage.getItem(VOICE_FAST_MODE_STORAGE_KEY) !== 'false';
@@ -1411,7 +1419,12 @@ function isFastVoiceModeEnabled() {
 function setFastVoiceState(state, detail = {}) {
   ttsFastState.state = state;
   ttsFastState.updatedAt = Date.now();
-  window.dispatchEvent(new CustomEvent('bailongma:voice-fast-state', { detail: { state, ...detail } }));
+  window.dispatchEvent(new CustomEvent('bailongma:voice-fast-state', { detail: { state, voiceTurnId: ttsActiveVoiceTurnId || ttsQueueVoiceTurnId || null, ...detail } }));
+}
+
+function isCurrentTtsVoiceTurn(voiceTurnId) {
+  if (!voiceTurnId) return true;
+  return !!window.bailongmaVoice?.isCurrentTurn?.(voiceTurnId);
 }
 
 function normalizeTTSPlainText(text) {
@@ -1447,6 +1460,7 @@ function splitTtsSentences(text) {
 function clearTtsQueue() {
   ttsQueue = [];
   ttsQueueGeneration += 1;
+  ttsQueueVoiceTurnId = null;
   if (ttsAbortController) {
     try { ttsAbortController.abort(); } catch {}
     ttsAbortController = null;
@@ -1512,7 +1526,8 @@ function applyTTSInterruption(spokenUpTo) {
 }
 
 // Called by voice-panel interruption detection: stop current TTS and record cut point
-window.stopTTS = () => {
+window.stopTTS = (detail = {}) => {
+  if (detail.voiceTurnId && ttsActiveVoiceTurnId && detail.voiceTurnId !== ttsActiveVoiceTurnId) return;
   clearTtsQueue();
   if (!ttsAudioEl) {
     ttsPlaying = false;
@@ -1532,7 +1547,8 @@ window.stopTTS = () => {
   ttsAudioEl = null;
   ttsActiveUrl = '';
   ttsPlaying = false;
-  setFastVoiceState('interrupted');
+  ttsActiveVoiceTurnId = null;
+  setFastVoiceState('interrupted', { reason: detail.reason || 'stop' });
 };
 
 // Called by voice-panel on impact noise: duck TTS volume without stopping
@@ -1549,6 +1565,7 @@ window.unduckTTS = () => {
 
 // Called by voice-panel on false-positive noise: resume TTS from interruption point and restore chat
 window.resumeTTSIfNoSpeech = () => {
+  const voiceTurnId = ttsActiveVoiceTurnId || ttsQueueVoiceTurnId || null;
   const text = ttsInterruptedRemaining;
   ttsInterruptedRemaining = '';
   if (!text) return;
@@ -1559,19 +1576,28 @@ window.resumeTTSIfNoSpeech = () => {
   }
   ttsInterruptionApplied = false;
   ttsInterruptedOriginalContent = '';
-  playTTSReply(text);
+  playTTSReply(text, { voiceTurnId });
 };
 
 async function playNextTtsSegment(generation) {
   if (ttsPlaying || generation !== ttsQueueGeneration) return;
-  const text = ttsQueue.shift();
-  if (!text) {
+  const item = ttsQueue.shift();
+  if (!item) {
     ttsCurrentText = '';
+    ttsActiveVoiceTurnId = null;
+    ttsQueueVoiceTurnId = null;
     setFastVoiceState('listening');
     window.bailongmaVoice?.resumeAfterMedia?.();
     return;
   }
+  const text = typeof item === 'string' ? item : item.text;
+  const voiceTurnId = typeof item === 'string' ? ttsQueueVoiceTurnId : item.voiceTurnId;
+  if (!isCurrentTtsVoiceTurn(voiceTurnId)) {
+    playNextTtsSegment(generation);
+    return;
+  }
   ttsPlaying = true;
+  ttsActiveVoiceTurnId = voiceTurnId || null;
   ttsCurrentText = text;
   ttsAbortController = new AbortController();
   setFastVoiceState('tts_fetch', { text });
@@ -1582,26 +1608,27 @@ async function playNextTtsSegment(generation) {
       body: JSON.stringify({ text }),
       signal: ttsAbortController.signal,
     });
-    if (generation !== ttsQueueGeneration) return;
+    if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return;
     if (!resp.ok) {
       let errMsg = `HTTP ${resp.status}`;
       try { const j = await resp.json(); errMsg = j.error || errMsg; } catch {}
       throw new Error(errMsg);
     }
     const blob = await resp.blob();
-    if (generation !== ttsQueueGeneration) return;
+    if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return;
     const url = URL.createObjectURL(blob);
     ttsActiveUrl = url;
     if (ttsAudioEl) { ttsAudioEl.pause(); try { URL.revokeObjectURL(ttsAudioEl.src); } catch {} }
     ttsAudioEl = new Audio(url);
     ttsAudioEl.volume = 1.0;
-    window.bailongmaVoice?.suspendForTTS?.();
+    window.bailongmaVoice?.suspendForTTS?.(voiceTurnId || null);
     setFastVoiceState('speaking', { text });
     ttsAudioEl.onended = () => {
       try { URL.revokeObjectURL(url); } catch {}
       if (ttsActiveUrl === url) ttsActiveUrl = '';
       ttsAudioEl = null;
       ttsPlaying = false;
+      ttsActiveVoiceTurnId = null;
       if (generation === ttsQueueGeneration) playNextTtsSegment(generation);
     };
     ttsAudioEl.onerror = () => {
@@ -1609,6 +1636,7 @@ async function playNextTtsSegment(generation) {
       if (ttsActiveUrl === url) ttsActiveUrl = '';
       ttsAudioEl = null;
       ttsPlaying = false;
+      ttsActiveVoiceTurnId = null;
       if (generation === ttsQueueGeneration) playNextTtsSegment(generation);
     };
     await ttsAudioEl.play();
@@ -1616,6 +1644,7 @@ async function playNextTtsSegment(generation) {
     if (err?.name !== 'AbortError') console.warn('[TTS fast]', err?.message || err);
     ttsPlaying = false;
     ttsAudioEl = null;
+    ttsActiveVoiceTurnId = null;
     ttsActiveUrl = '';
     if (generation === ttsQueueGeneration) playNextTtsSegment(generation);
   } finally {
@@ -1623,16 +1652,20 @@ async function playNextTtsSegment(generation) {
   }
 }
 
-async function playTTSReply(text) {
+async function playTTSReply(text, options = {}) {
+  const voiceTurnId = options.voiceTurnId || null;
+  if (!isCurrentTtsVoiceTurn(voiceTurnId)) return;
   const fastMode = isFastVoiceModeEnabled();
   const segments = fastMode ? splitTtsSentences(text) : [normalizeTTSPlainText(text)].filter(Boolean);
   if (!segments.length) return;
+  const items = segments.map(segment => ({ text: segment, voiceTurnId }));
 
   // 极速模式下，后端会边生成边分句推送 tts_reply。这里必须追加队列，
   // 不能每收到一句就 clear，否则会把正在播的上一句打断，听感会变成卡顿/丢字。
-  if (fastMode && (ttsPlaying || ttsQueue.length)) {
-    ttsQueue.push(...segments);
-    setFastVoiceState('queued', { count: ttsQueue.length });
+  if (fastMode && (ttsPlaying || ttsQueue.length) && (!voiceTurnId || !ttsActiveVoiceTurnId || voiceTurnId === ttsActiveVoiceTurnId)) {
+    ttsQueue.push(...items);
+    ttsQueueVoiceTurnId = voiceTurnId || ttsQueueVoiceTurnId;
+    setFastVoiceState('queued', { count: ttsQueue.length, voiceTurnId });
     playNextTtsSegment(ttsQueueGeneration);
     return;
   }
@@ -1641,9 +1674,10 @@ async function playTTSReply(text) {
   ttsInterruptedRemaining = '';
   ttsInterruptionApplied = false;
   ttsInterruptedOriginalContent = '';
-  ttsQueue = segments;
+  ttsQueue = items;
+  ttsQueueVoiceTurnId = voiceTurnId || null;
   const generation = ttsQueueGeneration;
-  setFastVoiceState('queued', { count: segments.length });
+  setFastVoiceState('queued', { count: segments.length, voiceTurnId });
   playNextTtsSegment(generation);
 }
 

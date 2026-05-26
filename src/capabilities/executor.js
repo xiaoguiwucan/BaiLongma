@@ -2334,7 +2334,7 @@ function execListTools() {
 
 // 语音消息自动回复 TTS：检测到用户用语音输入时，通知前端播放语音
 // 由 index.js 调用，前端收到 tts_reply 事件后调用 /tts/stream 完成实际合成
-export function autoSpeakForVoiceReply(text) {
+export function autoSpeakForVoiceReply(text, meta = {}) {
   if (!text) return
   const plain = text.trim()
     .replace(/\*\*(.+?)\*\*/g, '$1')
@@ -2346,7 +2346,7 @@ export function autoSpeakForVoiceReply(text) {
     .replace(/\n+/g, ' ')
     .trim()
   if (!plain) return
-  emitEvent('tts_reply', { text: plain })
+  emitEvent('tts_reply', { text: plain, voiceTurnId: meta.voiceTurnId || null })
 }
 
 // generate_lyrics：生成歌词

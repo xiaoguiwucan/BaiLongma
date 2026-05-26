@@ -216,7 +216,7 @@ export function initChat({
     }
   }
 
-  async function send({ channel = null, label = null } = {}) {
+  async function send({ channel = null, label = null, voiceTurnId = null } = {}) {
     if (inputLocked) return;
     const text = msgInput.value.trim();
     if (!text) return;
@@ -232,6 +232,7 @@ export function initChat({
       const backendText = (typeof override === "string") ? override : text;
       const payload = { content: backendText, from_id: "ID:000001" };
       if (channel) payload.channel = channel;
+      if (voiceTurnId) payload.voiceTurnId = voiceTurnId;
       const resp = await fetch(`${apiBase}/message`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },

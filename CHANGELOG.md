@@ -4,6 +4,42 @@
 
 
 
+
+## v0.2.0 - 2026-05-27
+
+### 更新内容
+
+- 新增小智式语音会话状态机 `VoiceSession`，统一管理语音 turn、状态和打断流程。
+- 每轮语音输入生成独立 `voiceTurnId`，从前端发送、API 入队、LLM 流式事件到 TTS 播放全链路传递。
+- ASR 回调、LLM 流式 TTS、TTS 队列播放都按 `voiceTurnId` 过滤，旧 turn 的回调会被丢弃，避免上一轮语音/播报污染当前轮。
+- 新增统一 `abortSpeaking(reason)` 控制点，用于用户打断、新一轮语音开始、TTS 停止等场景。
+- TTS 队列增加 turn 绑定；如果新 turn 已经开始，旧 turn 的分句语音不会继续播放。
+- 前端运行时新增 `voice_turn_state`、`voice-fast-state`、`voice-session-state` 状态同步，供 UI 和后续诊断使用。
+- API `/message` 支持 `voiceTurnId` / `voice_turn_id`，用于本地语音请求的会话隔离。
+
+### 改变原因
+
+- 借鉴小智 ESP32 的协议化会话思路：不是简单堆模型，而是把听、想、说、打断统一成明确的 turn 和状态。
+- 进一步解决语音残留、旧回调串入新一轮、TTS/ASR 打断混乱等问题。
+
+### 验证结果
+
+- `node --check src/api.js` 通过。
+- `node --check src/index.js` 通过。
+- `node --check src/capabilities/executor.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/chat.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `npm run smoke:brain-ui` 通过。
+- 本地 Electron 启动正常，API `3721` 和 ASR WebSocket `3723` 正常。
+- `/message` 携带 `voiceTurnId` 的 voice channel 测试可以正常得到回复。
+
+### 部署注意事项
+
+- 本版本不新增模型文件，不需要额外下载。
+- 如果从旧版本升级，直接 `git pull && npm install && npm start` 即可。
+- 设置页仍保持简单，没有新增复杂客户配置项。
+
 ## v0.1.1 - 2026-05-27
 
 ### 修复内容

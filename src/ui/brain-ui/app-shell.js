@@ -648,6 +648,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.2.0</span>
+                  <span class="release-note-date">2026-05-27</span>
+                </div>
+                <p class="release-note-summary">小智式语音会话状态机：每轮语音独立 turn，旧回调不再串入新一轮。</p>
+                <ul class="release-note-points">
+                  <li>新增 voiceTurnId 全链路隔离，覆盖语音输入、LLM 流式输出和 TTS 队列。</li>
+                  <li>新增统一 abortSpeaking 打断控制，新一轮语音开始会取消旧播报。</li>
+                  <li>设置页保持简洁，不新增复杂参数。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.1.1</span>
                   <span class="release-note-date">2026-05-27</span>
                 </div>

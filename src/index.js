@@ -658,6 +658,7 @@ function isVoiceChannel(channel) {
 
 function createVoiceSentenceEmitter(msg) {
   if (!isVoiceChannel(msg?.channel)) return null
+  const voiceTurnId = msg?.voiceTurnId || null
   let buffer = ''
   let spoken = ''
   const boundary = /[。！？!?；;]|[，,]/
@@ -668,7 +669,7 @@ function createVoiceSentenceEmitter(msg) {
     if (!shouldSpeak) return
     buffer = ''
     spoken += clean
-    autoSpeakForVoiceReply(clean)
+    autoSpeakForVoiceReply(clean, { voiceTurnId })
   }
   return {
     push(text = '') {
@@ -684,7 +685,7 @@ function createVoiceSentenceEmitter(msg) {
         const clean = trimAssistantFluff(part).replace(/\s+/g, ' ').trim()
         if (clean && (clean.length >= 6 || /[。！？!?；;]$/.test(clean))) {
           spoken += clean
-          autoSpeakForVoiceReply(clean)
+          autoSpeakForVoiceReply(clean, { voiceTurnId })
         }
       }
       flush(false)
@@ -830,7 +831,8 @@ async function runTurn(input, label, msg = null) {
   let voiceSentenceEmitter = null
 
   console.log(`\n── ${label} ──`)
-  emitEvent(isTick ? 'tick' : 'message_received', { label, input: input.slice(0, 300) })
+  emitEvent(isTick ? 'tick' : 'message_received', { label, input: input.slice(0, 300), voiceTurnId: msg?.voiceTurnId || null })
+  if (isVoiceChannel(msg?.channel)) emitEvent('voice_turn_state', { voiceTurnId: msg?.voiceTurnId || null, state: 'thinking', source: 'llm' })
 
   // User messages are written to conversations at the pushMessage stage (recorded on arrival) — do not write them again here.
   try {
@@ -1202,7 +1204,7 @@ async function runTurn(input, label, msg = null) {
         // 这里仅处理语音输入的 TTS 自动回放
         if (name === 'send_message' && args?.content && isVoiceChannel(msg?.channel)) {
           const cleanedContent = trimAssistantFluff(args.content)
-          if (cleanedContent && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(cleanedContent)
+          if (cleanedContent && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(cleanedContent, { voiceTurnId: msg?.voiceTurnId || null })
         }
       },
       onRetry: ({ attempt, nextAttempt, maxAttempts, delayMs, error }) => {
@@ -1214,14 +1216,14 @@ async function runTurn(input, label, msg = null) {
       onStream: ({ event, mode, text, name }) => {
         if (event === 'start') {
           currentStreamMode = mode || ''
-          emitEvent('stream_start', { mode })
+          emitEvent('stream_start', { mode, voiceTurnId: msg?.voiceTurnId || null })
         } else if (event === 'chunk') {
-          emitEvent('stream_chunk', { text })
+          emitEvent('stream_chunk', { text, voiceTurnId: msg?.voiceTurnId || null })
           if (currentStreamMode === 'text') voiceSentenceEmitter?.push(text)
         } else if (event === 'end') {
           if (currentStreamMode === 'text') voiceSentenceEmitter?.end()
           currentStreamMode = ''
-          emitEvent('stream_end', {})
+          emitEvent('stream_end', { voiceTurnId: msg?.voiceTurnId || null })
         } else if (event === 'tool_preparing') emitEvent('tool_preparing', { name })
       },
     })
@@ -1276,7 +1278,7 @@ async function runTurn(input, label, msg = null) {
       const timestamp = nowTimestamp()
       const blockedContent = 'I did not actually call the required tool, so I cannot claim the operation completed. Please send again — I will execute the tool first, then reply based on the result.'
       console.warn(`[protocol fallback] Blocked a text reply that required a tool call but made none. from=${msg.fromId}`)
-      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(blockedContent)
+      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(blockedContent, { voiceTurnId: msg?.voiceTurnId || null })
       deliverFallbackReply(msg, blockedContent, timestamp)
       toolCallLog.push({
         name: 'send_message',
@@ -1292,7 +1294,7 @@ async function runTurn(input, label, msg = null) {
     } else if (fallbackContent) {
       const timestamp = nowTimestamp()
       console.warn(`[protocol fallback] Model did not call send_message — delivering response body to ${msg.fromId}`)
-      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(fallbackContent)
+      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(fallbackContent, { voiceTurnId: msg?.voiceTurnId || null })
       deliverFallbackReply(msg, fallbackContent, timestamp)
       toolCallLog.push({
         name: 'send_message',
