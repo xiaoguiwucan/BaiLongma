@@ -611,7 +611,7 @@ try {
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-threshold') === '0.5')
-  await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('建议暂时保持当前参数'))
+  await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('声纹拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('建议暂时保持当前参数'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-rollback')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已回滚'))
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-threshold') === '0.63')

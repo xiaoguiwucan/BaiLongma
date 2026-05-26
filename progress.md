@@ -232,3 +232,13 @@
 - Verification passed: syntax checks for API and voice-events smoke script; `npm run smoke:voice-events` 63/63.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Extended wake/voice tuning evaluation metrics to include speaker verification outcomes.
+- `getVoiceEventMetricsWindow()` now reports `speakerAccepted`, `speakerRejected`, and `speakerAcceptanceRate` alongside wake and ASR/TTS metrics.
+- Tuning verdicts now consider speaker rejection reduction or speaker acceptance-rate improvement, so speaker-threshold tuning can be marked `improved`/`worse` for the right reason.
+- Evaluation advice now distinguishes speaker improvements/regressions from wake-word improvements/regressions.
+- Brain UI tuning history now renders speaker rejection before/after counts in addition to wake accepted/rejected counts.
+- Extended `smoke:voice-events` to 64/64 checks for speaker metrics/advice in tuning evaluations.
+- Extended `smoke:brain-ui` to verify speaker rejection before/after metrics render in the tuning history.
+- Verification passed: syntax checks for voice event bus, API, Brain UI app, and smoke scripts; `npm run smoke:voice-events` 64/64; `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

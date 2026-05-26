@@ -94,11 +94,15 @@ function evaluateWakeTuningRecord(item, now = Date.now()) {
   const windowMs = Math.max(30000, Math.min(10 * 60 * 1000, Number(item.windowMs || 60000)))
   const before = item.beforeMetrics || getVoiceEventMetricsWindow({ since: item.at - windowMs, until: item.at })
   const after = getVoiceEventMetricsWindow({ since: item.at, until: now })
-  const verdict = after.wakeRejected < before.wakeRejected || (after.acceptanceRate != null && before.acceptanceRate != null && after.acceptanceRate > before.acceptanceRate)
+  const wakeImproved = after.wakeRejected < before.wakeRejected || (after.acceptanceRate != null && before.acceptanceRate != null && after.acceptanceRate > before.acceptanceRate)
+  const speakerImproved = after.speakerRejected < before.speakerRejected || (after.speakerAcceptanceRate != null && before.speakerAcceptanceRate != null && after.speakerAcceptanceRate > before.speakerAcceptanceRate)
+  const wakeWorse = after.wakeRejected > before.wakeRejected
+  const speakerWorse = after.speakerRejected > before.speakerRejected
+  const verdict = wakeImproved || speakerImproved
     ? 'improved'
     : after.total === 0
       ? 'pending'
-      : after.wakeRejected > before.wakeRejected
+      : wakeWorse || speakerWorse
         ? 'worse'
         : 'unchanged'
   return { windowMs, before, after, verdict }
@@ -106,8 +110,11 @@ function evaluateWakeTuningRecord(item, now = Date.now()) {
 
 function wakeTuningEvaluationAdvice(evaluation) {
   const verdict = evaluation?.verdict || 'pending'
-  if (verdict === 'improved') return { level: 'ok', action: 'keep', text: '调参后唤醒表现变好，建议暂时保持当前参数并继续观察。' }
-  if (verdict === 'worse') return { level: 'warn', action: 'rollback', text: '调参后唤醒拒绝变多，建议立即回滚上一次调参。' }
+  const before = evaluation?.before || {}
+  const after = evaluation?.after || {}
+  const speakerChanged = Number(before.speakerRejected || 0) !== Number(after.speakerRejected || 0) || before.speakerAcceptanceRate !== after.speakerAcceptanceRate
+  if (verdict === 'improved') return { level: 'ok', action: 'keep', text: speakerChanged ? '调参后声纹拒绝减少或通过率变好，建议暂时保持当前参数并继续观察。' : '调参后唤醒表现变好，建议暂时保持当前参数并继续观察。' }
+  if (verdict === 'worse') return { level: 'warn', action: 'rollback', text: speakerChanged ? '调参后声纹拒绝变多，建议立即回滚上一次声纹调参。' : '调参后唤醒拒绝变多，建议立即回滚上一次调参。' }
   if (verdict === 'unchanged') return { level: 'info', action: 'observe', text: '调参后效果变化不明显，建议继续观察或只做一次小幅调整。' }
   return { level: 'pending', action: 'wait', text: '调参后样本不足，先继续使用一段时间再判断。' }
 }

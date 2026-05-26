@@ -255,3 +255,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events smoke coverage for speaker-rejection auto-tuning and auto-apply.
 - [x] Verify syntax plus voice-events smoke suite.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 26: Speaker-aware tuning evaluation
+- [x] Add speaker accepted/rejected counts to voice event metrics windows.
+- [x] Add speaker acceptance rate to metrics windows.
+- [x] Treat reduced speaker rejection or improved speaker acceptance rate as an improved tuning verdict.
+- [x] Treat increased speaker rejection as a worse tuning verdict.
+- [x] Generate speaker-specific evaluation advice for improved/worse speaker tuning outcomes.
+- [x] Render speaker rejection before/after counts in Brain UI tuning history.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.
