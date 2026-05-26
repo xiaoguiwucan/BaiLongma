@@ -2902,8 +2902,11 @@ function initTTSSettings() {
   document.getElementById("voice-local-overview-actions")?.addEventListener("click", handleVoiceOverviewAction);
   document.getElementById("voice-local-stop")?.addEventListener("click", stopLocalVoiceService);
   document.getElementById("voice-kws-refresh")?.addEventListener("click", refreshVoiceKwsStatus);
+  document.getElementById("voice-kws-scan-models")?.addEventListener("click", scanVoiceKwsModels);
+  document.getElementById("voice-kws-model-select")?.addEventListener("change", event => { const value = event.target?.value || ""; if (value) { const input = document.getElementById("voice-kws-model-path"); if (input) input.value = value; localStorage.setItem(VOICE_KWS_MODEL_PATH_KEY, value); } });
   document.getElementById("voice-kws-install-openwakeword")?.addEventListener("click", installOpenWakeWordRuntime);
   document.getElementById("voice-kws-apply-openwakeword")?.addEventListener("click", applyOpenWakeWordConfig);
+  document.getElementById("voice-kws-record-test")?.addEventListener("click", startKwsRecordTest);
   document.getElementById("voice-local-restart")?.addEventListener("click", restartLocalVoiceService);
   document.getElementById("voice-diagnostics-export")?.addEventListener("click", exportLocalVoiceDiagnostics);
   document.getElementById("voice-calibrate-speaker")?.addEventListener("click", () => refreshSpeakerCalibration({ apply: false }));
@@ -2919,6 +2922,31 @@ function initTTSSettings() {
       { status: dep.ok ? "ok" : status.engine === "openwakeword" ? "warn" : "info", label: "openWakeWord 依赖", detail: dep.ok ? `可用：${dep.python || "python"}` : (dep.error || "未检测或未选择 openWakeWord。") },
     ];
     return rows.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status)}"><span>${escapeFocusText(item.status)}</span><div><strong>${escapeFocusText(item.label)}</strong><em>${escapeFocusText(item.detail)}</em></div></div>`).join("");
+  }
+
+  function renderVoiceKwsModels(data = {}) {
+    const select = document.getElementById("voice-kws-model-select");
+    if (!select) return;
+    const models = Array.isArray(data.models) ? data.models : [];
+    const current = document.getElementById("voice-kws-model-path")?.value || localStorage.getItem(VOICE_KWS_MODEL_PATH_KEY) || "";
+    select.innerHTML = '<option value="">扫描 models/kws 中的 .onnx 模型</option>' + models.map(item => `<option value="${escapeFocusText(item.path)}">${escapeFocusText(item.name || item.path)}${item.size ? ` · ${Math.round(item.size / 1024)}KB` : ""}</option>`).join("");
+    if (current && [...select.options].some(opt => opt.value === current)) select.value = current;
+  }
+
+  async function scanVoiceKwsModels() {
+    const fb = document.getElementById("voice-kws-feedback");
+    showFeedback(fb, "正在扫描 models/kws 下的 .onnx 模型…");
+    try {
+      const resp = await fetch(`${API}/voice/local/kws/models`);
+      const data = await resp.json();
+      if (!resp.ok || data?.ok === false) throw new Error(data?.error || "模型扫描失败");
+      renderVoiceKwsModels(data);
+      showFeedback(fb, data.models?.length ? `找到 ${data.models.length} 个 KWS 模型` : "未找到模型，请把 .onnx 放到 models/kws/ 下");
+      return data;
+    } catch (err) {
+      showFeedback(fb, err?.message || "模型扫描失败", true);
+      return null;
+    }
   }
 
   async function refreshVoiceKwsStatus() {
@@ -2948,6 +2976,7 @@ function initTTSSettings() {
       if (!resp.ok || data?.ok === false) throw new Error(data?.stderr || data?.error || "安装失败");
       showFeedback(fb, "openWakeWord 依赖已安装，请配置 .onnx 模型路径后检测。");
       await refreshVoiceKwsStatus();
+      await scanVoiceKwsModels();
     } catch (err) {
       showFeedback(fb, err?.message || "安装失败", true);
       await refreshVoiceKwsStatus();
@@ -2980,6 +3009,26 @@ function initTTSSettings() {
       if (btn) btn.disabled = false;
     }
   }
+
+  async function startKwsRecordTest() {
+    const fb = document.getElementById("voice-kws-feedback");
+    const voiceButton = document.getElementById("voice-btn");
+    showFeedback(fb, "KWS 自测开始：请在 3 秒内说唤醒词…");
+    try {
+      window.__lastKwsRecordTestStartedAt = Date.now();
+      window.dispatchEvent(new CustomEvent("bailongma:kws-self-test-start", { detail: { at: Date.now(), seconds: 3 } }));
+      if (voiceButton && !voiceButton.classList.contains("active")) voiceButton.click();
+      setTimeout(() => {
+        const last = window.__lastKwsWakeDecision || null;
+        if (last?.accepted) showFeedback(fb, `KWS 命中：${last.word || "wake"} / ${last.score ?? "—"}`);
+        else showFeedback(fb, "自测已启动麦克风：请观察语音调试面板中的 wake:kws 事件；若无命中，检查模型/阈值。", true);
+      }, 3200);
+    } catch (err) {
+      showFeedback(fb, err?.message || "KWS 自测失败", true);
+    }
+  }
+
+  window.addEventListener("bailongma:kws-wake", ev => { window.__lastKwsWakeDecision = ev.detail || {}; });
 
   function renderVoiceOverview(overview = {}) {
     const panel = document.getElementById("voice-local-overview");

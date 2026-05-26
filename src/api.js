@@ -253,6 +253,41 @@ function checkPythonModule(moduleName = '') {
   return { ok: result.status === 0, python: python.executable || python.command, error: result.status === 0 ? '' : String(result.stderr || result.stdout || '').trim().slice(0, 500) }
 }
 
+function listWakeKwsModels() {
+  const roots = [
+    path.join(process.cwd(), 'models', 'kws'),
+    path.join(paths.resourcesDir || process.cwd(), 'models', 'kws'),
+  ]
+  const seen = new Set()
+  const models = []
+  for (const root of roots) {
+    try {
+      if (!root || !fs.existsSync(root)) continue
+      const stack = [root]
+      while (stack.length) {
+        const dir = stack.pop()
+        for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
+          const full = path.join(dir, entry.name)
+          if (entry.isDirectory()) {
+            if (!entry.name.startsWith('.') && stack.length < 200) stack.push(full)
+            continue
+          }
+          if (!entry.isFile() || !entry.name.toLowerCase().endsWith('.onnx')) continue
+          const rel = path.relative(process.cwd(), full)
+          const value = rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : full
+          if (seen.has(full)) continue
+          seen.add(full)
+          let size = 0
+          try { size = fs.statSync(full).size } catch (_) {}
+          models.push({ name: entry.name, path: value, absolutePath: full, size, engine: 'openwakeword' })
+        }
+      }
+    } catch (_) {}
+  }
+  models.sort((a, b) => a.path.localeCompare(b.path))
+  return { ok: true, roots: roots.map(root => ({ path: root, exists: fs.existsSync(root) })), models }
+}
+
 function buildWakeKwsStatus(voice = getVoiceConfig()) {
   const provider = ['text', 'hybrid', 'kws'].includes(voice.wakeDetectionProvider) ? voice.wakeDetectionProvider : 'text'
   const engine = ['none', 'sherpa-onnx', 'openwakeword'].includes(voice.wakeKwsEngine) ? voice.wakeKwsEngine : 'none'
@@ -2517,6 +2552,12 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     // GET /voice/local/kws/status — inspect local KWS dependency/model readiness
     if (req.method === 'GET' && url.pathname === '/voice/local/kws/status') {
       jsonResponse(res, 200, buildWakeKwsStatus())
+      return
+    }
+
+    // GET /voice/local/kws/models — list local openWakeWord .onnx models under models/kws
+    if (req.method === 'GET' && url.pathname === '/voice/local/kws/models') {
+      jsonResponse(res, 200, listWakeKwsModels())
       return
     }
 

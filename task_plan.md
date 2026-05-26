@@ -635,3 +635,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend smoke tests for KWS setup endpoints and UI sync.
 - [x] Run validation checks and smoke suites.
 - [x] Commit and push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 65 plan - KWS model selection and record-test entry
+
+- [x] Add backend scanner for local openWakeWord `.onnx` models under `models/kws`.
+- [x] Add KWS model selector to voice settings.
+- [x] Add “扫描模型” action and sync selected model into the model path field.
+- [x] Add “录音自测” entry that starts the mic path and reports KWS decision feedback.
+- [x] Extend KWS and Brain UI smoke coverage.
+- [x] Run validation checks and smoke suites.
+- [ ] Commit and push as a development checkpoint only, without tag/Release.

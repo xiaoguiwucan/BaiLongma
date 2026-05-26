@@ -3,6 +3,7 @@ import fs from 'fs'
 const panel = fs.readFileSync(new URL('../src/ui/brain-ui/voice-panel.js', import.meta.url), 'utf8')
 const server = fs.readFileSync(new URL('../src/voice/sensevoice_server.py', import.meta.url), 'utf8')
 const api = fs.readFileSync(new URL('../src/api.js', import.meta.url), 'utf8')
+const appShell = fs.readFileSync(new URL('../src/ui/brain-ui/app-shell.js', import.meta.url), 'utf8')
 
 const checks = []
 function check(ok, label, detail = '') {
@@ -20,8 +21,10 @@ check(server.includes('msg.get("type") == "kws_detect"') && server.includes('"ty
 check(server.includes('sherpa-onnx KWS 运行时需要完整 tokens/encoder/decoder/joiner 配置'), 'sherpa-onnx path fails honestly instead of pretending arbitrary onnx works')
 check(api.includes('openWakeWord 本地唤醒运行时已接通') && api.includes('KWS 模型路径不存在'), 'doctor/readiness explain configured, missing, and unsupported KWS states')
 check(api.includes("/voice/local/kws/status") && api.includes('buildWakeKwsStatus'), 'backend exposes KWS readiness status endpoint')
+check(api.includes("/voice/local/kws/models") && api.includes('listWakeKwsModels'), 'backend exposes local KWS model scanner endpoint')
 check(api.includes("/voice/local/kws/install-openwakeword") && api.includes('installOpenWakeWordDependency'), 'backend exposes openWakeWord dependency install endpoint')
 check(api.includes("/voice/local/kws/apply") && api.includes("wakeKwsEngine: 'openwakeword'"), 'backend exposes one-click openWakeWord config apply endpoint')
+check(appShell.includes('voice-kws-model-select') && appShell.includes('voice-kws-record-test'), 'settings UI exposes KWS model selection and record-test controls')
 
 const failed = checks.filter(item => !item.ok)
 if (failed.length) {

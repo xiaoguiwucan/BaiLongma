@@ -559,6 +559,11 @@ new WebSocket(url)`,
       return
     }
 
+    if (url.pathname === '/voice/local/kws/models') {
+      sendJson(res, { ok: true, roots: [{ path: `${root}/models/kws`, exists: true }], models: [{ name: 'longma.onnx', path: 'models/kws/longma.onnx', absolutePath: `${root}/models/kws/longma.onnx`, size: 123456, engine: 'openwakeword' }] })
+      return
+    }
+
     if (url.pathname === '/voice/local/kws/status') {
       sendJson(res, {
         ok: true,
@@ -956,6 +961,10 @@ try {
   if (videoVoiceSnapshot.speakerThreshold !== '0.63' || videoVoiceSnapshot.storedSpeakerThreshold !== '0.63') throw new Error('server speaker threshold did not hydrate settings UI and localStorage')
   if (videoVoiceSnapshot.wakeDetectionProvider !== 'hybrid' || videoVoiceSnapshot.kwsEngine !== 'sherpa-onnx' || videoVoiceSnapshot.kwsModelPath !== 'models/kws/longma.onnx' || videoVoiceSnapshot.kwsThreshold !== '0.62' || !videoVoiceSnapshot.kwsThresholdLabel.includes('0.62')) throw new Error(`server KWS wake settings did not hydrate settings UI: ${JSON.stringify(videoVoiceSnapshot)}`)
   if (videoVoiceSnapshot.storedWakeDetectionProvider !== 'hybrid' || videoVoiceSnapshot.storedKwsEngine !== 'sherpa-onnx' || videoVoiceSnapshot.storedKwsModelPath !== 'models/kws/longma.onnx' || videoVoiceSnapshot.storedKwsThreshold !== '0.62') throw new Error('server KWS wake settings were not mirrored to localStorage')
+  await page.click('#voice-kws-scan-models')
+  await page.waitForFunction(() => [...document.querySelectorAll('#voice-kws-model-select option')].some(opt => opt.value === 'models/kws/longma.onnx'))
+  await page.selectOption('#voice-kws-model-select', 'models/kws/longma.onnx')
+  await page.waitForFunction(() => document.querySelector('#voice-kws-model-path')?.value === 'models/kws/longma.onnx')
   await page.click('#voice-kws-refresh')
   await page.waitForFunction(() => document.querySelector('#voice-kws-status')?.textContent.includes('模型文件'))
   const kwsStatusText = await page.textContent('#voice-kws-status')
@@ -964,6 +973,8 @@ try {
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-kws-engine') === 'openwakeword')
   const kwsAppliedSnapshot = await page.evaluate(() => ({ engine: document.querySelector('#voice-kws-engine')?.value, provider: document.querySelector('#voice-wake-detection-provider')?.value, feedback: document.querySelector('#voice-kws-feedback')?.textContent || '' }))
   if (kwsAppliedSnapshot.engine !== 'openwakeword' || kwsAppliedSnapshot.provider !== 'hybrid') throw new Error(`KWS apply button did not sync openWakeWord controls: ${JSON.stringify(kwsAppliedSnapshot)}`)
+  await page.click('#voice-kws-record-test')
+  await page.waitForFunction(() => window.__lastKwsRecordTestStartedAt > 0)
   if (videoVoiceSnapshot.duckChecked !== false || videoVoiceSnapshot.pttChecked !== true || videoVoiceSnapshot.aecChecked !== false) throw new Error('server video voice booleans did not hydrate settings UI')
   if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35' || videoVoiceSnapshot.preRollMs !== '2800' || !videoVoiceSnapshot.preRollLabel.includes('2.8s')) throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')

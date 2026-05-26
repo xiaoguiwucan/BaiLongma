@@ -558,3 +558,14 @@
 - Extended smoke coverage so the settings panel verifies KWS status rendering and one-click openWakeWord config sync.
 - Extended `smoke:kws-runtime` so KWS setup endpoints are protected.
 - This remains a development checkpoint; a formal Release should wait until a bundled or guided model download/import flow is added and macOS package verification is rerun.
+
+## Checkpoint 65 - KWS model selection and record-test entry
+
+- Continued from KWS setup/readiness by adding model discovery and a user-facing self-test entry.
+- Added `GET /voice/local/kws/models` to scan local `models/kws` folders for `.onnx` openWakeWord models and return name/path/size metadata.
+- Added a “本地模型” selector in voice settings so users can choose a scanned model instead of manually typing the path.
+- Added “扫描模型” action that fills the selector from the backend scanner and syncs the selected model path into the KWS model path field/localStorage.
+- Added “录音自测” entry that starts the voice microphone path and watches `bailongma:kws-wake` / `wake:kws` decisions, giving immediate feedback if KWS fires.
+- Extended Brain UI smoke coverage for model scanning, model selection, one-click openWakeWord apply, and KWS record-test start.
+- Extended `smoke:kws-runtime` to cover the model scanner endpoint and UI controls.
+- This is still a development checkpoint; remaining gap before a formal Release is model acquisition/import UX and a real packaged macOS verification pass.
