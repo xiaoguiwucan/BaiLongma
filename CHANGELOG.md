@@ -4,6 +4,49 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.240 - 2026-05-26
+
+### 更新内容
+
+- 新增 `GET /voice/events/clients`，返回当前连接客户端的聚焦诊断信息：
+  - `clients`：当前连接数；
+  - `clientDetails[].audio` / `binaryAudio`：音频订阅状态；
+  - `clientDetails[].identity`：清洗后的客户端身份、capabilities、lastSeenAt；
+  - `clientDetails[].negotiated`：v2.1.239 的音频能力协商结果。
+- `/voice/events/protocol` 的 `endpoints` 新增 `clients: "/voice/events/clients"`。
+- 协议能力新增 `client_diagnostics`。
+- 协议元数据新增 `diagnosticsFields`，说明客户端诊断字段。
+- `/voice/events/status` 继续保留原有字段，但复用同一个安全 helper 生成 `clientDetails`。
+- `smoke:voice-events` 从 39/39 扩展到 41/41，覆盖空客户端列表和已登记客户端诊断。
+
+### 改变原因
+
+- 随着外部设备接入，单纯看 `/voice/events/status` 的总状态不够直观。
+- 小智式/ESP32/手机桥接客户端需要一个轻量端点来确认：设备是否连上、身份是否登记、是否订阅音频、协商到 binary 还是 base64。
+- 这个端点也为后续 Brain UI 客户端列表、设备配对、按设备授权打基础。
+
+### 影响范围
+
+- 向后兼容；旧客户端无需修改。
+- 新端点只返回安全摘要，不返回 token、密钥或原始敏感请求头。
+- `/voice/events/status` 的 `clientDetails` 内容会包含 `negotiated`，用于和新端点保持一致。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 37/37 通过。
+- `npm run smoke:voice-events` 41/41 通过。
+- 完整 smoke 结果见本版本发布记录。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 调试客户端连接状态：`curl http://127.0.0.1:3721/voice/events/clients`。
+- 外部设备排障建议先看 `/voice/events/protocol`，再看 `/voice/events/clients`。
+
 ## v2.1.239 - 2026-05-26
 
 ### 更新内容

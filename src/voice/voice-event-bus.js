@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -29,6 +29,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
     endpoints: {
       websocket: '/voice/events',
       status: '/voice/events/status',
+      clients: '/voice/events/clients',
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
     },
@@ -41,6 +42,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
     },
     clientMessages: ['ping', 'client:hello', 'client:identify', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
     identityFields: ['clientId', 'device', 'app', 'version', 'platform', 'capabilities'],
+    diagnosticsFields: ['audio', 'binaryAudio', 'identity', 'negotiated'],
     clientCapabilityExamples: ['binary_audio', 'base64_audio', 'tts_speak', 'wake', 'display'],
     negotiation: {
       audioModes: ['none', 'binary', 'base64'],
@@ -370,6 +372,18 @@ export function publishTTSAudioError({ sessionId, index, error, targetClient = n
   return { delivered: subscribers.length }
 }
 
+export function getVoiceEventClientDetails() {
+  return [...clients].map(ws => {
+    const identity = getVoiceEventClientIdentity(ws)
+    return {
+      audio: getOptions(ws).audio,
+      binaryAudio: getOptions(ws).binaryAudio,
+      identity,
+      negotiated: negotiateVoiceEventClientCapabilities(identity),
+    }
+  })
+}
+
 export function getVoiceEventBusStatus() {
   let audioSubscribers = 0
   let binaryAudioSubscribers = 0
@@ -384,10 +398,6 @@ export function getVoiceEventBusStatus() {
     audioSubscribers,
     binaryAudioSubscribers,
     version: VOICE_EVENTS_PROTOCOL_VERSION,
-    clientDetails: [...clients].map(ws => ({
-      audio: getOptions(ws).audio,
-      binaryAudio: getOptions(ws).binaryAudio,
-      identity: getVoiceEventClientIdentity(ws),
-    })),
+    clientDetails: getVoiceEventClientDetails(),
   }
 }

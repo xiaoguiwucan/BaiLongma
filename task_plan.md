@@ -1,44 +1,43 @@
-# Task Plan: v2.1.239 Voice Events Audio Capability Negotiation
+# Task Plan: v2.1.240 Voice Events Clients Diagnostics Endpoint
 
 ## Goal
-Continue the Xiaozhi-inspired voice server work by adding explicit audio capability negotiation to `/voice/events`, so ESP32-style clients that declare `binary_audio` or `base64_audio` receive a clear negotiated recommendation without changing old client behavior.
+Continue the Xiaozhi-inspired voice server work by adding a focused `/voice/events/clients` diagnostics endpoint, so external devices and the Brain UI/debug tools can inspect connected clients, identities, subscriptions, capabilities, and negotiated audio mode without parsing the broader status payload.
 
 ## Current Phase
-Complete
+GitHub release
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Confirm v2.1.238 clean baseline and GitHub release state
-- [x] Inspect protocol metadata, client identity handling, and smoke coverage
-- [x] Choose next aligned feature: capability-based negotiated audio mode
+- [x] Confirm v2.1.239 clean baseline and GitHub release state
+- [x] Inspect current status/protocol endpoints and bus status shape
+- [x] Choose next aligned feature: focused connected-client diagnostics
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add protocol capability and metadata for audio negotiation
-- [x] Compute negotiated audio mode from sanitized client capabilities
-- [x] Return negotiation details in `client:accepted`
-- [x] Keep subscribe behavior backward-compatible unless client explicitly subscribes
+- [x] Add `/voice/events/clients` endpoint to protocol metadata and API router
+- [x] Add safe `getVoiceEventClientDetails()` helper with negotiated audio details
+- [x] Preserve existing `/voice/events/status` shape while reusing helper
 - **Status:** complete
 
 ### Phase 3: Tests, docs, UI notes
-- [x] Extend smoke tests and pure mapping/protocol checks
-- [x] Bump version to 2.1.239 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
+- [x] Extend smoke tests and protocol mapping checks
+- [x] Bump version to 2.1.240 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
 - [x] Run syntax checks and smoke suites
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [x] Commit changes
-- [x] Tag and push v2.1.239
-- [x] Create source tarball and git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag and push v2.1.240
+- [ ] Create source tarball and git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** pending
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Negotiate but do not auto-subscribe audio in this step | Safer for existing clients; makes capability outcome explicit without unexpected audio traffic |
-| Prefer binary over base64 when both are declared | Binary is lower overhead and closer to hardware streaming patterns |
+| Add a focused endpoint instead of expanding only status | Easier for ESP32 bridges, mobile clients, and UI diagnostics to consume safely |
+| Return negotiated audio alongside identity/subscription | Makes v2.1.239 audio negotiation visible after the handshake |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

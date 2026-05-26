@@ -738,6 +738,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.240</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增 /voice/events/clients 客户端诊断端点，方便排查外部设备连接。</p>
+                <ul class="release-note-points">
+                  <li>集中返回身份、capabilities、订阅状态和 negotiated 音频模式。</li>
+                  <li>/voice/events/protocol 暴露 clients endpoint 和 client_diagnostics 能力。</li>
+                  <li>smoke:voice-events 扩展到 41 项，覆盖空列表与已登记客户端。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.239</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

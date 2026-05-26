@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.239 更新：client:accepted 音频能力协商）
+版本：v3（BaiLongma v2.1.240 更新：/voice/events/clients 客户端诊断端点）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -24,6 +24,12 @@ npm run voice:events -- protocol
 GET http://127.0.0.1:3721/voice/events/status
 ```
 
+聚焦客户端诊断接口：
+
+```text
+GET http://127.0.0.1:3721/voice/events/clients
+```
+
 协议元数据接口：
 
 ```text
@@ -31,6 +37,8 @@ GET http://127.0.0.1:3721/voice/events/protocol
 ```
 
 如果白龙马运行在局域网 Mac 上，客户端需要把 `127.0.0.1` 替换为 Mac 的局域网 IP，并自行确认端口暴露和安全策略。
+
+`/voice/events/clients` 返回安全摘要：连接数、订阅状态、清洗后的 identity/capabilities/lastSeenAt，以及 `negotiated` 音频协商结果；不会返回 token 或请求头。
 
 
 ## 1.1 访问控制与 token

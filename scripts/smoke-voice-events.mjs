@@ -75,14 +75,16 @@ try {
   assert(statusBefore.ok === true && statusBefore.version >= 3, 'status exposes voice event protocol version', JSON.stringify(statusBefore))
 
   const protocolMeta = await fetch(`${API}/voice/events/protocol`).then(r => r.json())
-  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits') && protocolMeta.capabilities?.includes('client_identity') && protocolMeta.capabilities?.includes('audio_negotiation'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
-  assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
+  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits') && protocolMeta.capabilities?.includes('client_identity') && protocolMeta.capabilities?.includes('audio_negotiation') && protocolMeta.capabilities?.includes('client_diagnostics'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
+  assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish' && protocolMeta.endpoints?.clients === '/voice/events/clients', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
   assert(protocolMeta.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocolMeta.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol endpoint exposes tts speak limits', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol endpoint exposes remote address tts speak scope', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.auth?.localhostExempt === true && protocolMeta.auth?.methods?.includes('?token=<token>'), 'protocol endpoint exposes auth metadata', JSON.stringify(protocolMeta.auth))
   assert(protocolMeta.clientMessages?.includes('client:hello') && protocolMeta.identityFields?.includes('clientId'), 'protocol endpoint exposes client identity metadata', JSON.stringify(protocolMeta.identityFields))
   assert(protocolMeta.identityFields?.includes('capabilities') && protocolMeta.clientCapabilityExamples?.includes('binary_audio'), 'protocol endpoint exposes client capability metadata', JSON.stringify(protocolMeta.clientCapabilityExamples))
   assert(protocolMeta.negotiation?.audioModes?.includes('binary') && protocolMeta.negotiation?.autoSubscribe === false, 'protocol endpoint exposes audio negotiation metadata', JSON.stringify(protocolMeta.negotiation))
+  const clientsBefore = await fetch(`${API}/voice/events/clients`).then(r => r.json())
+  assert(clientsBefore.ok === true && clientsBefore.clients === 0 && Array.isArray(clientsBefore.clientDetails), 'clients endpoint exposes empty client diagnostics', JSON.stringify(clientsBefore))
 
   await fetch(`${API}/settings/tts`, {
     method: 'POST',
@@ -118,10 +120,12 @@ try {
   const acceptedNegotiation = identifyMessages.find(msg => msg.type === 'client:accepted')?.negotiated
   assert(acceptedNegotiation?.audioMode === 'binary' && acceptedNegotiation?.binaryAudio === true && acceptedNegotiation?.shouldSubscribeAudio === false, 'client:accepted includes negotiated binary audio recommendation', JSON.stringify(acceptedNegotiation))
 
+  let clientsDuringIdentity = null
   const statusWithIdentityPromise = connectAndCollect({
     onOpen: async ws => {
       ws.send(JSON.stringify({ type: 'client:hello', clientId: 'status-client', app: 'smoke-status' }))
       await new Promise(resolve => setTimeout(resolve, 80))
+      clientsDuringIdentity = await fetch(`${API}/voice/events/clients`).then(r => r.json())
       const status = await fetch(`${API}/voice/events/status`).then(r => r.json())
       ws.send(JSON.stringify({ type: 'ping', statusSnapshot: status }))
     },
@@ -131,6 +135,7 @@ try {
   const statusWithIdentity = await fetch(`${API}/voice/events/status`).then(r => r.json())
   assert(Array.isArray(statusWithIdentity.clientDetails), 'status exposes clientDetails array', JSON.stringify(statusWithIdentity))
   assert(statusWithIdentity.clientDetails.every(item => item.identity?.lastSeenAt), 'status clientDetails include lastSeenAt diagnostics', JSON.stringify(statusWithIdentity.clientDetails))
+  assert(clientsDuringIdentity?.clients >= 1 && clientsDuringIdentity.clientDetails?.some(item => item.identity?.clientId === 'status-client' && item.negotiated?.audioMode === 'none'), 'clients endpoint exposes focused identity and negotiated diagnostics', JSON.stringify(clientsDuringIdentity))
 
   const pingMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'ping' })),
