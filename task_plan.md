@@ -644,4 +644,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add “录音自测” entry that starts the mic path and reports KWS decision feedback.
 - [x] Extend KWS and Brain UI smoke coverage.
 - [x] Run validation checks and smoke suites.
-- [ ] Commit and push as a development checkpoint only, without tag/Release.
+- [x] Commit and push as a development checkpoint only, without tag/Release.
