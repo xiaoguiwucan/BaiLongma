@@ -3787,11 +3787,49 @@ function initTTSSettings() {
     }
   }
 
+  function recommendMicThreshold(detail = window.bailongmaVoice?.getMicMonitor?.() || window.bailongmaVoiceMicMonitor || {}) {
+    const currentThreshold = Math.max(0.002, Math.min(0.04, Number(localStorage.getItem("bailongma-voice-threshold") || detail.threshold || 0.008) || 0.008));
+    const peak = Math.max(0, Number(detail.peak || detail.current || 0) || 0);
+    const noise = Math.max(0, Number(detail.noiseFloor || 0) || 0);
+    if (!peak || peak < 0.003) {
+      return { ok: false, reason: "还没有检测到足够清晰的本人声音。请打开麦克风后说：龙马，测试一下。", currentThreshold, recommendedThreshold: currentThreshold, peak, noise };
+    }
+    const fromPeak = peak * 0.55;
+    const fromNoise = noise > 0 ? noise * 2.2 : 0.002;
+    const recommended = Math.max(0.002, Math.min(0.04, Number(Math.max(fromNoise, Math.min(fromPeak, peak * 0.75)).toFixed(3))));
+    const reason = recommended < currentThreshold
+      ? `当前峰值 ${peak.toFixed(3)} 低于/接近阈值，建议把触发阈值降到 ${recommended.toFixed(3)}，更容易听见你。`
+      : recommended > currentThreshold * 1.25
+        ? `噪声底 ${noise.toFixed(3)} 偏高，建议把阈值提高到 ${recommended.toFixed(3)}，减少视频/环境噪声误触发。`
+        : `当前阈值 ${currentThreshold.toFixed(3)} 与峰值 ${peak.toFixed(3)} 基本匹配，可保持或应用 ${recommended.toFixed(3)}。`;
+    return { ok: true, reason, currentThreshold, recommendedThreshold: recommended, peak, noise, changed: Math.abs(recommended - currentThreshold) >= 0.001 };
+  }
+
+  function calibrateMicThreshold() {
+    const adviceEl = document.getElementById("voice-mic-meter-advice");
+    const thresholdSlider = document.getElementById("settings-voice-threshold");
+    const thresholdVal = document.getElementById("settings-voice-threshold-val");
+    const recommendation = recommendMicThreshold();
+    if (!recommendation.ok) {
+      showFeedback(adviceEl, recommendation.reason, true);
+      renderMicMeter();
+      return;
+    }
+    const next = recommendation.recommendedThreshold;
+    if (thresholdSlider) thresholdSlider.value = String(next);
+    if (thresholdVal) thresholdVal.textContent = next.toFixed(3);
+    localStorage.setItem("bailongma-voice-threshold", String(next));
+    window.bailongmaVoice?.resetMicMonitor?.();
+    renderMicMeter({ current: 0, peak: recommendation.peak, noiseFloor: recommendation.noise, threshold: next, active: Boolean(window.bailongmaVoice?.isActive?.()), updatedAt: Date.now() });
+    showFeedback(adviceEl, `已校准触发阈值：${next.toFixed(3)}。${recommendation.reason}`);
+  }
+
   window.addEventListener("bailongma:mic-level", event => renderMicMeter(event.detail || {}));
   document.getElementById("voice-mic-meter-reset")?.addEventListener("click", () => {
     window.bailongmaVoice?.resetMicMonitor?.();
     renderMicMeter();
   });
+  document.getElementById("voice-mic-threshold-calibrate")?.addEventListener("click", calibrateMicThreshold);
 
   async function startSpeakerVoiceService() {
     const btn = document.getElementById("voice-speaker-start-service");

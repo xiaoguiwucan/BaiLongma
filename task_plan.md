@@ -538,3 +538,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend Brain UI smoke coverage for live mic-level rendering.
 - [x] Verify syntax plus smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 55: Microphone threshold calibration
+- [x] Add one-click microphone trigger threshold calibration from the live mic self-check meter.
+- [x] Recommend a bounded threshold from current/peak level and observed noise floor.
+- [x] Lower the threshold when the user's peak voice is below or close to the current trigger threshold.
+- [x] Raise the threshold when noise floor implies likely false triggers.
+- [x] Sync the sensitivity slider, displayed value, localStorage, meter threshold marker, and user advice after calibration.
+- [x] Extend Brain UI smoke coverage for threshold calibration and persisted value sync.
+- [x] Verify syntax plus smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

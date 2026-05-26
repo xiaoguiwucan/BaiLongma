@@ -684,6 +684,7 @@ const createSettingsModal = () => `
               </div>
               <div class="voice-mic-meter-actions">
                 <button class="voice-readiness-action" id="voice-mic-meter-reset" type="button">重置峰值/噪声底</button>
+                <button class="voice-readiness-action" id="voice-mic-threshold-calibrate" type="button">按当前峰值校准阈值</button>
                 <span class="settings-feedback" id="voice-mic-meter-advice">打开麦克风后，对着 Mac 说唤醒词，看柱状条是否越过阈值。</span>
               </div>
             </div>

@@ -441,3 +441,10 @@
 - Added a reset button for peak/noise-floor retesting after changing microphone position or threshold.
 - Extended Brain UI smoke coverage for the mic-level event and rendered advice.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+
+- Continued the local-voice stability milestone by turning the microphone self-check meter into an actionable threshold calibration loop.
+- Added “按当前峰值校准阈值” beside the mic meter so users can speak once and apply a recommended trigger threshold instead of guessing slider values.
+- The recommendation uses peak voice level and estimated noise floor: it lowers the threshold when the user is not crossing it, and raises it when background/video noise suggests likely false triggers.
+- Applying calibration now synchronizes the sensitivity slider, numeric label, localStorage, mic meter threshold marker, and human advice text.
+- Extended Brain UI smoke coverage to verify the calibration computes `0.013` from a peak `0.024`, persists it, and updates the UI.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
