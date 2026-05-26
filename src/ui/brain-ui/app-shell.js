@@ -438,6 +438,17 @@ const createSettingsModal = () => `
                   <option value="accuracy">高精度：优先准确率</option>
                 </select>
               </div>
+              <div class="voice-readiness-wizard" id="voice-readiness-wizard" hidden>
+                <div class="voice-readiness-head">
+                  <div>
+                    <strong>一键语音准备</strong>
+                    <p class="settings-hint">自动切到本地 SenseVoice、启动本地服务、开启严格唤醒和视频抗干扰；声纹只提示录入，不会替你伪造声纹。</p>
+                  </div>
+                  <button class="settings-save-btn" id="voice-readiness-apply" type="button">一键准备</button>
+                </div>
+                <div id="voice-readiness-list" class="voice-readiness-list"></div>
+                <span class="settings-feedback" id="voice-readiness-feedback"></span>
+              </div>
               <div class="voice-local-doctor" id="voice-local-doctor" hidden>
                 <div class="voice-local-doctor-head">
                   <strong>本地语音体检</strong>

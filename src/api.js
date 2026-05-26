@@ -417,6 +417,96 @@ function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) 
 }
 
 
+
+async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
+  const speakerStatus = await queryLocalSpeakerStatus().catch(err => ({ ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' }))
+  const doctor = buildVoiceLocalDoctor({ windowMs, speakerStatus })
+  const voice = doctor.voice || getVoiceConfig()
+  const local = doctor.local || getVoiceStatus()
+  const preset = recommendVoiceStabilityPreset({ voice })
+  const steps = [
+    {
+      id: 'local_provider',
+      label: '本地中文识别',
+      status: voice.asrProvider === 'local' && voice.localAsrModel === 'sensevoice-small' ? 'ok' : 'warn',
+      detail: voice.asrProvider === 'local' && voice.localAsrModel === 'sensevoice-small'
+        ? '已使用本地 SenseVoiceSmall，中文优先且不上传麦克风音频。'
+        : '需要切换到本地 SenseVoiceSmall，避免继续走 Whisper/云端主路径。',
+      fixAction: voice.asrProvider === 'local' && voice.localAsrModel === 'sensevoice-small' ? null : 'use_local_sensevoice',
+    },
+    {
+      id: 'local_process',
+      label: '本地服务启动',
+      status: local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn',
+      detail: local.status === 'running' ? `运行中：${local.engineLabel || local.engine || 'local'} / ${local.model || voice.localAsrModel || 'sensevoice-small'}` : (local.message || '本地语音服务尚未运行。'),
+      fixAction: local.status === 'running' ? null : 'start_local_voice',
+    },
+    {
+      id: 'wake_guard',
+      label: '唤醒保护',
+      status: voice.wakeWordEnabled !== false && voice.wakeMode === 'strict' && voice.wakeRepeatSuppression !== false ? 'ok' : 'warn',
+      detail: voice.wakeWordEnabled !== false ? `唤醒词开启，${voice.wakeMode === 'strict' ? '严格匹配' : '宽松匹配'}。` : '唤醒词关闭时，视频/别人说话更容易误触发。',
+      fixAction: voice.wakeWordEnabled !== false && voice.wakeMode === 'strict' && voice.wakeRepeatSuppression !== false ? null : 'enable_wake_guard',
+    },
+    {
+      id: 'video_guard',
+      label: '视频抗干扰',
+      status: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled ? 'ok' : 'warn',
+      detail: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled ? '视频降音、按住说话、AEC 都已开启。' : '播放视频时建议同时开启视频降音、按住说话和 AEC。',
+      fixAction: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled ? null : 'apply_video_guard',
+    },
+    {
+      id: 'speaker_voiceprint',
+      label: '本人声纹',
+      status: speakerStatus.reachable === false ? 'pending' : speakerStatus.configured ? 'ok' : 'warn',
+      detail: speakerStatus.reachable === false ? '本地服务启动后才能确认声纹是否已录入。' : speakerStatus.configured ? `已录入 ${speakerStatus.sampleCount || 0} 个声纹样本。` : '还没有录入声纹；如果要“只响应我”，请录入后再开启声纹门控。',
+      action: speakerStatus.reachable === false ? '先启动本地语音服务。' : speakerStatus.configured ? '可以测试声纹分数。' : '点击“录入/重录声纹”。',
+    },
+  ]
+  const blocking = steps.filter(item => item.status === 'warn' || item.status === 'error')
+  return {
+    ok: true,
+    level: blocking.length ? 'warn' : steps.some(item => item.status === 'pending') ? 'pending' : 'ok',
+    checkedAt: Date.now(),
+    voice,
+    local,
+    speakerStatus,
+    recommendedPreset: preset,
+    steps,
+    nextActions: steps.filter(item => item.status !== 'ok').map(item => ({ id: item.id, label: item.label, fixAction: item.fixAction || null, action: item.action || item.detail })).slice(0, 6),
+    doctor,
+  }
+}
+
+async function applyVoiceReadinessWizard({ enableSpeaker = false, presetId = 'balanced' } = {}) {
+  const before = getVoiceConfig()
+  const requestedPreset = getVoiceStabilityPreset(presetId) || getVoiceStabilityPreset('balanced')
+  const applied = {
+    asrProvider: 'local',
+    localAsrModel: 'sensevoice-small',
+    whisperModel: 'small',
+    asrProfile: before.asrProfile || 'balanced',
+    wakeWordEnabled: true,
+    wakeMode: 'strict',
+    wakeRepeatSuppression: true,
+    ...(requestedPreset?.patch || {}),
+  }
+  if (enableSpeaker) applied.speakerVerificationEnabled = true
+  setVoiceConfig(applied)
+  const voice = getVoiceConfig()
+  const started = startVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', localAsrModel: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
+  const record = appendVoiceLocalDoctorHistory({
+    action: 'voice_readiness_wizard',
+    label: '一键语音准备',
+    applied,
+    before,
+    after: getVoiceConfig(),
+    status: started?.status || 'ok',
+  })
+  const readiness = await buildVoiceReadinessWizard({ windowMs: 60000 })
+  return { ok: true, applied, preset: requestedPreset ? { id: requestedPreset.id, label: requestedPreset.label, description: requestedPreset.description, patch: { ...requestedPreset.patch } } : null, started, record, voice: getVoiceConfig(), readiness }
+}
+
 function localDoctorFixLabel(action = '') {
   const labels = {
     use_local_sensevoice: '切换到本地 SenseVoiceSmall',
@@ -1958,6 +2048,25 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         jsonResponse(res, 200, { ok: true, cleared: true, speaker: result, voice: getVoiceConfig() })
       }).catch(err => {
         jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message, code: err.code || 'speaker_clear_failed' })
+      })
+      return
+    }
+
+    // GET /voice/local/readiness — guided local voice readiness wizard state
+    if (req.method === 'GET' && url.pathname === '/voice/local/readiness') {
+      const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))
+      buildVoiceReadinessWizard({ windowMs }).then(result => jsonResponse(res, 200, result)).catch(err => {
+        jsonResponse(res, 500, { ok: false, error: err.message || 'Failed to build voice readiness wizard.' })
+      })
+      return
+    }
+
+    // POST /voice/local/readiness/apply — apply a safe complete local voice baseline
+    if (req.method === 'POST' && url.pathname === '/voice/local/readiness/apply') {
+      readJsonBody(req).then(body => applyVoiceReadinessWizard({ enableSpeaker: Boolean(body.enableSpeaker), presetId: body.preset || body.presetId || 'balanced' })).then(result => {
+        jsonResponse(res, 200, result)
+      }).catch(err => {
+        jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message || 'Failed to apply voice readiness wizard.' })
       })
       return
     }

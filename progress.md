@@ -356,3 +356,12 @@
 - Brain UI now includes a backup selector next to “恢复备份”, refreshing it after clear/restore operations.
 - Extended smoke coverage for backup listing and selected-backup restore flow.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Started a larger post-v2.2.0 milestone instead of publishing small releases: focused on an end-to-end local voice readiness flow.
+- Added backend `GET /voice/local/readiness` to aggregate provider/model/process/wake/video/speaker status into a guided “一键语音准备” checklist.
+- Added backend `POST /voice/local/readiness/apply` to safely apply a complete local baseline: local SenseVoiceSmall, strict wake guard, balanced stability preset, and local ASR service start; it records an auditable doctor-history entry.
+- Added Brain UI “一键语音准备” panel above local voice doctor with guided steps, recommendation text, apply button, and synchronized settings controls after apply.
+- Extended smoke coverage for backend readiness wizard/apply and Brain UI readiness rendering/apply/sync flow.
+- This is still a development checkpoint candidate only: no tag and no GitHub Release until a real large version milestone is complete.
+- Verification passed: `node --check src/api.js`; `node --check src/config.js`; `node --check src/ui/brain-ui/app-shell.js`; `node --check src/ui/brain-ui/app.js`; `node --check scripts/smoke-brain-ui.mjs`; `node --check scripts/smoke-voice-events.mjs`; `python3 -m py_compile src/voice/sensevoice_server.py`.
+- Verification passed: `npm run smoke:voice-events` 84/84 and `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.

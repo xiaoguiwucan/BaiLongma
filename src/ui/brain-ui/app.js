@@ -2891,6 +2891,62 @@ function initTTSSettings() {
     });
   }
   document.getElementById("voice-local-doctor-refresh")?.addEventListener("click", refreshVoiceLocalDoctor);
+  document.getElementById("voice-readiness-apply")?.addEventListener("click", applyVoiceReadinessWizard);
+
+  function renderVoiceReadinessWizard(readiness = {}) {
+    const steps = Array.isArray(readiness.steps) ? readiness.steps : [];
+    if (!steps.length) return '<div class="voice-clients-empty">暂无一键准备检查数据。</div>';
+    const preset = readiness.recommendedPreset;
+    const helper = preset?.label ? `<div class="voice-readiness-helper">推荐基线：${escapeFocusText(preset.label)} · ${escapeFocusText(preset.reason || "先建立稳定语音基线，再微调声纹。")}</div>` : "";
+    return helper + steps.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status || "pending")}">
+      <span>${escapeFocusText(item.status || "pending")}</span>
+      <div><strong>${escapeFocusText(item.label || item.id || "步骤")}</strong><em>${escapeFocusText(item.detail || item.action || "")}</em></div>
+    </div>`).join("");
+  }
+
+  async function refreshVoiceReadinessWizard() {
+    const panel = document.getElementById("voice-readiness-wizard");
+    const list = document.getElementById("voice-readiness-list");
+    if (!panel || !list) return;
+    panel.hidden = false;
+    list.innerHTML = '<div class="voice-clients-empty">正在生成语音准备清单…</div>';
+    try {
+      const resp = await fetch(`${API}/voice/local/readiness?windowMs=60000`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "语音准备检查失败");
+      list.innerHTML = renderVoiceReadinessWizard(data);
+      const fb = document.getElementById("voice-readiness-feedback");
+      if (fb) fb.textContent = data.level === "ok" ? "语音基础链路已准备好" : "建议点击一键准备补齐基础项";
+    } catch (err) {
+      list.innerHTML = `<div class="voice-clients-error">${escapeFocusText(err?.message || "语音准备检查失败")}</div>`;
+    }
+  }
+
+  async function applyVoiceReadinessWizard() {
+    const btn = document.getElementById("voice-readiness-apply");
+    const fb = document.getElementById("voice-readiness-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在应用本地语音稳定基线…");
+    try {
+      const resp = await fetch(`${API}/voice/local/readiness/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preset: "balanced", enableSpeaker: false }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "一键准备失败");
+      if (data.voice) hydrateVoiceControlsFromConfig(data.voice);
+      await refreshVoiceReadinessWizard();
+      showFeedback(fb, `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}`);
+      await refreshVoiceLocalDoctor();
+      await refreshSpeakerStatus();
+      await loadVoiceStabilityPresets();
+    } catch (err) {
+      showFeedback(fb, err?.message || "一键准备失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
 
 
   function renderVoiceLocalDoctor(doctor = {}) {
@@ -3101,6 +3157,7 @@ function initTTSSettings() {
     if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
 
     applyVoiceProviderUI(savedProvider);
+    refreshVoiceReadinessWizard();
     refreshVoiceLocalDoctor();
   }
 

@@ -447,3 +447,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events smoke coverage for backup list endpoint.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 45: Local voice readiness wizard
+- [x] Add backend guided local voice readiness state endpoint.
+- [x] Add backend safe one-click local voice baseline apply endpoint.
+- [x] Record readiness apply in local doctor history for audit/rollback context.
+- [x] Add Brain UI “一键语音准备” panel with human-readable steps.
+- [x] Sync controls and diagnostics after applying the readiness baseline.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [ ] Push as a development checkpoint only, without tag/Release.

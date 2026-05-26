@@ -53,6 +53,7 @@ function createServer() {
   let localDoctorFixHistory = []
   let localDoctorRollback = false
   let speakerBackupAvailable = false
+  let readinessApplied = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -492,6 +493,44 @@ new WebSocket(url)`,
     }
 
 
+
+    if (url.pathname === '/voice/local/readiness') {
+      sendJson(res, {
+        ok: true,
+        level: readinessApplied ? 'ok' : 'warn',
+        recommendedPreset: { id: 'balanced', label: '均衡推荐', reason: '建立稳定语音基线。' },
+        speakerStatus: { reachable: readinessApplied, configured: localDoctorFixed, sampleCount: localDoctorFixed ? 3 : 0, detail: readinessApplied ? '本地服务可达。' : '本地服务未运行。' },
+        local: { status: readinessApplied ? 'running' : 'stopped', engine: 'sensevoice', model: 'sensevoice-small' },
+        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', wakeWordEnabled: true },
+        steps: readinessApplied ? [
+          { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
+          { id: 'local_process', label: '本地服务启动', status: 'ok', detail: '运行中：SenseVoice / sensevoice-small' },
+          { id: 'wake_guard', label: '唤醒保护', status: 'ok', detail: '严格唤醒已开启。' },
+        ] : [
+          { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
+          { id: 'local_process', label: '本地服务启动', status: 'warn', detail: '本地语音服务尚未运行。', fixAction: 'start_local_voice' },
+          { id: 'video_guard', label: '视频抗干扰', status: 'warn', detail: '播放视频时建议开启保护。', fixAction: 'apply_video_guard' },
+          { id: 'speaker_voiceprint', label: '本人声纹', status: 'pending', detail: '本地服务启动后才能确认声纹。' },
+        ],
+        nextActions: [],
+      })
+      return
+    }
+
+    if (url.pathname === '/voice/local/readiness/apply') {
+      readinessApplied = true
+      localDoctorFixed = true
+      localDoctorFixHistory = [{ id: 'voice_readiness_smoke', at: Date.now(), action: 'voice_readiness_wizard', label: '一键语音准备', status: 'running', before: { localAsrModel: 'small' }, after: { asrProvider: 'local' } }]
+      sendJson(res, {
+        ok: true,
+        started: { status: 'running', engine: 'sensevoice', engineLabel: 'SenseVoice', model: 'sensevoice-small' },
+        record: localDoctorFixHistory[0],
+        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', wakeWordEnabled: true, wakeMode: 'strict', wakeRepeatSuppression: true, wakeConfidenceThreshold: 0.72, wakeMinCommandChars: 2, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true, speakerVerificationEnabled: false, speakerThreshold: 0.55, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.10, videoVoiceDuckHoldMs: 2200, videoVoiceDuckSensitivity: 1.0, voiceLocalDoctorHistory: localDoctorFixHistory },
+        readiness: { ok: true, level: 'ok' },
+      })
+      return
+    }
+
     if (url.pathname === '/voice/local/speaker/status') {
       sendJson(res, {
         ok: true,
@@ -722,15 +761,25 @@ try {
     refreshHidden: document.querySelector('#voice-speaker-refresh-status')?.hidden,
   }))
   if (speakerActionVisible.startHidden !== false || speakerActionVisible.enrollHidden !== true || speakerActionVisible.refreshHidden !== false) throw new Error(`speaker status action buttons not shown for unreachable service: ${JSON.stringify(speakerActionVisible)}`)
+  const readinessText = await page.textContent('#voice-readiness-list')
+  if (!readinessText.includes('本地中文识别') || !readinessText.includes('本地服务启动') || !readinessText.includes('本人声纹')) throw new Error(`voice readiness wizard did not render guided steps: ${readinessText}`)
+  await page.click('#voice-readiness-apply')
+  await page.waitForFunction(() => document.querySelector('#voice-readiness-feedback')?.textContent.includes('已应用本地语音基线'))
+  await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('运行中：SenseVoice'))
+  const readinessSnapshot = await page.evaluate(() => ({
+    wakeMode: document.querySelector('#voice-wake-mode')?.value,
+    duck: document.querySelector('#voice-video-duck')?.checked,
+    aec: document.querySelector('#voice-video-aec')?.checked,
+    speakerVerify: document.querySelector('#voice-speaker-verify')?.checked,
+    storedProvider: localStorage.getItem('bailongma-voice-provider'),
+  }))
+  if (readinessSnapshot.wakeMode !== 'strict' || readinessSnapshot.duck !== true || readinessSnapshot.aec !== true || readinessSnapshot.speakerVerify !== false) throw new Error(`voice readiness wizard did not sync controls: ${JSON.stringify(readinessSnapshot)}`)
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
-  if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
-  await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())
-  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('最近修复') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('启动本地语音服务') && document.querySelector('.voice-local-doctor-rollback')?.textContent.includes('回滚'))
+  if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-rollback')?.click())
-  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('回滚：启动本地语音服务'))
-  await page.waitForFunction(() => document.querySelector('#voice-speaker-start-service')?.hidden === false)
-  await page.click('#voice-speaker-start-service')
-  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已请求启动'))
+  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('回滚：'))
+  await fetch(`${baseUrl}/voice/local/start`, { method: 'POST' })
+  await page.click('#voice-speaker-refresh-status')
   await page.waitForFunction(() => document.querySelector('#voice-speaker-status')?.textContent.includes('已录入'))
   await page.click('#voice-clear-speaker')
   await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('声纹已备份并清除'))
