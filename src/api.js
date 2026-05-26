@@ -44,6 +44,97 @@ const SANDBOX_PATH       = paths.sandboxDir
 const DEFAULT_AGENT_NAME = '小白龙'
 const DEFAULT_API_HOST = '127.0.0.1'
 
+
+const VOICE_STABILITY_PRESETS = Object.freeze([
+  {
+    id: 'quiet-room',
+    label: '安静环境',
+    description: '响应更自然，适合近距离安静说话。',
+    patch: {
+      wakeMode: 'strict',
+      wakeConfidenceThreshold: 0.68,
+      wakeMinCommandChars: 1,
+      wakeCooldownMs: 800,
+      wakeRequireSpeakerWhenEnabled: false,
+      speakerThreshold: 0.55,
+      videoVoiceDuckEnabled: true,
+      videoVoicePttEnabled: true,
+      videoVoiceAecEnabled: true,
+      videoVoiceDuckLevel: 0.12,
+      videoVoiceDuckHoldMs: 2200,
+      videoVoiceDuckSensitivity: 1.0,
+    },
+  },
+  {
+    id: 'video-guard',
+    label: '视频抗干扰',
+    description: '优先防止视频/别人说话误唤醒，并保留按住说话兜底。',
+    patch: {
+      wakeMode: 'strict',
+      wakeConfidenceThreshold: 0.78,
+      wakeMinCommandChars: 2,
+      wakeCooldownMs: 1600,
+      wakeRepeatSuppression: true,
+      wakeRequireSpeakerWhenEnabled: true,
+      speakerThreshold: 0.58,
+      videoVoiceDuckEnabled: true,
+      videoVoicePttEnabled: true,
+      videoVoiceAecEnabled: true,
+      videoVoiceDuckLevel: 0.08,
+      videoVoiceDuckHoldMs: 3200,
+      videoVoiceDuckSensitivity: 0.85,
+    },
+  },
+  {
+    id: 'strict-speaker',
+    label: '严格声纹',
+    description: '只响应本人声音，适合多人环境；如果误拒绝请重新录入或切回均衡。',
+    patch: {
+      wakeMode: 'strict',
+      wakeConfidenceThreshold: 0.76,
+      wakeMinCommandChars: 2,
+      wakeCooldownMs: 1400,
+      wakeRequireSpeakerWhenEnabled: true,
+      speakerVerificationEnabled: true,
+      speakerThreshold: 0.66,
+      videoVoiceDuckEnabled: true,
+      videoVoicePttEnabled: true,
+      videoVoiceAecEnabled: true,
+      videoVoiceDuckLevel: 0.10,
+      videoVoiceDuckHoldMs: 2600,
+      videoVoiceDuckSensitivity: 1.0,
+    },
+  },
+  {
+    id: 'balanced',
+    label: '均衡推荐',
+    description: '默认推荐：兼顾速度、误唤醒和声纹误拒绝。',
+    patch: {
+      wakeMode: 'strict',
+      wakeConfidenceThreshold: 0.72,
+      wakeMinCommandChars: 2,
+      wakeCooldownMs: 1200,
+      wakeRepeatSuppression: true,
+      wakeRequireSpeakerWhenEnabled: true,
+      speakerThreshold: 0.55,
+      videoVoiceDuckEnabled: true,
+      videoVoicePttEnabled: true,
+      videoVoiceAecEnabled: true,
+      videoVoiceDuckLevel: 0.10,
+      videoVoiceDuckHoldMs: 2200,
+      videoVoiceDuckSensitivity: 1.0,
+    },
+  },
+])
+
+function publicVoiceStabilityPresets() {
+  return VOICE_STABILITY_PRESETS.map(item => ({ id: item.id, label: item.label, description: item.description, patch: { ...item.patch } }))
+}
+
+function getVoiceStabilityPreset(id = '') {
+  return VOICE_STABILITY_PRESETS.find(item => item.id === String(id || '').trim()) || null
+}
+
 const wakeTuningHistory = getVoiceConfig().wakeTuningHistory || []
 
 
@@ -1183,6 +1274,33 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
           setVoiceConfig(body)
           jsonResponse(res, 200, { ok: true, voice: getVoiceConfig() })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+    // GET /settings/voice/presets — recommended voice stability presets
+    if (req.method === 'GET' && url.pathname === '/settings/voice/presets') {
+      jsonResponse(res, 200, { ok: true, presets: publicVoiceStabilityPresets(), current: getVoiceConfig() })
+      return
+    }
+
+    // POST /settings/voice/preset/apply — apply one recommended voice stability preset
+    if (req.method === 'POST' && url.pathname === '/settings/voice/preset/apply') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const preset = getVoiceStabilityPreset(body.id || body.preset || '')
+          if (!preset) {
+            jsonResponse(res, 404, { ok: false, error: 'Unknown voice stability preset.' })
+            return
+          }
+          setVoiceConfig(preset.patch)
+          jsonResponse(res, 200, { ok: true, preset: { id: preset.id, label: preset.label, description: preset.description, patch: { ...preset.patch } }, voice: getVoiceConfig() })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
         }

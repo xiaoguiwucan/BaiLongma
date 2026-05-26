@@ -265,3 +265,11 @@
 - Verification passed: syntax checks for API, Brain UI app, and smoke scripts; `npm run smoke:voice-events` 65/65; `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Added backend voice stability presets to reduce manual tuning burden across wake word, speaker verification, and video anti-interference settings.
+- Added `GET /settings/voice/presets` returning recommended presets: `quiet-room`, `video-guard`, `strict-speaker`, and `balanced` with labels, descriptions, and bounded patches.
+- Added `POST /settings/voice/preset/apply` to persist one selected preset through the existing `setVoiceConfig()` clamp/sanitize path.
+- The `video-guard` preset raises wake confidence, keeps strict prefix wake, enables wake/speaker coupling, lowers video duck volume, and keeps PTT/AEC enabled for noisy playback scenarios.
+- Extended `smoke:voice-events` to 67/67 checks for preset listing and preset apply persistence.
+- Verification passed: syntax checks for API and voice-events smoke script; `npm run smoke:voice-events` 67/67.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

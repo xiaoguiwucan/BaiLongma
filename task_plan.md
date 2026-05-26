@@ -296,3 +296,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 30: Backend voice stability presets
+- [x] Define recommended presets for quiet room, video anti-interference, strict speaker verification, and balanced use.
+- [x] Add `GET /settings/voice/presets` to expose presets with labels/descriptions/patches.
+- [x] Add `POST /settings/voice/preset/apply` to persist a selected preset safely.
+- [x] Route preset application through `setVoiceConfig()` so existing bounds and sanitization still apply.
+- [x] Extend voice-events smoke coverage for preset listing and application.
+- [x] Verify syntax plus voice-events smoke suite.
+- [x] Push as a development checkpoint only, without tag/Release.
