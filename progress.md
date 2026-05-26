@@ -14,3 +14,8 @@
 - Verification passed: `npm run smoke:voice-mapping` 33/33.
 - Verification passed: `npm run smoke:voice-events` 37/37.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.237 as `5ef2fe4 feat: add voice event client capabilities`.
+- Tagged and pushed `v2.1.237` to origin.
+- Created local release assets: `backups/v2.1.237/BaiLongma-v2.1.237-source.tar.gz` and `backups/v2.1.237/BaiLongma-v2.1.237.bundle`.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.237
+- Uploaded release assets via GitHub API: source tarball and git bundle.
