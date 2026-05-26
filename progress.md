@@ -365,3 +365,5 @@
 - Verification passed: `node --check src/api.js`; `node --check src/config.js`; `node --check src/ui/brain-ui/app-shell.js`; `node --check src/ui/brain-ui/app.js`; `node --check scripts/smoke-brain-ui.mjs`; `node --check scripts/smoke-voice-events.mjs`; `python3 -m py_compile src/voice/sensevoice_server.py`.
 - Verification passed: `npm run smoke:voice-events` 84/84 and `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
+- Pushed development checkpoint `d5f20ae feat: add local voice readiness wizard` to `origin/main`.
+- Per user instruction, no tag/GitHub Release was created for this checkpoint; it will be included in the next large version milestone notes.

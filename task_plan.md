@@ -455,4 +455,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add Brain UI “一键语音准备” panel with human-readable steps.
 - [x] Sync controls and diagnostics after applying the readiness baseline.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
-- [ ] Push as a development checkpoint only, without tag/Release.
+- [x] Push as a development checkpoint only, without tag/Release.
