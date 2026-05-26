@@ -100,6 +100,39 @@ function createServer() {
       return
     }
 
+
+    if (url.pathname === '/voice/events/clients') {
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.events',
+        version: 3,
+        clients: 1,
+        clientDetails: [
+          {
+            audio: true,
+            binaryAudio: true,
+            identity: {
+              clientId: 'smoke-esp32',
+              device: 'xiaozhi-esp32',
+              app: 'brain-ui-smoke',
+              version: '0.1.0',
+              platform: 'esp32',
+              capabilities: ['binary_audio', 'wake', 'display'],
+              lastSeenAt: Date.now(),
+            },
+            negotiated: {
+              audioMode: 'binary',
+              binaryAudio: true,
+              base64Audio: false,
+              shouldSubscribeAudio: false,
+              reason: 'client_capability',
+            },
+          },
+        ],
+      })
+      return
+    }
+
     if (url.pathname === '/settings/tts') {
       sendJson(res, {
         ok: true,
@@ -267,6 +300,8 @@ try {
     personImage: !document.querySelector('#pc-hero-img')?.hidden,
     closeHidden: getComputedStyle(document.querySelector('#pc-exit-btn')).opacity === '0',
     brand: document.querySelector('#agent-brand-name')?.textContent || '',
+    voiceClientsCount: document.querySelector('#voice-clients-count')?.textContent || '',
+    voiceClientCard: document.querySelector('.voice-client-card')?.textContent || '',
   }))
 
   if (!snapshot.d3) throw new Error('d3 global missing')
@@ -277,6 +312,15 @@ try {
   if (!snapshot.personKnownFor.includes('淘宝')) throw new Error('person card did not absorb assistant known-for items')
   if (!snapshot.personImage) throw new Error('person card hero image was not visible')
   if (!snapshot.closeHidden) throw new Error('person card close button should be hidden until hover')
+  await page.waitForFunction(() => document.querySelector('#voice-clients-count')?.textContent === '1' && document.querySelector('.voice-client-card')?.textContent.includes('smoke-esp32'))
+  const voiceClientSnapshot = await page.evaluate(() => ({
+    count: document.querySelector('#voice-clients-count')?.textContent || '',
+    audio: document.querySelector('#voice-clients-audio-count')?.textContent || '',
+    binary: document.querySelector('#voice-clients-binary-count')?.textContent || '',
+    card: document.querySelector('.voice-client-card')?.textContent || '',
+  }))
+  if (voiceClientSnapshot.count !== '1') throw new Error('voice clients panel did not show connected client count')
+  if (!voiceClientSnapshot.card.includes('binary')) throw new Error('voice clients panel did not render negotiated binary mode')
   await page.hover('.pc-card')
   await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#pc-exit-btn')).opacity) > 0.5)
   await page.click('#pc-exit-btn')

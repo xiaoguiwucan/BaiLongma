@@ -361,6 +361,22 @@ const createSettingsModal = () => `
           </div>
 
           <div class="settings-section">
+            <div class="settings-section-label">外部语音客户端</div>
+            <p class="settings-hint">显示通过 /voice/events 接入的小智式 ESP32、桥接器、手机端或调试 CLI。用于排查是否连上、是否订阅音频、声明了哪些 capabilities，以及服务端建议的音频模式。</p>
+            <div class="voice-clients-toolbar">
+              <div class="voice-client-stat"><span>连接</span><strong id="voice-clients-count">0</strong></div>
+              <div class="voice-client-stat"><span>音频订阅</span><strong id="voice-clients-audio-count">0</strong></div>
+              <div class="voice-client-stat"><span>二进制</span><strong id="voice-clients-binary-count">0</strong></div>
+              <button class="settings-save-btn" id="voice-clients-refresh-btn" type="button">刷新客户端</button>
+              <label class="voice-clients-auto"><input id="voice-clients-auto-refresh" type="checkbox" checked> 自动刷新</label>
+              <span class="settings-feedback" id="voice-clients-feedback"></span>
+            </div>
+            <div id="voice-clients-list" class="voice-clients-list">
+              <div class="voice-clients-empty">暂无外部客户端连接。可运行 <code>npm run voice:events -- listen --audio --client-id mac-debug</code> 测试。</div>
+            </div>
+          </div>
+
+          <div class="settings-section">
             <div class="settings-section-label">语音识别模式</div>
             <div class="settings-row">
               <label class="settings-label" for="voice-provider-select">服务商</label>

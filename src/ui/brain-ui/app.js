@@ -1689,6 +1689,93 @@ bootstrapACUI();
 initPanelCollapse();
 initWechatPopup();
 
+
+function formatVoiceClientSeenAt(value) {
+  const ts = Number(value || 0);
+  if (!Number.isFinite(ts) || ts <= 0) return "—";
+  const diff = Math.max(0, Date.now() - ts);
+  if (diff < 1000) return "刚刚";
+  if (diff < 60000) return `${Math.round(diff / 1000)} 秒前`;
+  if (diff < 3600000) return `${Math.round(diff / 60000)} 分钟前`;
+  return new Date(ts).toLocaleString();
+}
+
+function renderVoiceClientTags(capabilities = []) {
+  const safeCaps = Array.isArray(capabilities) ? capabilities : [];
+  if (!safeCaps.length) return '<span class="voice-client-tag">no capabilities</span>';
+  return safeCaps.map(cap => `<span class="voice-client-tag">${escapeFocusText(cap)}</span>`).join("");
+}
+
+function renderVoiceClientCard(client = {}) {
+  const identity = client.identity || {};
+  const negotiated = client.negotiated || {};
+  const title = identity.clientId || identity.device || identity.app || "unknown-client";
+  const subtitle = [identity.device, identity.platform, identity.version].filter(Boolean).join(" · ") || identity.app || "未登记设备信息";
+  const audioState = client.audio ? (client.binaryAudio ? "binary subscribed" : "base64 subscribed") : "not subscribed";
+  return `
+    <article class="voice-client-card">
+      <div class="voice-client-head">
+        <div>
+          <div class="voice-client-title">${escapeFocusText(title)}</div>
+          <div class="voice-client-subtitle">${escapeFocusText(subtitle)}</div>
+        </div>
+        <div class="voice-client-mode">${escapeFocusText(negotiated.audioMode || "none")}</div>
+      </div>
+      <div class="voice-client-grid">
+        <div class="voice-client-kv"><span>App</span><strong>${escapeFocusText(identity.app || "—")}</strong></div>
+        <div class="voice-client-kv"><span>Audio</span><strong>${escapeFocusText(audioState)}</strong></div>
+        <div class="voice-client-kv"><span>Last Seen</span><strong>${escapeFocusText(formatVoiceClientSeenAt(identity.lastSeenAt || identity.updatedAt || identity.connectedAt))}</strong></div>
+        <div class="voice-client-kv"><span>Negotiated</span><strong>${escapeFocusText(negotiated.reason || "—")}</strong></div>
+      </div>
+      <div class="voice-client-tags">${renderVoiceClientTags(identity.capabilities)}</div>
+    </article>`;
+}
+
+function initVoiceClientsPanel() {
+  const listEl = document.getElementById("voice-clients-list");
+  if (!listEl) return;
+  const countEl = document.getElementById("voice-clients-count");
+  const audioCountEl = document.getElementById("voice-clients-audio-count");
+  const binaryCountEl = document.getElementById("voice-clients-binary-count");
+  const feedbackEl = document.getElementById("voice-clients-feedback");
+  const refreshBtn = document.getElementById("voice-clients-refresh-btn");
+  const autoEl = document.getElementById("voice-clients-auto-refresh");
+  let timer = null;
+
+  async function refreshVoiceClients({ quiet = false } = {}) {
+    if (!quiet && feedbackEl) feedbackEl.textContent = "刷新中…";
+    try {
+      const res = await fetch(`${API}/voice/events/clients`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const clients = Array.isArray(data.clientDetails) ? data.clientDetails : [];
+      if (countEl) countEl.textContent = String(data.clients ?? clients.length);
+      if (audioCountEl) audioCountEl.textContent = String(clients.filter(c => c.audio).length);
+      if (binaryCountEl) binaryCountEl.textContent = String(clients.filter(c => c.binaryAudio).length);
+      if (!clients.length) {
+        listEl.innerHTML = '<div class="voice-clients-empty">暂无外部客户端连接。可运行 <code>npm run voice:events -- listen --audio --client-id mac-debug</code> 测试。</div>';
+      } else {
+        listEl.innerHTML = clients.map(renderVoiceClientCard).join("");
+      }
+      if (feedbackEl) feedbackEl.textContent = quiet ? "" : "已刷新";
+    } catch (err) {
+      listEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/clients 失败：${escapeFocusText(err.message || err)}</div>`;
+      if (feedbackEl) feedbackEl.textContent = "读取失败";
+    }
+  }
+
+  function restartTimer() {
+    if (timer) clearInterval(timer);
+    timer = null;
+    if (autoEl?.checked) timer = setInterval(() => refreshVoiceClients({ quiet: true }), 5000);
+  }
+
+  refreshBtn?.addEventListener("click", () => refreshVoiceClients());
+  autoEl?.addEventListener("change", restartTimer);
+  refreshVoiceClients({ quiet: true });
+  restartTimer();
+}
+
 // ── TTS settings panel init ───────────────────────────────────────────────────
 function initTTSSettings() {
   const providerSel = document.getElementById("tts-provider-select");
@@ -2654,6 +2741,7 @@ function initTTSSettings() {
   });
 
   initTTSSettings();
+  initVoiceClientsPanel();
 
   const memoryGraphToggle = document.getElementById("settings-memory-graph-toggle");
   const memoryGraphFeedback = document.getElementById("settings-memory-graph-feedback");

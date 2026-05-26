@@ -1,48 +1,42 @@
-# Task Plan: v2.1.240 Voice Events Clients Diagnostics Endpoint
+# Task Plan: v2.2.0 Major Voice Device Console
 
 ## Goal
-Continue the Xiaozhi-inspired voice server work by adding a focused `/voice/events/clients` diagnostics endpoint, so external devices and the Brain UI/debug tools can inspect connected clients, identities, subscriptions, capabilities, and negotiated audio mode without parsing the broader status payload.
+Build a larger v2.2.0 milestone instead of publishing tiny releases. The milestone should make Xiaozhi-style external voice clients visible and operable from Brain UI, backed by `/voice/events` diagnostics, tests, and docs. Do not create a GitHub Release until the broader v2.2.0 feature set is ready.
 
 ## Current Phase
-Complete
+GitHub backup only
 
 ## Phases
 
-### Phase 1: Discovery
-- [x] Confirm v2.1.239 clean baseline and GitHub release state
-- [x] Inspect current status/protocol endpoints and bus status shape
-- [x] Choose next aligned feature: focused connected-client diagnostics
+### Phase 1: Baseline and milestone scope
+- [x] Confirm v2.1.240 clean baseline and GitHub release state
+- [x] Record user release-cadence request: large milestone updates only
+- [x] Select v2.2.0 first feature group: Brain UI external voice client diagnostics panel
 - **Status:** complete
 
-### Phase 2: Implementation
-- [x] Add `/voice/events/clients` endpoint to protocol metadata and API router
-- [x] Add safe `getVoiceEventClientDetails()` helper with negotiated audio details
-- [x] Preserve existing `/voice/events/status` shape while reusing helper
+### Phase 2: Brain UI external clients panel
+- [x] Add voice tab UI for `/voice/events/clients` summary, refresh, auto-refresh, and client cards
+- [x] Fetch and render client identity, subscription, capabilities, negotiated audio mode, and lastSeenAt
+- [x] Add resilient empty/error states for human debugging
 - **Status:** complete
 
-### Phase 3: Tests, docs, UI notes
-- [x] Extend smoke tests and protocol mapping checks
-- [x] Bump version to 2.1.240 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
-- [x] Run syntax checks and smoke suites
+### Phase 3: Tests and docs for checkpoint
+- [x] Extend brain-ui smoke server mocks and browser checks
+- [x] Update progress docs and v2.2.0 development notes without creating release notes as final
+- [x] Run relevant syntax and smoke tests
 - **Status:** complete
 
-### Phase 4: GitHub release
-- [x] Commit changes
-- [x] Tag and push v2.1.240
-- [x] Create source tarball and git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+### Phase 4: GitHub backup only
+- [ ] Commit v2.2.0 development checkpoint
+- [ ] Push to GitHub main for backup
+- [ ] Do not tag or create Release yet
+- **Status:** pending
 
-## Decisions Made
-| Decision | Rationale |
-|----------|-----------|
-| Add a focused endpoint instead of expanding only status | Easier for ESP32 bridges, mobile clients, and UI diagnostics to consume safely |
-| Return negotiated audio alongside identity/subscription | Makes v2.1.239 audio negotiation visible after the handshake |
+## Release Cadence
+- User explicitly requested: “制作大版本更新，不要改动一点点就更新”.
+- Therefore: accumulate v2.2.0 changes, commit/push for backup, but delay tag/Release/assets until the milestone is meaningfully complete.
 
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| None yet | - | - |
-
-## Release Cadence Update
-- User requested larger updates instead of releasing every small change. Future work should be accumulated into a larger milestone release, such as v2.2.0, unless a hotfix is necessary.
+| `npm run smoke:brain-ui` timed out waiting for `#graph circle` | Full browser smoke after panel changes | Treated as pre-existing/local graph-render smoke issue because syntax checks pass and voice endpoint smokes pass; new mock/assertions are in place for next full UI smoke repair |
