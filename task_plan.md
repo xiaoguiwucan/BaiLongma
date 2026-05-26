@@ -398,3 +398,11 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui smoke coverage for action visibility when service is unreachable.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 40: Speaker status action feedback
+- [x] Add user-visible feedback when the speaker-status “启动服务” action is clicked.
+- [x] Surface backend start errors instead of silently retrying status refresh.
+- [x] Refresh both speaker status and local voice doctor after a successful start request.
+- [x] Extend brain-ui smoke coverage for start-service feedback and status transition.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

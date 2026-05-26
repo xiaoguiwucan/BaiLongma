@@ -548,8 +548,14 @@ new WebSocket(url)`,
       return
     }
 
-    if (url.pathname === '/voice/local/start' || url.pathname === '/voice/local/status') {
-      sendJson(res, { ok: true, running: false, provider: 'local', model: 'sensevoice-small' })
+    if (url.pathname === '/voice/local/start') {
+      localDoctorFixed = true
+      sendJson(res, { ok: true, status: 'starting', engine: 'sensevoice', engineLabel: 'SenseVoice', model: 'sensevoice-small' })
+      return
+    }
+
+    if (url.pathname === '/voice/local/status') {
+      sendJson(res, { ok: true, running: localDoctorFixed, provider: 'local', model: 'sensevoice-small' })
       return
     }
 
@@ -694,6 +700,9 @@ try {
     refreshHidden: document.querySelector('#voice-speaker-refresh-status')?.hidden,
   }))
   if (speakerActionVisible.startHidden !== false || speakerActionVisible.enrollHidden !== true || speakerActionVisible.refreshHidden !== false) throw new Error(`speaker status action buttons not shown for unreachable service: ${JSON.stringify(speakerActionVisible)}`)
+  await page.click('#voice-speaker-start-service')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已请求启动'))
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-status')?.textContent.includes('已录入'))
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())

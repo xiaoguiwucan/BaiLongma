@@ -329,3 +329,8 @@
 - “启动服务” calls `/voice/local/start` using the currently selected local ASR model/profile; “去录入” reuses the existing enroll flow.
 - Extended brain-ui smoke coverage to verify the unreachable-service state exposes the correct action buttons.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Improved feedback for the speaker status “启动服务” action so users see that a start request was sent and which engine/model is being started.
+- Start-service errors now appear in the existing speaker feedback area instead of failing silently.
+- After a successful start request, Brain UI refreshes both speaker status and the local voice doctor so the two diagnostic panels stay synchronized.
+- Extended brain-ui smoke coverage for the start-service button, feedback text, and post-start speaker status transition.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

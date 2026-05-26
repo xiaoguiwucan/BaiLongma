@@ -3386,16 +3386,24 @@ function initTTSSettings() {
 
   async function startSpeakerVoiceService() {
     const btn = document.getElementById("voice-speaker-start-service");
+    const fb = document.getElementById("voice-speaker-feedback");
     if (btn) btn.disabled = true;
+    showFeedback(fb, "正在启动本地语音服务…");
     try {
       const model = document.getElementById("voice-local-asr-model")?.value || localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
       const profile = document.getElementById("voice-asr-profile")?.value || localStorage.getItem(VOICE_ASR_PROFILE_KEY) || "balanced";
-      await fetch(`${API}/voice/local/start`, {
+      const resp = await fetch(`${API}/voice/local/start`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ localAsrModel: model, model, asrProfile: profile }),
       });
+      const data = await resp.json().catch(() => ({}));
+      if (!resp.ok || data?.ok === false) throw new Error(data?.error || "启动失败");
+      showFeedback(fb, `已请求启动：${data.engineLabel || data.engine || model}`);
       setTimeout(refreshSpeakerStatus, 800);
+      setTimeout(refreshVoiceLocalDoctor, 1000);
+    } catch (err) {
+      showFeedback(fb, err?.message || "启动失败", true);
     } finally {
       if (btn) btn.disabled = false;
     }
