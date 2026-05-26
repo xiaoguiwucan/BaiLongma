@@ -46,3 +46,11 @@
 - Verification passed: `npm run smoke:brain-ui`.
 - Verification passed: `node --check src/ui/brain-ui/app-shell.js`, `node --check src/ui/brain-ui/app.js`, `node --check scripts/smoke-brain-ui.mjs`.
 - Verification passed: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.
+- Added backend `GET /voice/events/onboarding` endpoint so UI and external bridges can fetch canonical onboarding commands/messages instead of duplicating front-end guesses.
+- Added `client_onboarding` protocol capability and `endpoints.onboarding` metadata.
+- Added `getVoiceEventsOnboarding()` helper with local/LAN WebSocket URLs, local/LAN CLI commands, `client:hello` JSON, binary subscribe JSON, and LAN/token notes.
+- Updated Brain UI external clients guide to prefer backend onboarding data when available, falling back to local generation.
+- Extended smoke mapping to 39/39 and voice events smoke to 43/43 for onboarding metadata/endpoint coverage.
+- Extended brain-ui smoke mock with `/voice/events/onboarding`.
+- Verification passed: `npm run smoke:voice-mapping` 39/39, `npm run smoke:voice-events` 43/43, `npm run smoke:brain-ui`, and `npm run smoke:voice-events-client` 8/8.
+- Verification passed: syntax checks for `src/voice/voice-event-bus.js`, `src/api.js`, `scripts/smoke-voice-mapping.mjs`, `scripts/smoke-voice-events.mjs`, `src/ui/brain-ui/app.js`, and `scripts/smoke-brain-ui.mjs`.

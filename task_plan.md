@@ -68,3 +68,11 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add guidance for token query string and negotiated audio mode.
 - [x] Extend brain-ui smoke to assert LAN command and handshake example.
 - [x] Verify brain-ui and voice event smoke suites.
+
+## Checkpoint 6: Canonical onboarding endpoint
+- [x] Add `GET /voice/events/onboarding` backend endpoint.
+- [x] Add `client_onboarding` protocol capability and protocol endpoint metadata.
+- [x] Return local/LAN URLs, CLI commands, `client:hello`, subscribe message, and token/LAN notes.
+- [x] Update Brain UI to use backend onboarding data when available.
+- [x] Extend mapping, voice-events, and brain-ui smoke coverage.
+- [x] Verify all relevant smoke suites for this checkpoint.

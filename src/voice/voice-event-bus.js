@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -20,6 +20,44 @@ export const VOICE_EVENTS_PROTOCOL_STATES = Object.freeze({
   interrupt: ['interrupt'],
 })
 
+
+export function getVoiceEventsOnboarding({ host = '127.0.0.1', port = 3721, protocol = 'http:', tokenConfigured = false } = {}) {
+  const safeHost = String(host || '127.0.0.1').replace(/^\[(.*)\]$/, '$1')
+  const displayHost = ['localhost', '127.0.0.1', '::1'].includes(safeHost) ? '<Mac局域网IP>' : safeHost
+  const wsScheme = protocol === 'https:' ? 'wss' : 'ws'
+  const localWsUrl = `${wsScheme}://127.0.0.1:${port}/voice/events`
+  const lanWsUrl = `${wsScheme}://${displayHost}:${port}/voice/events${tokenConfigured ? '?token=<token>' : ''}`
+  const localCommand = `npm run voice:events -- listen --url ${localWsUrl} --audio --binary --client-id mac-debug --device mac --platform macos --capability binary_audio --capability wake --capability display`
+  const lanCommand = `npm run voice:events -- listen --url ${lanWsUrl} --audio --binary --client-id esp32-test --device xiaozhi-esp32 --platform esp32 --capability binary_audio --capability wake --capability display`
+  const clientHello = {
+    type: 'client:hello',
+    clientId: 'esp32-living-room',
+    device: 'xiaozhi-esp32',
+    app: 'bailongma-bridge',
+    version: '0.1.0',
+    platform: 'esp32',
+    capabilities: ['binary_audio', 'tts_speak', 'wake', 'display'],
+  }
+  const subscribe = { type: 'subscribe', audio: true, binaryAudio: true }
+  return {
+    service: 'bailongma.voice.events',
+    version: VOICE_EVENTS_PROTOCOL_VERSION,
+    urls: {
+      localWebSocket: localWsUrl,
+      lanWebSocket: lanWsUrl,
+      protocol: '/voice/events/protocol',
+      clients: '/voice/events/clients',
+    },
+    commands: { local: localCommand, lan: lanCommand },
+    messages: { clientHello, subscribe },
+    notes: [
+      'LAN devices must replace <Mac局域网IP> with this Mac\'s LAN IP address.',
+      tokenConfigured ? 'A token is configured; remote clients should pass ?token=<token> or Authorization: Bearer <token>.' : 'No API token is configured; localhost is open and LAN access still depends on BAILONGMA_ALLOW_LAN.',
+      'Send client:hello first, read client:accepted.negotiated.audioMode, then choose subscribe audio options.',
+    ],
+  }
+}
+
 export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {}) {
   const activeTTSSpeakLimits = normalizeVoiceEventsTTSSpeakLimits(ttsSpeakLimits)
   return {
@@ -30,6 +68,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
       websocket: '/voice/events',
       status: '/voice/events/status',
       clients: '/voice/events/clients',
+      onboarding: '/voice/events/onboarding',
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
     },

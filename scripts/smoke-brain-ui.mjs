@@ -114,6 +114,28 @@ function createServer() {
 
 
 
+
+    if (url.pathname === '/voice/events/onboarding') {
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.events',
+        version: 3,
+        urls: {
+          localWebSocket: 'ws://127.0.0.1:3721/voice/events',
+          lanWebSocket: 'ws://<Mac局域网IP>:3721/voice/events',
+        },
+        commands: {
+          local: 'npm run voice:events -- listen --url ws://127.0.0.1:3721/voice/events --audio --binary --client-id mac-debug',
+          lan: 'npm run voice:events -- listen --url ws://<Mac局域网IP>:3721/voice/events --audio --binary --client-id esp32-test --device xiaozhi-esp32',
+        },
+        messages: {
+          clientHello: { type: 'client:hello', clientId: 'esp32-living-room', device: 'xiaozhi-esp32', capabilities: ['binary_audio', 'wake'] },
+          subscribe: { type: 'subscribe', audio: true, binaryAudio: true },
+        },
+      })
+      return
+    }
+
     if (url.pathname === '/voice/events/protocol') {
       sendJson(res, {
         ok: true,

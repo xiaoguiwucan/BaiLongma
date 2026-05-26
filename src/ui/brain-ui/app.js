@@ -1803,9 +1803,10 @@ function initVoiceClientsPanel() {
     const endpoints = protocol.endpoints || {};
     const caps = Array.isArray(protocol.capabilities) ? protocol.capabilities : [];
     const modes = protocol.negotiation?.audioModes || [];
-    const command = voiceClientConnectCommand(protocol);
-    const lanCommand = voiceClientLanCommand(protocol);
-    const handshake = renderDeviceHandshakeExample();
+    const onboarding = protocol.onboarding || null;
+    const command = onboarding?.commands?.local || voiceClientConnectCommand(protocol);
+    const lanCommand = onboarding?.commands?.lan || voiceClientLanCommand(protocol);
+    const handshake = JSON.stringify(onboarding?.messages?.clientHello || JSON.parse(renderDeviceHandshakeExample()), null, 2);
     diagnosticsEl.hidden = false;
     diagnosticsEl.innerHTML = `
       <div class="voice-diagnostic-line"><span>WebSocket</span><code>${escapeFocusText(endpoints.websocket || "—")}</code></div>
@@ -1833,6 +1834,10 @@ function initVoiceClientsPanel() {
       const res = await fetch(`${API}/voice/events/protocol`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const protocol = await res.json();
+      try {
+        const onboardingRes = await fetch(`${API}/voice/events/onboarding`);
+        if (onboardingRes.ok) protocol.onboarding = await onboardingRes.json();
+      } catch {}
       renderProtocolDiagnostics(protocol);
       if (feedbackEl) feedbackEl.textContent = "协议正常";
     } catch (err) {

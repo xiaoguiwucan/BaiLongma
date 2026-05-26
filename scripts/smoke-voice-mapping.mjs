@@ -1,4 +1,4 @@
-import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi, validateVoiceEventClientMessage, VOICE_EVENTS_TTS_SPEAK_LIMITS, normalizeVoiceEventsTTSSpeakLimits, sanitizeVoiceEventClientIdentity, negotiateVoiceEventClientCapabilities } from '../src/voice/voice-event-bus.js'
+import { getVoiceEventsProtocolMetadata, mapVoiceEventToXiaozhi, validateVoiceEventClientMessage, VOICE_EVENTS_TTS_SPEAK_LIMITS, normalizeVoiceEventsTTSSpeakLimits, sanitizeVoiceEventClientIdentity, negotiateVoiceEventClientCapabilities, getVoiceEventsOnboarding } from '../src/voice/voice-event-bus.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -79,12 +79,12 @@ assert(mapVoiceEventToXiaozhi(null) === null, 'null event maps to null')
 
 const protocol = getVoiceEventsProtocolMetadata()
 assert(protocol.version >= 3 && protocol.capabilities.includes('tts_speak') && protocol.capabilities.includes('protocol_errors') && protocol.capabilities.includes('tts_speak_limits'), 'protocol metadata exposes version, tts_speak, protocol_errors, and tts_speak_limits')
-assert(protocol.endpoints?.protocol === '/voice/events/protocol' && protocol.endpoints?.websocket === '/voice/events' && protocol.endpoints?.clients === '/voice/events/clients', 'protocol metadata exposes endpoints')
+assert(protocol.endpoints?.protocol === '/voice/events/protocol' && protocol.endpoints?.websocket === '/voice/events' && protocol.endpoints?.clients === '/voice/events/clients' && protocol.endpoints?.onboarding === '/voice/events/onboarding', 'protocol metadata exposes endpoints')
 assert(protocol.auth?.localhostExempt === true && protocol.auth?.methods?.length >= 2, 'protocol metadata exposes auth methods')
 assert(protocol.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocol.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol metadata exposes tts speak limits')
 assert(protocol.limits?.ttsSpeak?.scopes?.includes('connection') && protocol.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol metadata exposes tts speak limit scopes')
 assert(protocol.capabilities.includes('client_identity') && protocol.clientMessages.includes('client:hello') && protocol.diagnosticsFields?.includes('negotiated'), 'protocol metadata exposes client identity diagnostics')
-assert(protocol.capabilities.includes('audio_negotiation') && protocol.capabilities.includes('client_diagnostics') && protocol.negotiation?.audioModes?.includes('binary'), 'protocol metadata exposes audio negotiation capability')
+assert(protocol.capabilities.includes('audio_negotiation') && protocol.capabilities.includes('client_diagnostics') && protocol.capabilities.includes('client_onboarding') && protocol.negotiation?.audioModes?.includes('binary'), 'protocol metadata exposes audio negotiation and onboarding capability')
 assert(protocol.identityFields.includes('capabilities') && protocol.clientCapabilityExamples.includes('binary_audio'), 'protocol metadata exposes client capability fields')
 const customProtocol = getVoiceEventsProtocolMetadata({ ttsSpeakLimits: { maxTextChars: 123, cooldownMs: 456 }, auth: { tokenConfigured: true } })
 assert(customProtocol.limits?.ttsSpeak?.maxTextChars === 123 && customProtocol.limits?.ttsSpeak?.cooldownMs === 456, 'protocol metadata accepts configured tts speak limits')
@@ -96,6 +96,9 @@ assert(identity.capabilities.includes('binary_audio') && identity.capabilities.i
 assert(negotiateVoiceEventClientCapabilities(identity).audioMode === 'binary', 'client capability negotiation prefers binary audio')
 assert(negotiateVoiceEventClientCapabilities({ capabilities: ['base64_audio'] }).audioMode === 'base64', 'client capability negotiation accepts base64 audio')
 assert(negotiateVoiceEventClientCapabilities({ capabilities: ['wake'] }).audioMode === 'none', 'client capability negotiation handles no audio capability')
+const onboarding = getVoiceEventsOnboarding({ host: '192.168.1.8', port: 3721, tokenConfigured: true })
+assert(onboarding.urls?.lanWebSocket?.includes('192.168.1.8') && onboarding.urls.lanWebSocket.includes('token=<token>'), 'onboarding exposes LAN websocket URL with token hint')
+assert(onboarding.messages?.clientHello?.type === 'client:hello' && onboarding.messages?.subscribe?.binaryAudio === true, 'onboarding exposes client hello and subscribe messages')
 assert(validateVoiceEventClientMessage({ type: 'ping' }).ok === true, 'client validation accepts ping')
 assert(validateVoiceEventClientMessage({ type: 'client:hello', clientId: 'dev-1' }).ok === true, 'client validation accepts client hello')
 assert(validateVoiceEventClientMessage({ type: 'tts:speak', text: '你好' }).ok === true, 'client validation accepts tts speak with text')

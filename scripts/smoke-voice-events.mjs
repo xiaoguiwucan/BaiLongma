@@ -75,8 +75,8 @@ try {
   assert(statusBefore.ok === true && statusBefore.version >= 3, 'status exposes voice event protocol version', JSON.stringify(statusBefore))
 
   const protocolMeta = await fetch(`${API}/voice/events/protocol`).then(r => r.json())
-  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits') && protocolMeta.capabilities?.includes('client_identity') && protocolMeta.capabilities?.includes('audio_negotiation') && protocolMeta.capabilities?.includes('client_diagnostics'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
-  assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish' && protocolMeta.endpoints?.clients === '/voice/events/clients', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
+  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits') && protocolMeta.capabilities?.includes('client_identity') && protocolMeta.capabilities?.includes('audio_negotiation') && protocolMeta.capabilities?.includes('client_diagnostics') && protocolMeta.capabilities?.includes('client_onboarding'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
+  assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish' && protocolMeta.endpoints?.clients === '/voice/events/clients' && protocolMeta.endpoints?.onboarding === '/voice/events/onboarding', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
   assert(protocolMeta.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocolMeta.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol endpoint exposes tts speak limits', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol endpoint exposes remote address tts speak scope', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.auth?.localhostExempt === true && protocolMeta.auth?.methods?.includes('?token=<token>'), 'protocol endpoint exposes auth metadata', JSON.stringify(protocolMeta.auth))
@@ -85,6 +85,9 @@ try {
   assert(protocolMeta.negotiation?.audioModes?.includes('binary') && protocolMeta.negotiation?.autoSubscribe === false, 'protocol endpoint exposes audio negotiation metadata', JSON.stringify(protocolMeta.negotiation))
   const clientsBefore = await fetch(`${API}/voice/events/clients`).then(r => r.json())
   assert(clientsBefore.ok === true && clientsBefore.clients === 0 && Array.isArray(clientsBefore.clientDetails), 'clients endpoint exposes empty client diagnostics', JSON.stringify(clientsBefore))
+  const onboarding = await fetch(`${API}/voice/events/onboarding`).then(r => r.json())
+  assert(onboarding.ok === true && onboarding.urls?.localWebSocket?.includes('/voice/events') && onboarding.commands?.local?.includes('npm run voice:events'), 'onboarding endpoint exposes local websocket and CLI command', JSON.stringify(onboarding))
+  assert(onboarding.messages?.clientHello?.type === 'client:hello' && onboarding.messages?.subscribe?.binaryAudio === true, 'onboarding endpoint exposes client hello and binary subscribe examples', JSON.stringify(onboarding.messages))
 
   await fetch(`${API}/settings/tts`, {
     method: 'POST',
