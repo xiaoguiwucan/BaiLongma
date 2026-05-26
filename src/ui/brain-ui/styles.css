@@ -4813,3 +4813,16 @@ body.person-card-mode .person-card-panel,
   font-size: 11px;
   background: rgba(0,0,0,0.16);
 }
+
+
+.voice-local-doctor-rollback {
+  margin-left: 6px;
+  border: 1px solid rgba(211,152,114,0.30);
+  border-radius: 999px;
+  padding: 2px 6px;
+  color: var(--warm);
+  background: rgba(211,152,114,0.08);
+  cursor: pointer;
+  font-size: 10px;
+}
+.voice-local-doctor-rollback:disabled { cursor: wait; opacity: 0.65; }

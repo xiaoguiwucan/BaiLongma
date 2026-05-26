@@ -679,6 +679,7 @@ function sanitizeVoiceLocalDoctorHistory(value) {
       before: cleanObject(item.before),
       after: cleanObject(item.after),
       status: String(item.status || 'ok').slice(0, 40),
+      rollbackOf: item.rollbackOf ? String(item.rollbackOf).slice(0, 80) : undefined,
     }
   }).filter(Boolean)
 }

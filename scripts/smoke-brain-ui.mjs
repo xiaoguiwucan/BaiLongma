@@ -51,6 +51,7 @@ function createServer() {
   let wakeTuningApplied = false
   let localDoctorFixed = false
   let localDoctorFixHistory = []
+  let localDoctorRollback = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -508,13 +509,27 @@ new WebSocket(url)`,
 
     if (url.pathname === '/voice/local/doctor/fix') {
       localDoctorFixed = true
-      localDoctorFixHistory = [{ id: 'voice_doctor_smoke', at: Date.now(), action: 'start_local_voice', label: '启动本地语音服务', status: 'running' }]
+      localDoctorFixHistory = [{ id: 'voice_doctor_smoke', at: Date.now(), action: 'start_local_voice', label: '启动本地语音服务', status: 'running', before: { localAsrModel: 'small' }, after: { localAsrModel: 'sensevoice-small' } }]
       sendJson(res, {
         ok: true,
         action: 'start_local_voice',
         record: localDoctorFixHistory[0],
         voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
         doctor: { ok: true, level: 'ok', recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
+      })
+      return
+    }
+
+
+    if (url.pathname === '/voice/local/doctor/rollback') {
+      localDoctorRollback = true
+      localDoctorFixHistory = [{ id: 'voice_doctor_rollback', at: Date.now(), action: 'rollback_local_doctor_fix', label: '回滚：启动本地语音服务', status: 'ok', rollbackOf: 'voice_doctor_smoke' }]
+      sendJson(res, {
+        ok: true,
+        rolledBack: 'voice_doctor_smoke',
+        record: localDoctorFixHistory[0],
+        voice: { asrProvider: 'local', localAsrModel: 'small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
+        doctor: { ok: true, level: 'warn', recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'warn', detail: 'stopped：本地语音服务未运行' }] },
       })
       return
     }
@@ -660,7 +675,9 @@ try {
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())
-  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('最近修复') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('启动本地语音服务'))
+  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('最近修复') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('启动本地语音服务') && document.querySelector('.voice-local-doctor-rollback')?.textContent.includes('回滚'))
+  await page.evaluate(() => document.querySelector('.voice-local-doctor-rollback')?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('回滚：启动本地语音服务'))
   await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰') && document.querySelector('#voice-preset-list')?.textContent.includes('建议：视频抗干扰'), null, { timeout: 5000 })
   await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
   await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))

@@ -357,3 +357,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui smoke coverage for recent fix history rendering.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 36: Rollback for local voice doctor fixes
+- [x] Add backend rollback helper for local voice doctor fix records.
+- [x] Add `POST /voice/local/doctor/rollback` to restore a selected or latest fix record's `before` snapshot.
+- [x] Record rollback operations in `voiceLocalDoctorHistory` with `rollbackOf` metadata.
+- [x] Preserve `rollbackOf` through voice config sanitization.
+- [x] Add Brain UI rollback button on the latest repair history entry.
+- [x] Sync rolled-back voice config into settings controls/localStorage and refresh the doctor panel.
+- [x] Extend voice-events and brain-ui smoke coverage for rollback.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

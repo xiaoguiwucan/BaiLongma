@@ -306,3 +306,9 @@
 - `/voice/local/doctor` returns recent fix records, and Brain UI renders a “最近修复” strip inside the local voice doctor panel.
 - Extended smoke coverage to verify repair history persistence and UI rendering after one-click repair.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added rollback support for local voice doctor one-click repairs so a repair can be safely undone if it makes the user's voice setup worse.
+- New backend `POST /voice/local/doctor/rollback` restores the selected/latest repair record's `before` snapshot and records a rollback entry with `rollbackOf` metadata.
+- Voice config sanitization now preserves local doctor rollback metadata.
+- Brain UI shows a “回滚” button on the latest repair history entry, syncs rolled-back settings into controls/localStorage, and refreshes the doctor panel.
+- Extended smoke coverage for backend rollback and UI rollback flow.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

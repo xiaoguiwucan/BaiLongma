@@ -2902,7 +2902,7 @@ function initTTSSettings() {
       ${item.fixAction ? `<button class="voice-local-doctor-fix" data-action="${escapeFocusText(item.fixAction)}" type="button">一键修复</button>` : ""}
     </div>`).join("");
     const fixes = Array.isArray(doctor.recentFixes) ? doctor.recentFixes : [];
-    const fixHtml = fixes.length ? `<div class="voice-local-doctor-history"><strong>最近修复</strong>${fixes.map(item => `<span>${escapeFocusText(item.label || item.action || "修复")} · ${escapeFocusText(new Date(item.at || Date.now()).toLocaleTimeString())}</span>`).join("")}</div>` : "";
+    const fixHtml = fixes.length ? `<div class="voice-local-doctor-history"><strong>最近修复</strong>${fixes.map((item, index) => `<span>${escapeFocusText(item.label || item.action || "修复")} · ${escapeFocusText(new Date(item.at || Date.now()).toLocaleTimeString())}${index === 0 && item.before && Object.keys(item.before).length ? `<button class="voice-local-doctor-rollback" data-id="${escapeFocusText(item.id || "")}" type="button">回滚</button>` : ""}</span>`).join("")}</div>` : "";
     return checkHtml + fixHtml;
   }
 
@@ -2931,6 +2931,31 @@ function initTTSSettings() {
     });
   }
 
+
+  function bindVoiceLocalDoctorRollbacks() {
+    document.querySelectorAll(".voice-local-doctor-rollback").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = btn.dataset.id || "";
+        btn.disabled = true;
+        btn.textContent = "回滚中…";
+        try {
+          const resp = await fetch(`${API}/voice/local/doctor/rollback`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ id }),
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data?.ok) throw new Error(data?.error || "回滚失败");
+          if (data.voice) hydrateVoiceControlsFromConfig(data.voice);
+          await refreshVoiceLocalDoctor();
+        } catch (err) {
+          btn.textContent = err?.message || "回滚失败";
+          setTimeout(() => { btn.textContent = "回滚"; btn.disabled = false; }, 2500);
+        }
+      });
+    });
+  }
+
   async function refreshVoiceLocalDoctor() {
     const panel = document.getElementById("voice-local-doctor");
     const list = document.getElementById("voice-local-doctor-list");
@@ -2943,6 +2968,7 @@ function initTTSSettings() {
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "本地语音体检失败");
       list.innerHTML = renderVoiceLocalDoctor(data);
       bindVoiceLocalDoctorFixes();
+      bindVoiceLocalDoctorRollbacks();
     } catch (err) {
       list.innerHTML = `<div class="voice-clients-error">${escapeFocusText(err?.message || "本地语音体检失败")}</div>`;
     }

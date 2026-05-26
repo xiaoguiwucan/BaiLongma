@@ -335,6 +335,32 @@ function applyVoiceLocalDoctorFix(action = '') {
   return { action: id, applied, started, record, voice, doctor: buildVoiceLocalDoctor() }
 }
 
+
+function rollbackVoiceLocalDoctorFix(id = '') {
+  const current = getVoiceConfig()
+  const history = Array.isArray(current.voiceLocalDoctorHistory) ? current.voiceLocalDoctorHistory : []
+  const target = id ? history.find(item => item.id === id) : [...history].reverse().find(item => item.before && Object.keys(item.before).length)
+  if (!target || !target.before || !Object.keys(target.before).length) {
+    const err = new Error('No local voice doctor fix history available to rollback.')
+    err.statusCode = 404
+    throw err
+  }
+  const beforeRollback = getVoiceConfig()
+  setVoiceConfig(target.before)
+  const after = getVoiceConfig()
+  const record = appendVoiceLocalDoctorHistory({
+    action: 'rollback_local_doctor_fix',
+    label: `回滚：${target.label || target.action || target.id}`,
+    applied: target.before,
+    before: beforeRollback,
+    after,
+    status: 'ok',
+    rollbackOf: target.id,
+  })
+  const voice = getVoiceConfig()
+  return { rolledBack: target.id, record, voice, doctor: buildVoiceLocalDoctor() }
+}
+
 const wakeTuningHistory = getVoiceConfig().wakeTuningHistory || []
 
 
@@ -1771,6 +1797,23 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         try {
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
           const result = applyVoiceLocalDoctorFix(body.action || body.id || '')
+          jsonResponse(res, 200, { ok: true, ...result })
+        } catch (err) {
+          jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+
+    // POST /voice/local/doctor/rollback — rollback one local voice doctor fix
+    if (req.method === 'POST' && url.pathname === '/voice/local/doctor/rollback') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const result = rollbackVoiceLocalDoctorFix(body.id || body.rollbackOf || '')
           jsonResponse(res, 200, { ok: true, ...result })
         } catch (err) {
           jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message })
