@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.235 with remote-address-level `tts:speak` cooldown for `/voice/events`, preventing a client from bypassing per-WebSocket cooldown by opening multiple connections. The change must be reflected in protocol metadata, tests, docs, UI release notes, and GitHub Release assets.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -28,11 +28,11 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [ ] Commit changes
-- [ ] Tag and push v2.1.235
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** in_progress
+- [x] Commit changes
+- [x] Tag and push v2.1.235
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
