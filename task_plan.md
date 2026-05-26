@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice optimization by shipping v2.1.236 with `/voice/events` external client identity registration. Clients can send `client:hello` / `client:identify` with device/app metadata; the server stores sanitized identity per connection, reports identity in status, acknowledges with `client:accepted`, and documents/tests the flow.
 
 ## Current Phase
-Verification complete; release in progress
+Complete
 
 ## Phases
 
@@ -28,11 +28,11 @@ Verification complete; release in progress
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [ ] Commit changes
-- [ ] Tag and push v2.1.236
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** in_progress
+- [x] Commit changes
+- [x] Tag and push v2.1.236
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
