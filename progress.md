@@ -401,3 +401,5 @@
 - Brain UI renders a warm hint for reused services and explains that it will not duplicate-start; model switching should stop the old service first.
 - Extended smoke coverage so Brain UI verifies external-service hints and voice-events verifies self-test/readiness responses report service source metadata.
 - Verification passed: `node --check src/api.js`, `node --check src/ui/brain-ui/app.js`, `node --check scripts/smoke-brain-ui.mjs`, `node --check scripts/smoke-voice-events.mjs`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
+- Pushed development checkpoint `fbaac08 feat: show reused voice service status` to `origin/main`.
+- No tag/GitHub Release created; this remains part of the next large-version milestone bundle.

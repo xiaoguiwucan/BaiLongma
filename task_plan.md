@@ -490,4 +490,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add user guidance that reused service will not be duplicate-started and should be stopped before model switching.
 - [x] Extend Brain UI and voice-events smoke coverage for service source metadata.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
-- [ ] Push as a development checkpoint only, without tag/Release.
+- [x] Push as a development checkpoint only, without tag/Release.
