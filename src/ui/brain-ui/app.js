@@ -2901,11 +2901,85 @@ function initTTSSettings() {
   document.getElementById("voice-self-test-start")?.addEventListener("click", startVoiceSelfTest);
   document.getElementById("voice-local-overview-actions")?.addEventListener("click", handleVoiceOverviewAction);
   document.getElementById("voice-local-stop")?.addEventListener("click", stopLocalVoiceService);
+  document.getElementById("voice-kws-refresh")?.addEventListener("click", refreshVoiceKwsStatus);
+  document.getElementById("voice-kws-install-openwakeword")?.addEventListener("click", installOpenWakeWordRuntime);
+  document.getElementById("voice-kws-apply-openwakeword")?.addEventListener("click", applyOpenWakeWordConfig);
   document.getElementById("voice-local-restart")?.addEventListener("click", restartLocalVoiceService);
   document.getElementById("voice-diagnostics-export")?.addEventListener("click", exportLocalVoiceDiagnostics);
   document.getElementById("voice-calibrate-speaker")?.addEventListener("click", () => refreshSpeakerCalibration({ apply: false }));
   let voiceSelfTestSince = 0;
 
+
+  function renderVoiceKwsStatus(status = {}) {
+    if (!status || status.ok === false) return `<div class="voice-readiness-step voice-readiness-step-warn"><span>warn</span><div><strong>KWS 状态</strong><em>${escapeFocusText(status?.error || "无法读取 KWS 状态")}</em></div></div>`;
+    const dep = status.dependency?.openwakeword || {};
+    const rows = [
+      { status: status.runtimeReady ? "ok" : status.enabled ? "warn" : "info", label: "运行状态", detail: status.runtimeReady ? "openWakeWord 本地 KWS 已准备好。" : status.nextAction || "当前未启用 KWS。" },
+      { status: status.modelExists ? "ok" : status.configuredPath ? "warn" : "info", label: "模型文件", detail: status.configuredPath ? `${status.configuredPath}${status.modelExists ? " · 已找到" : " · 不存在"}` : "尚未填写模型路径。" },
+      { status: dep.ok ? "ok" : status.engine === "openwakeword" ? "warn" : "info", label: "openWakeWord 依赖", detail: dep.ok ? `可用：${dep.python || "python"}` : (dep.error || "未检测或未选择 openWakeWord。") },
+    ];
+    return rows.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status)}"><span>${escapeFocusText(item.status)}</span><div><strong>${escapeFocusText(item.label)}</strong><em>${escapeFocusText(item.detail)}</em></div></div>`).join("");
+  }
+
+  async function refreshVoiceKwsStatus() {
+    const el = document.getElementById("voice-kws-status");
+    if (!el) return null;
+    el.innerHTML = '<div class="voice-clients-empty">正在检测 KWS…</div>';
+    try {
+      const resp = await fetch(`${API}/voice/local/kws/status`);
+      const data = await resp.json();
+      if (!resp.ok || data?.ok === false) throw new Error(data?.error || "KWS 检测失败");
+      el.innerHTML = renderVoiceKwsStatus(data);
+      return data;
+    } catch (err) {
+      el.innerHTML = renderVoiceKwsStatus({ ok: false, error: err?.message || "KWS 检测失败" });
+      return null;
+    }
+  }
+
+  async function installOpenWakeWordRuntime() {
+    const btn = document.getElementById("voice-kws-install-openwakeword");
+    const fb = document.getElementById("voice-kws-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在安装 openWakeWord/onnxruntime，可能需要几分钟…");
+    try {
+      const resp = await fetch(`${API}/voice/local/kws/install-openwakeword`, { method: "POST" });
+      const data = await resp.json();
+      if (!resp.ok || data?.ok === false) throw new Error(data?.stderr || data?.error || "安装失败");
+      showFeedback(fb, "openWakeWord 依赖已安装，请配置 .onnx 模型路径后检测。");
+      await refreshVoiceKwsStatus();
+    } catch (err) {
+      showFeedback(fb, err?.message || "安装失败", true);
+      await refreshVoiceKwsStatus();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function applyOpenWakeWordConfig() {
+    const btn = document.getElementById("voice-kws-apply-openwakeword");
+    const fb = document.getElementById("voice-kws-feedback");
+    const modelPath = document.getElementById("voice-kws-model-path")?.value?.trim() || "";
+    const threshold = Math.max(0.10, Math.min(0.99, Number(document.getElementById("voice-kws-threshold")?.value || 0.50) || 0.50));
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在保存 openWakeWord KWS 配置…");
+    try {
+      const resp = await fetch(`${API}/voice/local/kws/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ provider: "hybrid", modelPath, threshold }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data?.ok === false) throw new Error(data?.error || "保存失败");
+      if (data.voice) hydrateVoiceControlsFromConfig(data.voice);
+      showFeedback(fb, data.status?.runtimeReady ? "KWS 配置已可用" : "KWS 配置已保存，请按提示补齐依赖/模型");
+      await refreshVoiceKwsStatus();
+    } catch (err) {
+      showFeedback(fb, err?.message || "保存失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
 
   function renderVoiceOverview(overview = {}) {
     const panel = document.getElementById("voice-local-overview");
@@ -3457,6 +3531,7 @@ function initTTSSettings() {
     refreshVoiceReadinessWizard();
     refreshVoiceSelfTest();
     refreshVoiceLocalDoctor();
+    refreshVoiceKwsStatus();
   }
 
   function hydrateVoiceControlsFromConfig(voice = {}) {

@@ -543,3 +543,18 @@
 - Doctor/readiness wording now distinguishes: stable text wake, openWakeWord runtime connected, missing model path, and unsupported/incomplete sherpa-onnx runtime.
 - Added `scripts/smoke-kws-runtime.mjs` and `npm run smoke:kws-runtime` to protect the protocol/runtime wiring.
 - This is still a development checkpoint only; no formal Release until a real model file/install flow and user-facing KWS test workflow are bundled.
+
+## Checkpoint 64 - KWS setup and readiness loop
+
+- Continued from the KWS runtime protocol hook by adding user-operable setup/readiness controls.
+- Added backend KWS endpoints:
+  - `GET /voice/local/kws/status` reports wake provider, engine, configured path, resolved path, model existence, openWakeWord dependency status, local voice service state, issues, and next action.
+  - `POST /voice/local/kws/install-openwakeword` installs `openwakeword` + `onnxruntime` into the detected Python environment.
+  - `POST /voice/local/kws/apply` saves a practical openWakeWord hybrid/KWS configuration and returns refreshed voice config/status.
+- Added Brain UI KWS setup panel inside voice settings:
+  - “检测 KWS” renders runtime/model/dependency checks;
+  - “安装 openWakeWord” runs the backend installer and refreshes status;
+  - “应用 openWakeWord 配置” switches to hybrid + openWakeWord using the current model path/threshold.
+- Extended smoke coverage so the settings panel verifies KWS status rendering and one-click openWakeWord config sync.
+- Extended `smoke:kws-runtime` so KWS setup endpoints are protected.
+- This remains a development checkpoint; a formal Release should wait until a bundled or guided model download/import flow is added and macOS package verification is rerun.

@@ -19,6 +19,9 @@ check(server.includes('OpenWakeWordModel') && server.includes('def detect_kws'),
 check(server.includes('msg.get("type") == "kws_detect"') && server.includes('"type": "kws_result"'), 'local Python service exposes kws_detect/kws_result protocol')
 check(server.includes('sherpa-onnx KWS 运行时需要完整 tokens/encoder/decoder/joiner 配置'), 'sherpa-onnx path fails honestly instead of pretending arbitrary onnx works')
 check(api.includes('openWakeWord 本地唤醒运行时已接通') && api.includes('KWS 模型路径不存在'), 'doctor/readiness explain configured, missing, and unsupported KWS states')
+check(api.includes("/voice/local/kws/status") && api.includes('buildWakeKwsStatus'), 'backend exposes KWS readiness status endpoint')
+check(api.includes("/voice/local/kws/install-openwakeword") && api.includes('installOpenWakeWordDependency'), 'backend exposes openWakeWord dependency install endpoint')
+check(api.includes("/voice/local/kws/apply") && api.includes("wakeKwsEngine: 'openwakeword'"), 'backend exposes one-click openWakeWord config apply endpoint')
 
 const failed = checks.filter(item => !item.ok)
 if (failed.length) {

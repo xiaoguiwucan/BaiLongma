@@ -624,3 +624,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add KWS runtime smoke coverage.
 - [x] Run broader validation checks and smoke suites.
 - [x] Commit and push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 64 plan - KWS setup and readiness loop
+
+- [x] Add backend KWS status endpoint with dependency/model/runtime readiness.
+- [x] Add backend openWakeWord dependency install endpoint.
+- [x] Add backend one-click openWakeWord config apply endpoint.
+- [x] Add Brain UI KWS setup controls in voice settings.
+- [x] Render KWS model/dependency/runtime status in settings.
+- [x] Extend smoke tests for KWS setup endpoints and UI sync.
+- [x] Run validation checks and smoke suites.
+- [ ] Commit and push as a development checkpoint only, without tag/Release.

@@ -574,6 +574,14 @@ const createSettingsModal = () => `
               <label class="settings-label" for="voice-kws-model-path">KWS 模型路径</label>
               <input class="settings-input" type="text" id="voice-kws-model-path" placeholder="例如 models/kws/longma.onnx；openWakeWord .onnx 优先">
             </div>
+            <div class="settings-row" style="align-items:flex-start;gap:8px;flex-wrap:wrap;">
+              <label class="settings-label">KWS 自检</label>
+              <button class="settings-button ghost" type="button" id="voice-kws-refresh">检测 KWS</button>
+              <button class="settings-button ghost" type="button" id="voice-kws-install-openwakeword">安装 openWakeWord</button>
+              <button class="settings-button ghost" type="button" id="voice-kws-apply-openwakeword">应用 openWakeWord 配置</button>
+              <span id="voice-kws-feedback" class="settings-feedback"></span>
+            </div>
+            <div id="voice-kws-status" class="voice-readiness-list" style="margin:6px 0 10px;"></div>
             <div class="settings-row">
               <label class="settings-label" for="voice-wake-mode">文本唤醒匹配模式</label>
               <select class="settings-select" id="voice-wake-mode">

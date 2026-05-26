@@ -2,6 +2,7 @@
 import fs from 'fs'
 import path from 'path'
 import net from 'net'
+import { spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import WebSocket, { WebSocketServer } from 'ws'
 import { pushMessage } from './queue.js'
@@ -226,6 +227,77 @@ function buildVoiceStabilityPresetResponse({ windowMs = 60000 } = {}) {
 }
 
 
+
+function resolveKwsModelPath(modelPath = '') {
+  const raw = String(modelPath || '').trim()
+  if (!raw) return ''
+  return path.isAbsolute(raw) ? raw : path.join(process.cwd(), raw)
+}
+
+function detectPythonCommand() {
+  const candidates = []
+  if (process.env.BAILONGMA_PYTHON) candidates.push(process.env.BAILONGMA_PYTHON)
+  candidates.push(path.join(process.cwd(), '.venv-whisper', 'bin', 'python'), path.join(process.cwd(), '.venv-whisper', 'Scripts', 'python.exe'), 'python3.11', 'python3.12', 'python3', 'python')
+  for (const candidate of candidates) {
+    if (!candidate) continue
+    if (candidate.includes(path.sep) && !fs.existsSync(candidate)) continue
+    const result = spawnSync(candidate, ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8', timeout: 2500 })
+    if (result.status === 0) return { command: candidate, executable: String(result.stdout || '').trim() || candidate }
+  }
+  return { command: process.platform === 'win32' ? 'python' : 'python3', executable: '' }
+}
+
+function checkPythonModule(moduleName = '') {
+  const python = detectPythonCommand()
+  const result = spawnSync(python.command, ['-c', `import ${moduleName}; print('ok')`], { encoding: 'utf8', timeout: 4000 })
+  return { ok: result.status === 0, python: python.executable || python.command, error: result.status === 0 ? '' : String(result.stderr || result.stdout || '').trim().slice(0, 500) }
+}
+
+function buildWakeKwsStatus(voice = getVoiceConfig()) {
+  const provider = ['text', 'hybrid', 'kws'].includes(voice.wakeDetectionProvider) ? voice.wakeDetectionProvider : 'text'
+  const engine = ['none', 'sherpa-onnx', 'openwakeword'].includes(voice.wakeKwsEngine) ? voice.wakeKwsEngine : 'none'
+  const configuredPath = typeof voice.wakeKwsModelPath === 'string' ? voice.wakeKwsModelPath.trim() : ''
+  const resolvedPath = resolveKwsModelPath(configuredPath)
+  const modelExists = Boolean(resolvedPath && fs.existsSync(resolvedPath))
+  const openwakeword = engine === 'openwakeword' ? checkPythonModule('openwakeword') : { ok: false, python: detectPythonCommand().executable || detectPythonCommand().command, error: engine === 'openwakeword' ? '' : 'openWakeWord 未选择' }
+  const runtimeReady = provider !== 'text' && engine === 'openwakeword' && modelExists && openwakeword.ok
+  const issues = []
+  if (provider !== 'text' && engine === 'none') issues.push('未选择 KWS 引擎')
+  if (provider !== 'text' && !configuredPath) issues.push('未填写 KWS 模型路径')
+  if (configuredPath && !modelExists) issues.push('KWS 模型文件不存在')
+  if (engine === 'openwakeword' && !openwakeword.ok) issues.push('Python 环境缺少 openwakeword 依赖')
+  if (engine === 'sherpa-onnx') issues.push('sherpa-onnx 需要完整 tokens/encoder/decoder/joiner 配置，当前未接入完整配置表单')
+  return {
+    ok: true,
+    provider,
+    enabled: provider !== 'text',
+    engine,
+    configuredPath,
+    resolvedPath,
+    modelExists,
+    threshold: voice.wakeKwsThreshold ?? 0.5,
+    runtimeReady,
+    dependency: { openwakeword },
+    local: getVoiceStatus(),
+    level: runtimeReady ? 'ok' : provider === 'text' ? 'info' : issues.length ? 'warn' : 'pending',
+    issues,
+    nextAction: runtimeReady ? '可以在设置页点击 KWS 自测，或直接选择“混合唤醒/本地 KWS”实测。' : provider === 'text' ? '如需更快唤醒，选择 openWakeWord 并配置 .onnx 模型。' : issues.join('；') || '等待运行时准备。',
+  }
+}
+
+function installOpenWakeWordDependency() {
+  const python = detectPythonCommand()
+  const args = ['-m', 'pip', 'install', 'openwakeword', 'onnxruntime']
+  const result = spawnSync(python.command, args, { encoding: 'utf8', timeout: 180000, maxBuffer: 1024 * 1024 * 4 })
+  return {
+    ok: result.status === 0,
+    python: python.executable || python.command,
+    command: `${python.command} ${args.join(' ')}`,
+    stdout: String(result.stdout || '').slice(-2000),
+    stderr: String(result.stderr || '').slice(-2000),
+    exitCode: result.status,
+  }
+}
 
 async function queryLocalSpeakerStatus({ timeoutMs = 900 } = {}) {
   const local = getVoiceStatus()
@@ -2439,6 +2511,31 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       buildLocalVoiceOverview({ windowMs }).then(result => jsonResponse(res, 200, result)).catch(err => {
         jsonResponse(res, 500, { ok: false, error: err.message || 'Failed to build local voice overview.' })
       })
+      return
+    }
+
+    // GET /voice/local/kws/status — inspect local KWS dependency/model readiness
+    if (req.method === 'GET' && url.pathname === '/voice/local/kws/status') {
+      jsonResponse(res, 200, buildWakeKwsStatus())
+      return
+    }
+
+    // POST /voice/local/kws/install-openwakeword — install local openWakeWord runtime dependencies
+    if (req.method === 'POST' && url.pathname === '/voice/local/kws/install-openwakeword') {
+      const result = installOpenWakeWordDependency()
+      jsonResponse(res, result.ok ? 200 : 500, { ...result, status: buildWakeKwsStatus() })
+      return
+    }
+
+    // POST /voice/local/kws/apply — save a practical openWakeWord KWS configuration
+    if (req.method === 'POST' && url.pathname === '/voice/local/kws/apply') {
+      readJsonBody(req).then(body => {
+        const modelPath = String(body.modelPath || body.wakeKwsModelPath || '').trim().slice(0, 500)
+        const threshold = Math.max(0.10, Math.min(0.99, Number(body.threshold || body.wakeKwsThreshold || 0.50) || 0.50))
+        const provider = ['hybrid', 'kws', 'text'].includes(body.provider || body.wakeDetectionProvider) ? (body.provider || body.wakeDetectionProvider) : 'hybrid'
+        setVoiceConfig({ wakeDetectionProvider: provider, wakeKwsEngine: 'openwakeword', wakeKwsModelPath: modelPath, wakeKwsThreshold: threshold })
+        jsonResponse(res, 200, { ok: true, voice: getVoiceConfig(), status: buildWakeKwsStatus() })
+      }).catch(err => jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message }))
       return
     }
 
