@@ -44,6 +44,17 @@ const SANDBOX_PATH       = paths.sandboxDir
 const DEFAULT_AGENT_NAME = '小白龙'
 const DEFAULT_API_HOST = '127.0.0.1'
 
+const wakeTuningHistory = []
+function publicWakeTuningHistory() {
+  return wakeTuningHistory.slice(-12).map(item => ({ ...item, before: { ...(item.before || {}) }, after: { ...(item.after || {}) }, applied: { ...(item.applied || {}) } }))
+}
+function pushWakeTuningRecord(record) {
+  wakeTuningHistory.push({ id: `wake_tune_${Date.now()}_${wakeTuningHistory.length + 1}`, at: Date.now(), ...record })
+  if (wakeTuningHistory.length > 30) wakeTuningHistory.shift()
+  return wakeTuningHistory[wakeTuningHistory.length - 1]
+}
+
+
 // card.action signals that are lifecycle/system-internal — stored in DB for passive injector use only, not pushed to the agent queue
 const SILENT_CARD_ACTIONS = new Set([
   'card.dismissed',  // card closed (components should use acui:dismiss; this is a fallback guard)
@@ -1142,6 +1153,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         current: getVoiceConfig(),
         summary,
         actions: buildWakeGuardTuningActions({ summary, current: getVoiceConfig() }),
+        history: publicWakeTuningHistory(),
       })
       return
     }
@@ -1160,8 +1172,33 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
             jsonResponse(res, 400, { ok: false, error: 'No safe wake tuning fields provided.' })
             return
           }
+          const before = getVoiceConfig()
           setVoiceConfig(safePatch)
-          jsonResponse(res, 200, { ok: true, applied: safePatch, voice: getVoiceConfig() })
+          const after = getVoiceConfig()
+          const record = pushWakeTuningRecord({ reason: body.reason || '', label: body.label || '', before, after, applied: safePatch })
+          jsonResponse(res, 200, { ok: true, applied: safePatch, voice: after, record, history: publicWakeTuningHistory() })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+    // POST /voice/wake/tuning/rollback — rollback latest or selected wake tuning record
+    if (req.method === 'POST' && url.pathname === '/voice/wake/tuning/rollback') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const target = body.id ? wakeTuningHistory.find(item => item.id === body.id) : wakeTuningHistory[wakeTuningHistory.length - 1]
+          if (!target) {
+            jsonResponse(res, 404, { ok: false, error: 'No wake tuning record to rollback.' })
+            return
+          }
+          setVoiceConfig(target.before || {})
+          const rolledBack = pushWakeTuningRecord({ reason: 'rollback', label: `回滚 ${target.label || target.id}`, before: target.after, after: getVoiceConfig(), applied: target.before || {}, rollbackOf: target.id })
+          jsonResponse(res, 200, { ok: true, rolledBack: target.id, record: rolledBack, voice: getVoiceConfig(), history: publicWakeTuningHistory() })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
         }

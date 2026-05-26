@@ -155,3 +155,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend wake-guard, voice-events, and brain-ui smoke coverage.
 - [x] Verify relevant smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 16: Wake tuning history and rollback
+- [x] Record before/after/applied metadata for wake tuning apply actions.
+- [x] Return recent wake tuning history from `GET /voice/wake/tuning`.
+- [x] Add `POST /voice/wake/tuning/rollback` to restore latest or selected tuning record.
+- [x] Render latest tuning record and rollback button in Brain UI.
+- [x] Sync rollback result to localStorage and refresh diagnostics.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

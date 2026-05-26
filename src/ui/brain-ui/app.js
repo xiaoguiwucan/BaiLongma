@@ -2018,21 +2018,25 @@ function initVoiceClientsPanel() {
     }
   }
 
-  function renderWakeTuningActions(actions = []) {
+  function renderWakeTuningActions(actions = [], history = []) {
     const host = document.getElementById("voice-wake-tuning-actions");
     if (!host) return;
     const safeActions = Array.isArray(actions) ? actions.filter(item => item.safe !== false && item.patch && Object.keys(item.patch).length) : [];
+    const tuningHistory = Array.isArray(history) ? history : [];
     latestWakeTuningActions = safeActions;
-    if (!safeActions.length) {
+    const latest = tuningHistory[tuningHistory.length - 1];
+    if (!safeActions.length && !latest) {
       host.innerHTML = "";
       return;
     }
     host.innerHTML = `
-      <div class="voice-wake-tuning-title">可一键应用的调参建议</div>
-      ${safeActions.map((item, index) => `<button class="voice-wake-tuning-action" data-index="${index}" type="button"><strong>${escapeFocusText(item.label || item.reason)}</strong><span>${escapeFocusText(item.reason || "")}</span></button>`).join("")}`;
+      ${safeActions.length ? `<div class="voice-wake-tuning-title">可一键应用的调参建议</div>
+      ${safeActions.map((item, index) => `<button class="voice-wake-tuning-action" data-index="${index}" type="button"><strong>${escapeFocusText(item.label || item.reason)}</strong><span>${escapeFocusText(item.reason || "")}</span></button>`).join("")}` : ""}
+      ${latest ? `<div class="voice-wake-tuning-history"><span>最近调参：${escapeFocusText(latest.label || latest.reason || latest.id)}</span><button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">回滚</button></div>` : ""}`;
     host.querySelectorAll(".voice-wake-tuning-action").forEach(btn => {
       btn.addEventListener("click", () => applyWakeTuningAction(Number(btn.dataset.index || -1)));
     });
+    host.querySelector(".voice-wake-tuning-rollback")?.addEventListener("click", (event) => rollbackWakeTuning(event.currentTarget?.dataset?.id || ""));
   }
 
   async function refreshWakeTuningActions() {
@@ -2042,7 +2046,7 @@ function initVoiceClientsPanel() {
       const res = await fetch(`${API}/voice/wake/tuning?windowMs=60000`);
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
-      renderWakeTuningActions(data.actions || []);
+      renderWakeTuningActions(data.actions || [], data.history || []);
     } catch (err) {
       host.innerHTML = `<div class="voice-clients-error">读取 /voice/wake/tuning 失败：${escapeFocusText(err.message || err)}</div>`;
     }
@@ -2056,7 +2060,7 @@ function initVoiceClientsPanel() {
       const res = await fetch(`${API}/voice/wake/tuning/apply`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ patch: action.patch }),
+        body: JSON.stringify({ patch: action.patch, reason: action.reason, label: action.label }),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
       const data = await res.json();
@@ -2071,6 +2075,30 @@ function initVoiceClientsPanel() {
       refreshVoiceLinkSummary({ quiet: true });
     } catch (err) {
       if (feedbackEl) feedbackEl.textContent = `应用失败：${err.message || err}`;
+    }
+  }
+
+  async function rollbackWakeTuning(id = "") {
+    if (feedbackEl) feedbackEl.textContent = "回滚唤醒调参中…";
+    try {
+      const res = await fetch(`${API}/voice/wake/tuning/rollback`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(id ? { id } : {}),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const voice = data.voice || {};
+      if (voice.wakeConfidenceThreshold != null) localStorage.setItem("bailongma-voice-wake-confidence-threshold", String(voice.wakeConfidenceThreshold));
+      if (voice.wakeMinCommandChars != null) localStorage.setItem("bailongma-voice-wake-min-command-chars", String(voice.wakeMinCommandChars));
+      if (voice.wakeCooldownMs != null) localStorage.setItem("bailongma-voice-wake-cooldown-ms", String(voice.wakeCooldownMs));
+      if (voice.wakeRequireSpeakerWhenEnabled != null) localStorage.setItem("bailongma-voice-wake-require-speaker", String(voice.wakeRequireSpeakerWhenEnabled));
+      if (voice.wakeMode) localStorage.setItem("bailongma-voice-wake-mode", voice.wakeMode);
+      if (voice.wakeRepeatSuppression != null) localStorage.setItem("bailongma-voice-wake-repeat-suppression", String(voice.wakeRepeatSuppression));
+      if (feedbackEl) feedbackEl.textContent = "唤醒调参已回滚";
+      refreshVoiceLinkSummary({ quiet: true });
+    } catch (err) {
+      if (feedbackEl) feedbackEl.textContent = `回滚失败：${err.message || err}`;
     }
   }
 

@@ -4489,3 +4489,30 @@ body.person-card-mode .person-card-panel,
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
 }
+
+.voice-wake-tuning-history {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 8px;
+  color: var(--ink2);
+  background: rgba(255,255,255,0.025);
+  font-size: 10px;
+}
+.voice-wake-tuning-rollback {
+  flex: none;
+  border: 1px solid rgba(211,152,114,0.35);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--warm);
+  background: rgba(211,152,114,0.08);
+  cursor: pointer;
+  font-size: 10px;
+}
+.voice-wake-tuning-rollback:hover {
+  border-color: rgba(211,152,114,0.65);
+  background: rgba(211,152,114,0.14);
+}

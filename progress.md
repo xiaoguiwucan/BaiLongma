@@ -145,3 +145,13 @@
 - Extended `smoke:brain-ui` to verify tuning actions render and can be clicked/applied.
 - Verification passed: `npm run smoke:wake-guard` 9/9, `npm run smoke:voice-events` 53/53, `npm run smoke:brain-ui`, and `npm run smoke:voice-config` 8/8.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
+- Added in-memory wake tuning apply history and rollback support to prevent one-click tuning from becoming a one-way change.
+- `GET /voice/wake/tuning` now returns recent tuning history alongside safe actions.
+- `POST /voice/wake/tuning/apply` now records before/after/applied patch metadata and returns the created record.
+- Added `POST /voice/wake/tuning/rollback` to restore the previous settings from the latest or selected tuning record, with rollback itself recorded for auditability.
+- Brain UI now shows the most recent wake tuning action and a “回滚” button in the voice link summary.
+- Clicking rollback restores backend voice config, mirrors values to localStorage, refreshes diagnostics, and shows “唤醒调参已回滚”.
+- Extended `smoke:voice-events` to 54/54 for apply history and rollback endpoint coverage.
+- Extended `smoke:brain-ui` to apply a tuning action and then rollback it from the UI.
+- Verification passed: `npm run smoke:voice-events` 54/54, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.

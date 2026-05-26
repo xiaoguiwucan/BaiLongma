@@ -48,6 +48,7 @@ function sendFile(res, filePath) {
 
 function createServer() {
   const sseClients = new Set()
+  let wakeTuningApplied = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -298,12 +299,21 @@ new WebSocket(url)`,
         actions: [
           { reason: 'command too short', label: '降低最短指令字数到 1 字', patch: { wakeMinCommandChars: 1 }, safe: true, advice: '降低最短指令字数' },
         ],
+        history: wakeTuningApplied ? [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', reason: 'command too short', applied: { wakeMinCommandChars: 1 } }] : [],
       })
       return
     }
 
     if (url.pathname === '/voice/wake/tuning/apply') {
-      sendJson(res, { ok: true, applied: { wakeMinCommandChars: 1 }, voice: { wakeMinCommandChars: 1, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true } })
+      wakeTuningApplied = true
+      sendJson(res, { ok: true, applied: { wakeMinCommandChars: 1 }, record: { id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', before: { wakeMinCommandChars: 2 }, after: { wakeMinCommandChars: 1 }, applied: { wakeMinCommandChars: 1 } }, history: [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字' }], voice: { wakeMinCommandChars: 1, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true } })
+      return
+    }
+
+
+    if (url.pathname === '/voice/wake/tuning/rollback') {
+      wakeTuningApplied = false
+      sendJson(res, { ok: true, rolledBack: 'wake_tune_smoke', record: { id: 'wake_tune_rollback', rollbackOf: 'wake_tune_smoke' }, voice: { wakeMinCommandChars: 2, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true }, history: [] })
       return
     }
 
@@ -517,6 +527,9 @@ try {
   await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))
+  await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚'))
+  await page.evaluate(() => document.querySelector('.voice-wake-tuning-rollback')?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已回滚'))
   if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop') || !voiceClientSnapshot.history.includes('confidence:0.81')) throw new Error('voice events history timeline did not render recent events and wake guard meta')
   await page.evaluate(() => document.querySelector('#voice-link-check-btn')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-link-check')?.textContent.includes('一键语音链路自检'))
