@@ -347,3 +347,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage for safe fixes and UI repair flow.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 35: Local voice doctor fix history
+- [x] Persist `voiceLocalDoctorHistory` in voice config with sanitization and bounded retention.
+- [x] Record before/after/applied metadata every time a local doctor safe fix runs.
+- [x] Return recent fix records from `GET /voice/local/doctor` and `POST /voice/local/doctor/fix`.
+- [x] Show recent local voice doctor fixes in Brain UI.
+- [x] Extend voice-events smoke coverage for persisted fix history.
+- [x] Extend brain-ui smoke coverage for recent fix history rendering.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

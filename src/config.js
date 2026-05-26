@@ -629,7 +629,7 @@ export function setSocialConfig(updates) {
 }
 
 const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
-const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeTuningHistory', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', 'speakerThreshold', 'wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeAutoTuningEnabled', 'wakeAutoTuningMinRejects', 'wakeAutoTuningCooldownMs', 'wakeAutoTuningMaxActionsPerHour', 'wakeAutoTuningLastAppliedAt', 'videoVoiceDuckEnabled', 'videoVoicePttEnabled', 'videoVoiceAecEnabled', 'videoVoiceDuckLevel', 'videoVoiceDuckHoldMs', 'videoVoiceDuckSensitivity', ...VOICE_SECRET_KEYS]
+const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeTuningHistory', 'voiceLocalDoctorHistory', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', 'speakerThreshold', 'wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeAutoTuningEnabled', 'wakeAutoTuningMinRejects', 'wakeAutoTuningCooldownMs', 'wakeAutoTuningMaxActionsPerHour', 'wakeAutoTuningLastAppliedAt', 'videoVoiceDuckEnabled', 'videoVoicePttEnabled', 'videoVoiceAecEnabled', 'videoVoiceDuckLevel', 'videoVoiceDuckHoldMs', 'videoVoiceDuckSensitivity', ...VOICE_SECRET_KEYS]
 const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
 const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
 const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
@@ -656,6 +656,29 @@ function sanitizeWakeTuningHistory(value) {
       windowMs: Number.isFinite(Number(item.windowMs)) ? Math.max(30000, Math.min(10 * 60 * 1000, Math.round(Number(item.windowMs)))) : 60000,
       rollbackOf: item.rollbackOf ? String(item.rollbackOf).slice(0, 80) : undefined,
       auto: item.auto === true,
+    }
+  }).filter(Boolean)
+}
+
+
+function sanitizeVoiceLocalDoctorHistory(value) {
+  if (!Array.isArray(value)) return []
+  return value.slice(-20).map((item, index) => {
+    if (!item || typeof item !== 'object') return null
+    const at = Number.isFinite(Number(item.at)) ? Math.max(0, Math.round(Number(item.at))) : Date.now()
+    const cleanObject = (obj, limit = 18) => {
+      if (!obj || typeof obj !== 'object' || Array.isArray(obj)) return {}
+      return Object.fromEntries(Object.entries(obj).slice(0, limit).filter(([key]) => typeof key === 'string' && key.length <= 80))
+    }
+    return {
+      id: String(item.id || `voice_doctor_${at}_${index + 1}`).slice(0, 80),
+      at,
+      action: String(item.action || '').slice(0, 80),
+      label: String(item.label || '').slice(0, 160),
+      applied: cleanObject(item.applied),
+      before: cleanObject(item.before),
+      after: cleanObject(item.after),
+      status: String(item.status || 'ok').slice(0, 40),
     }
   }).filter(Boolean)
 }
@@ -695,6 +718,7 @@ export function getVoiceConfig() {
     videoVoiceDuckHoldMs: Number.isFinite(Number(stored.videoVoiceDuckHoldMs)) ? Math.max(800, Math.min(8000, Math.round(Number(stored.videoVoiceDuckHoldMs)))) : 2200,
     videoVoiceDuckSensitivity: Number.isFinite(Number(stored.videoVoiceDuckSensitivity)) ? Math.max(0.55, Math.min(1.60, Number(stored.videoVoiceDuckSensitivity))) : 1.0,
     wakeTuningHistory: sanitizeWakeTuningHistory(stored.wakeTuningHistory),
+    voiceLocalDoctorHistory: sanitizeVoiceLocalDoctorHistory(stored.voiceLocalDoctorHistory),
   }
   for (const key of VOICE_SECRET_KEYS) {
     result[key] = { configured: !!(stored[key]) }
@@ -734,6 +758,10 @@ export function setVoiceConfig(updates) {
     }
     if (key === 'wakeTuningHistory') {
       next.wakeTuningHistory = sanitizeWakeTuningHistory(val)
+      continue
+    }
+    if (key === 'voiceLocalDoctorHistory') {
+      next.voiceLocalDoctorHistory = sanitizeVoiceLocalDoctorHistory(val)
       continue
     }
     if (key === 'wakeWordEnabled') {

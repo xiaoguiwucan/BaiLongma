@@ -50,6 +50,7 @@ function createServer() {
   const sseClients = new Set()
   let wakeTuningApplied = false
   let localDoctorFixed = false
+  let localDoctorFixHistory = []
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -492,6 +493,7 @@ new WebSocket(url)`,
       sendJson(res, {
         ok: true,
         level: localDoctorFixed ? 'ok' : 'warn',
+        recentFixes: localDoctorFixHistory,
         checks: localDoctorFixed ? [
           { id: 'provider', label: '识别服务商', status: 'ok', detail: '当前使用本地 ASR，音频不会上传云端。', action: '保持本地模式。' },
           { id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723', action: '可以开始麦克风测试。' },
@@ -506,11 +508,13 @@ new WebSocket(url)`,
 
     if (url.pathname === '/voice/local/doctor/fix') {
       localDoctorFixed = true
+      localDoctorFixHistory = [{ id: 'voice_doctor_smoke', at: Date.now(), action: 'start_local_voice', label: '启动本地语音服务', status: 'running' }]
       sendJson(res, {
         ok: true,
         action: 'start_local_voice',
-        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced' },
-        doctor: { ok: true, level: 'ok', checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
+        record: localDoctorFixHistory[0],
+        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
+        doctor: { ok: true, level: 'ok', recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
       })
       return
     }
@@ -656,7 +660,7 @@ try {
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())
-  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice'))
+  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('最近修复') && document.querySelector('#voice-local-doctor-list')?.textContent.includes('启动本地语音服务'))
   await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰') && document.querySelector('#voice-preset-list')?.textContent.includes('建议：视频抗干扰'), null, { timeout: 5000 })
   await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
   await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))

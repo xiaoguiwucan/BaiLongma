@@ -2896,11 +2896,14 @@ function initTTSSettings() {
   function renderVoiceLocalDoctor(doctor = {}) {
     const checks = Array.isArray(doctor.checks) ? doctor.checks : [];
     if (!checks.length) return '<div class="voice-clients-empty">暂无本地语音体检数据。</div>';
-    return checks.map(item => `<div class="voice-local-doctor-item voice-local-doctor-item-${escapeFocusText(item.status || "pending")}">
+    const checkHtml = checks.map(item => `<div class="voice-local-doctor-item voice-local-doctor-item-${escapeFocusText(item.status || "pending")}">
       <span>${escapeFocusText(item.status || "pending")}</span>
       <div><strong>${escapeFocusText(item.label || item.id || "检查项")}</strong><em>${escapeFocusText(item.detail || "")}${item.action ? ` · ${escapeFocusText(item.action)}` : ""}</em></div>
       ${item.fixAction ? `<button class="voice-local-doctor-fix" data-action="${escapeFocusText(item.fixAction)}" type="button">一键修复</button>` : ""}
     </div>`).join("");
+    const fixes = Array.isArray(doctor.recentFixes) ? doctor.recentFixes : [];
+    const fixHtml = fixes.length ? `<div class="voice-local-doctor-history"><strong>最近修复</strong>${fixes.map(item => `<span>${escapeFocusText(item.label || item.action || "修复")} · ${escapeFocusText(new Date(item.at || Date.now()).toLocaleTimeString())}</span>`).join("")}</div>` : "";
+    return checkHtml + fixHtml;
   }
 
   function bindVoiceLocalDoctorFixes() {

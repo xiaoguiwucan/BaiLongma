@@ -276,14 +276,34 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     voice,
     local,
     summary: summary ? { level: summary.level, recent: summary.recent, issues: summary.issues, suggestions: summary.suggestions } : null,
+    recentFixes: Array.isArray(voice.voiceLocalDoctorHistory) ? voice.voiceLocalDoctorHistory.slice(-5).reverse() : [],
     checks,
     nextActions: checks.filter(item => item.status !== 'ok').map(item => ({ id: item.id, label: item.label, action: item.action, fixAction: item.fixAction || null })).slice(0, 5),
   }
 }
 
 
+function localDoctorFixLabel(action = '') {
+  const labels = {
+    use_local_sensevoice: '切换到本地 SenseVoiceSmall',
+    enable_wake_guard: '开启唤醒保护',
+    apply_video_guard: '应用视频抗干扰预设',
+    start_local_voice: '启动本地语音服务',
+  }
+  return labels[action] || action
+}
+
+function appendVoiceLocalDoctorHistory(record = {}) {
+  const current = getVoiceConfig()
+  const history = Array.isArray(current.voiceLocalDoctorHistory) ? current.voiceLocalDoctorHistory : []
+  const next = [...history, { id: `voice_doctor_${Date.now()}_${history.length + 1}`, at: Date.now(), ...record }].slice(-20)
+  setVoiceConfig({ voiceLocalDoctorHistory: next })
+  return getVoiceConfig().voiceLocalDoctorHistory.slice(-1)[0] || null
+}
+
 function applyVoiceLocalDoctorFix(action = '') {
   const id = String(action || '').trim()
+  const before = getVoiceConfig()
   let applied = {}
   let started = null
   if (id === 'use_local_sensevoice') {
@@ -309,7 +329,10 @@ function applyVoiceLocalDoctorFix(action = '') {
     err.statusCode = 404
     throw err
   }
-  return { action: id, applied, started, voice: getVoiceConfig(), doctor: buildVoiceLocalDoctor() }
+  const after = getVoiceConfig()
+  const record = appendVoiceLocalDoctorHistory({ action: id, label: localDoctorFixLabel(id), applied, before, after, status: started?.status || 'ok' })
+  const voice = getVoiceConfig()
+  return { action: id, applied, started, record, voice, doctor: buildVoiceLocalDoctor() }
 }
 
 const wakeTuningHistory = getVoiceConfig().wakeTuningHistory || []

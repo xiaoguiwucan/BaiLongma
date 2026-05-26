@@ -300,3 +300,9 @@
 - Brain UI local voice doctor rows now show “一键修复” buttons, apply the fix, sync returned voice config to controls/localStorage, and refresh the doctor result.
 - Extended smoke coverage for unknown action rejection, video-guard repair persistence, and UI one-click repair rendering/refresh.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added persisted local voice doctor repair history so one-click fixes are auditable instead of disappearing after the button click.
+- Voice config now accepts and sanitizes `voiceLocalDoctorHistory`, retaining the latest 20 doctor repair records.
+- Every `/voice/local/doctor/fix` action records action, label, applied patch, before/after config snapshots, status, and timestamp.
+- `/voice/local/doctor` returns recent fix records, and Brain UI renders a “最近修复” strip inside the local voice doctor panel.
+- Extended smoke coverage to verify repair history persistence and UI rendering after one-click repair.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

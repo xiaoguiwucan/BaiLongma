@@ -4789,3 +4789,27 @@ body.person-card-mode .person-card-panel,
   cursor: wait;
   opacity: 0.65;
 }
+
+
+.voice-local-doctor-history {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+  padding: 8px 10px;
+  border: 1px solid rgba(181,154,116,0.18);
+  border-radius: 12px;
+  background: rgba(181,154,116,0.06);
+}
+.voice-local-doctor-history strong {
+  color: var(--ink);
+  font-size: 12px;
+  margin-right: 4px;
+}
+.voice-local-doctor-history span {
+  padding: 3px 7px;
+  border-radius: 999px;
+  color: var(--dim);
+  font-size: 11px;
+  background: rgba(0,0,0,0.16);
+}
