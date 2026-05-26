@@ -623,4 +623,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Update diagnostics/readiness wording for runtime-connected vs missing/incomplete KWS.
 - [x] Add KWS runtime smoke coverage.
 - [x] Run broader validation checks and smoke suites.
-- [ ] Commit and push as a development checkpoint only, without tag/Release.
+- [x] Commit and push as a development checkpoint only, without tag/Release.
