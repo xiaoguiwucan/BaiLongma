@@ -324,3 +324,8 @@
 - This reduces mismatches between “声纹状态” and “本地语音体检”, making voiceprint troubleshooting more consistent.
 - Extended smoke coverage for the backend endpoint and settings speaker status rendering.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added contextual action buttons next to Brain UI speaker status so users immediately know what to do when voiceprint diagnostics fail.
+- Speaker status now always has “刷新”; it shows “启动服务” when the local voice service is unreachable and “去录入” when the service is reachable but no voiceprint is enrolled.
+- “启动服务” calls `/voice/local/start` using the currently selected local ASR model/profile; “去录入” reuses the existing enroll flow.
+- Extended brain-ui smoke coverage to verify the unreachable-service state exposes the correct action buttons.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

@@ -388,3 +388,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui smoke coverage to verify settings speaker status uses backend runtime diagnostics.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 39: Speaker status contextual actions
+- [x] Add contextual action buttons beside Brain UI speaker status: refresh, start service, and enroll shortcut.
+- [x] Show “启动服务” when runtime speaker status reports local service unreachable.
+- [x] Show “去录入” when local service is reachable but no voiceprint is enrolled.
+- [x] Wire “启动服务” to `/voice/local/start` with the selected local model/profile.
+- [x] Wire “去录入” to the existing enroll voiceprint action.
+- [x] Extend brain-ui smoke coverage for action visibility when service is unreachable.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

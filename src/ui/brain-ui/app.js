@@ -3351,10 +3351,18 @@ function initTTSSettings() {
     }
   }
 
+  function updateSpeakerStatusActions({ showStart = false, showEnroll = false } = {}) {
+    const startBtn = document.getElementById("voice-speaker-start-service");
+    const enrollShortcut = document.getElementById("voice-speaker-enroll-shortcut");
+    if (startBtn) startBtn.hidden = !showStart;
+    if (enrollShortcut) enrollShortcut.hidden = !showEnroll;
+  }
+
   async function refreshSpeakerStatus() {
     const el = document.getElementById("voice-speaker-status");
     if (!el) return;
     el.textContent = "检测中…";
+    updateSpeakerStatusActions();
     try {
       const resp = await fetch(`${API}/voice/local/speaker/status`);
       const data = await resp.json();
@@ -3362,13 +3370,34 @@ function initTTSSettings() {
       const speaker = data.speaker || {};
       if (speaker.reachable === false) {
         el.textContent = `服务不可达：${speaker.detail || speaker.reason || "本地语音服务未运行"}`;
+        updateSpeakerStatusActions({ showStart: true });
       } else if (speaker.configured) {
         el.textContent = `已录入（${speaker.sampleCount || 1} 个样本，阈值 ${speaker.threshold ?? "—"}）`;
+        updateSpeakerStatusActions();
       } else {
         el.textContent = "未录入（本地服务可达）";
+        updateSpeakerStatusActions({ showEnroll: true });
       }
     } catch (err) {
       el.textContent = err?.message || "状态未知";
+      updateSpeakerStatusActions({ showStart: true });
+    }
+  }
+
+  async function startSpeakerVoiceService() {
+    const btn = document.getElementById("voice-speaker-start-service");
+    if (btn) btn.disabled = true;
+    try {
+      const model = document.getElementById("voice-local-asr-model")?.value || localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
+      const profile = document.getElementById("voice-asr-profile")?.value || localStorage.getItem(VOICE_ASR_PROFILE_KEY) || "balanced";
+      await fetch(`${API}/voice/local/start`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localAsrModel: model, model, asrProfile: profile }),
+      });
+      setTimeout(refreshSpeakerStatus, 800);
+    } finally {
+      if (btn) btn.disabled = false;
     }
   }
 
@@ -3432,6 +3461,9 @@ function initTTSSettings() {
 
   const enrollSpeakerBtn = document.getElementById("voice-enroll-speaker");
   if (enrollSpeakerBtn) enrollSpeakerBtn.addEventListener("click", enrollSpeakerVoice);
+  document.getElementById("voice-speaker-enroll-shortcut")?.addEventListener("click", () => enrollSpeakerBtn?.click());
+  document.getElementById("voice-speaker-start-service")?.addEventListener("click", startSpeakerVoiceService);
+  document.getElementById("voice-speaker-refresh-status")?.addEventListener("click", refreshSpeakerStatus);
   const testSpeakerBtn = document.getElementById("voice-test-speaker");
   if (testSpeakerBtn) testSpeakerBtn.addEventListener("click", testSpeakerVoice);
   refreshSpeakerStatus();

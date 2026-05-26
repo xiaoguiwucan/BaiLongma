@@ -688,6 +688,12 @@ try {
   if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
   const speakerStatusText = await page.textContent('#voice-speaker-status')
   if (!speakerStatusText.includes('服务不可达') || !speakerStatusText.includes('本地语音服务未运行')) throw new Error(`speaker status did not use backend runtime endpoint: ${speakerStatusText}`)
+  const speakerActionVisible = await page.evaluate(() => ({
+    startHidden: document.querySelector('#voice-speaker-start-service')?.hidden,
+    enrollHidden: document.querySelector('#voice-speaker-enroll-shortcut')?.hidden,
+    refreshHidden: document.querySelector('#voice-speaker-refresh-status')?.hidden,
+  }))
+  if (speakerActionVisible.startHidden !== false || speakerActionVisible.enrollHidden !== true || speakerActionVisible.refreshHidden !== false) throw new Error(`speaker status action buttons not shown for unreachable service: ${JSON.stringify(speakerActionVisible)}`)
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())

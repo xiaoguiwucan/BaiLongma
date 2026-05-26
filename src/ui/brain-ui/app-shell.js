@@ -553,6 +553,9 @@ const createSettingsModal = () => `
             <div class="settings-row">
               <label class="settings-label">声纹状态</label>
               <span class="settings-config-info" id="voice-speaker-status">未检测</span>
+              <button class="settings-save-btn voice-speaker-status-action" id="voice-speaker-start-service" type="button" hidden>启动服务</button>
+              <button class="settings-save-btn voice-speaker-status-action" id="voice-speaker-enroll-shortcut" type="button" hidden>去录入</button>
+              <button class="settings-save-btn voice-speaker-status-action" id="voice-speaker-refresh-status" type="button">刷新</button>
             </div>
             <p class="settings-hint">声纹只保存在本机。v2.1.213 起录入时会拆成多段样本求中心声纹，测试按钮会显示当前分数和建议阈值。录入时请在安静环境下连续说 6–8 秒。</p>
             <div class="settings-row">

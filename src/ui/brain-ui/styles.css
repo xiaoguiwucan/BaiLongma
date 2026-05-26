@@ -4847,3 +4847,10 @@ body.person-card-mode .person-card-panel,
   background: rgba(130,210,255,0.08);
 }
 .voice-local-speaker-runtime em { color: var(--ink2); font-style: normal; font-size: 11px; }
+
+
+.voice-speaker-status-action {
+  width: auto;
+  padding: 0 10px;
+  margin-left: 6px;
+}
