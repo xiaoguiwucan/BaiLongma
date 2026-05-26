@@ -4025,3 +4025,36 @@ body.person-card-mode .person-card-panel,
   background: rgba(211,152,114,0.08);
   font-size: 9px;
 }
+.voice-clients-guide {
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  border: 1px solid rgba(130,210,255,0.22);
+  border-radius: 12px;
+  background: linear-gradient(135deg, rgba(130,210,255,0.08), rgba(0,0,0,0.08));
+}
+.voice-guide-title {
+  margin-bottom: 6px;
+  color: var(--cool);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  letter-spacing: .1em;
+  text-transform: uppercase;
+}
+.voice-clients-guide code {
+  display: block;
+  padding: 8px;
+  border-radius: 8px;
+  background: rgba(0,0,0,0.18);
+  color: var(--ink);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  line-height: 1.5;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+.voice-clients-guide p {
+  margin: 7px 0 0;
+  color: var(--ink2);
+  font-size: 10px;
+  line-height: 1.5;
+}

@@ -1760,15 +1760,25 @@ function initVoiceClientsPanel() {
   const feedbackEl = document.getElementById("voice-clients-feedback");
   const refreshBtn = document.getElementById("voice-clients-refresh-btn");
   const protocolBtn = document.getElementById("voice-clients-protocol-btn");
+  const copyBtn = document.getElementById("voice-clients-copy-btn");
   const diagnosticsEl = document.getElementById("voice-clients-diagnostics");
+  const guideEl = document.getElementById("voice-clients-guide");
   const autoEl = document.getElementById("voice-clients-auto-refresh");
   let timer = null;
 
+  let latestProtocol = null;
+  function voiceClientConnectCommand(protocol = latestProtocol || {}) {
+    const wsPath = protocol.endpoints?.websocket || "/voice/events";
+    return `npm run voice:events -- listen --url ws://127.0.0.1:3721${wsPath} --audio --binary --client-id mac-debug --device mac --platform ${navigator.platform || "mac"} --capability binary_audio --capability wake --capability display`;
+  }
+
   function renderProtocolDiagnostics(protocol = {}) {
     if (!diagnosticsEl) return;
+    latestProtocol = protocol;
     const endpoints = protocol.endpoints || {};
     const caps = Array.isArray(protocol.capabilities) ? protocol.capabilities : [];
     const modes = protocol.negotiation?.audioModes || [];
+    const command = voiceClientConnectCommand(protocol);
     diagnosticsEl.hidden = false;
     diagnosticsEl.innerHTML = `
       <div class="voice-diagnostic-line"><span>WebSocket</span><code>${escapeFocusText(endpoints.websocket || "—")}</code></div>
@@ -1776,6 +1786,14 @@ function initVoiceClientsPanel() {
       <div class="voice-diagnostic-line"><span>Audio Modes</span><code>${escapeFocusText(modes.join(" / ") || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>Capabilities</span><code>${escapeFocusText(caps.filter(c => ["client_identity", "audio_negotiation", "client_diagnostics", "tts_speak"].includes(c)).join(" · ") || "—")}</code></div>
     `;
+    if (guideEl) {
+      guideEl.hidden = false;
+      guideEl.innerHTML = `
+        <div class="voice-guide-title">本机调试接入命令</div>
+        <code>${escapeFocusText(command)}</code>
+        <p>先复制运行该命令，再回到这里查看客户端是否出现、是否订阅音频、是否协商为 binary。</p>
+      `;
+    }
   }
 
   async function refreshProtocolDiagnostics() {
@@ -1825,6 +1843,15 @@ function initVoiceClientsPanel() {
 
   refreshBtn?.addEventListener("click", () => refreshVoiceClients());
   protocolBtn?.addEventListener("click", () => refreshProtocolDiagnostics());
+  copyBtn?.addEventListener("click", async () => {
+    const command = voiceClientConnectCommand();
+    try {
+      await navigator.clipboard?.writeText(command);
+      if (feedbackEl) feedbackEl.textContent = "命令已复制";
+    } catch {
+      if (feedbackEl) feedbackEl.textContent = command;
+    }
+  });
   autoEl?.addEventListener("change", restartTimer);
   refreshProtocolDiagnostics();
   refreshVoiceClients({ quiet: true });

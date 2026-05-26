@@ -54,3 +54,10 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add per-client human advice for identity, capability, subscription, and binary mismatch issues.
 - [x] Extend `smoke-brain-ui` mocks/assertions for protocol diagnostics and “链路正常” advice.
 - [x] Verify brain-ui and voice event smoke suites.
+
+## Checkpoint 4: Copyable device onboarding command
+- [x] Add a generated local debug command based on protocol endpoint metadata.
+- [x] Add “复制接入命令” action for external-client onboarding.
+- [x] Add human guide block explaining the debug flow.
+- [x] Extend brain-ui smoke to assert the guide command is rendered.
+- [x] Verify brain-ui and voice event smoke suites.

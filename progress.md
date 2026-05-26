@@ -31,3 +31,10 @@
 - Verification passed: `npm run smoke:brain-ui`.
 - Verification passed: `node --check src/ui/brain-ui/app.js`, `node --check src/ui/brain-ui/app-shell.js`, `node --check scripts/smoke-brain-ui.mjs`.
 - Verification passed: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.
+- Added a copyable local debug connect command to the Brain UI external clients panel, generated from `/voice/events/protocol` endpoint metadata.
+- Added “复制接入命令” action; if Clipboard API is unavailable, the command is shown in feedback.
+- Added a human guide block explaining how to run `npm run voice:events -- listen ...` and then verify the client in the panel.
+- Extended `smoke-brain-ui` assertions to verify the guide renders the debug connect command.
+- Verification passed: `npm run smoke:brain-ui`.
+- Verification passed: `node --check src/ui/brain-ui/app.js`, `node --check src/ui/brain-ui/app-shell.js`, `node --check scripts/smoke-brain-ui.mjs`.
+- Verification passed: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.

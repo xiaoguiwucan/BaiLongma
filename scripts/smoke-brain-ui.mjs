@@ -358,11 +358,13 @@ try {
     binary: document.querySelector('#voice-clients-binary-count')?.textContent || '',
     card: document.querySelector('.voice-client-card')?.textContent || '',
     diagnostics: document.querySelector('#voice-clients-diagnostics')?.textContent || '',
+    guide: document.querySelector('#voice-clients-guide')?.textContent || '',
   }))
   if (voiceClientSnapshot.count !== '1') throw new Error('voice clients panel did not show connected client count')
   if (!voiceClientSnapshot.card.includes('binary')) throw new Error('voice clients panel did not render negotiated binary mode')
   if (!voiceClientSnapshot.card.includes('链路正常')) throw new Error('voice clients panel did not render human advice')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/clients')) throw new Error('voice clients protocol diagnostics did not render clients endpoint')
+  if (!voiceClientSnapshot.guide.includes('npm run voice:events -- listen')) throw new Error('voice clients guide did not render debug connect command')
   await page.hover('.pc-card')
   await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#pc-exit-btn')).opacity) > 0.5)
   await page.click('#pc-exit-btn')
