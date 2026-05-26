@@ -581,3 +581,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend Brain UI smoke coverage.
 - [x] Run broader voice smoke suites.
 - [x] Commit and push as a development checkpoint.
+
+
+## Checkpoint 60 plan - Voice debug observability
+
+- [x] Add live mic/VAD numbers to voice debug panel.
+- [x] Add wake accepted/rejected reason and confidence to voice debug panel.
+- [x] Add speaker accepted/rejected score and threshold to voice debug panel.
+- [x] Add media pre-roll/ASR gate state to voice debug panel.
+- [x] Extend Brain UI smoke coverage for synthetic debug events.
+- [x] Run broader checks.
+- [x] Commit and push as a development checkpoint.

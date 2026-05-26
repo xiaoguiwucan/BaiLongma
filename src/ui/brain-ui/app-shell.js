@@ -357,6 +357,10 @@ const createSettingsModal = () => `
               <span>ASR Session</span><code id="voice-debug-asr">—</code>
               <span>TTS Session</span><code id="voice-debug-tts">—</code>
               <span>最近事件</span><code id="voice-debug-event">—</code>
+              <span>麦克风/VAD</span><code id="voice-debug-mic">—</code>
+              <span>唤醒判定</span><code id="voice-debug-wake">—</code>
+              <span>声纹判定</span><code id="voice-debug-speaker">—</code>
+              <span>媒体门控</span><code id="voice-debug-media">—</code>
             </div>
           </div>
 

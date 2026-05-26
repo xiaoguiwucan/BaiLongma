@@ -4206,6 +4206,28 @@ function initTTSSettings() {
   const voiceDebugAsr = document.getElementById("voice-debug-asr");
   const voiceDebugTts = document.getElementById("voice-debug-tts");
   const voiceDebugEvent = document.getElementById("voice-debug-event");
+  const voiceDebugMic = document.getElementById("voice-debug-mic");
+  const voiceDebugWake = document.getElementById("voice-debug-wake");
+  const voiceDebugSpeaker = document.getElementById("voice-debug-speaker");
+  const voiceDebugMedia = document.getElementById("voice-debug-media");
+  const voiceDebugLast = {
+    mic: "—",
+    wake: "—",
+    speaker: "—",
+    media: "—",
+  };
+
+  function updateVoiceDebugAux() {
+    if (voiceDebugMic) voiceDebugMic.textContent = voiceDebugLast.mic;
+    if (voiceDebugWake) voiceDebugWake.textContent = voiceDebugLast.wake;
+    if (voiceDebugSpeaker) voiceDebugSpeaker.textContent = voiceDebugLast.speaker;
+    if (voiceDebugMedia) voiceDebugMedia.textContent = voiceDebugLast.media;
+  }
+
+  function formatDebugNumber(value, digits = 3) {
+    const n = Number(value);
+    return Number.isFinite(n) ? n.toFixed(digits) : "—";
+  }
 
   function updateVoiceDebugPanel(detail = {}) {
     if (!voiceDebugPanel) return;
@@ -4217,6 +4239,7 @@ function initTTSSettings() {
     if (voiceDebugRound) voiceDebugRound.textContent = detail.roundId || "—";
     if (voiceDebugAsr) voiceDebugAsr.textContent = detail.asrSessionId || "—";
     if (voiceDebugTts) voiceDebugTts.textContent = detail.ttsSessionId || "—";
+    updateVoiceDebugAux();
   }
 
   if (voiceDebugToggle) {
@@ -4227,10 +4250,46 @@ function initTTSSettings() {
   }
   window.addEventListener("bailongma:voice-state", (event) => updateVoiceDebugPanel(event.detail || {}));
   window.addEventListener("bailongma:voice-event", (event) => {
+    const e = event.detail || {};
+    const detail = e.detail || {};
     if (voiceDebugEvent) {
-      const e = event.detail || {};
       voiceDebugEvent.textContent = `${e.type || "—"} #${e.seq || ""}`.trim();
     }
+    if (e.type === "wake:accepted") {
+      voiceDebugLast.wake = `通过：${detail.word || detail.reason || "wake"}${detail.confidence != null ? ` · conf ${formatDebugNumber(detail.confidence, 2)}` : ""}`;
+    } else if (e.type === "wake:rejected") {
+      voiceDebugLast.wake = `拒绝：${detail.reason || "unknown"}${detail.confidence != null ? ` · conf ${formatDebugNumber(detail.confidence, 2)}` : ""}`;
+    } else if (e.type === "speaker:accepted") {
+      voiceDebugLast.speaker = `通过：${formatDebugNumber(detail.score, 3)} / ${formatDebugNumber(detail.threshold, 2)}`;
+    } else if (e.type === "speaker:rejected") {
+      voiceDebugLast.speaker = `拒绝：${formatDebugNumber(detail.score, 3)} / ${formatDebugNumber(detail.threshold, 2)} · ${detail.reason || "声纹未通过"}`;
+    } else if (e.type === "media:duck") {
+      if (detail.phase === "asr_gate_open") {
+        voiceDebugLast.media = `ASR门控开 ${Math.round(detail.holdMs || 0)}ms · 预录 ${detail.flushedChunks || 0}/${detail.preRollChunks || 0}块`;
+      } else if (detail.phase === "voice_activity") {
+        voiceDebugLast.media = `近场人声 vol ${formatDebugNumber(detail.volume, 3)} · 预录${detail.preRollMs || "—"}ms`;
+      } else if (detail.active) {
+        voiceDebugLast.media = `降音中 ${detail.kind || "media"}${detail.paused ? " · 已暂停" : ""}`;
+      } else {
+        voiceDebugLast.media = "空闲";
+      }
+    } else if (e.type === "asr:partial") {
+      voiceDebugLast.wake = `识别中：${String(detail.text || "").slice(0, 18)}`;
+    } else if (e.type === "asr:final") {
+      voiceDebugLast.wake = `识别完成：${String(detail.text || "").slice(0, 18)}`;
+    }
+    updateVoiceDebugAux();
+  });
+  window.addEventListener("bailongma:mic-level", (event) => {
+    const mic = event.detail || {};
+    const pre = window.bailongmaVoice?.getMediaPreRollState?.();
+    voiceDebugLast.mic = `cur ${formatDebugNumber(mic.current, 3)} · peak ${formatDebugNumber(mic.peak, 3)} · thr ${formatDebugNumber(mic.threshold, 3)}`;
+    if (pre?.enabled) {
+      voiceDebugLast.media = pre.gateOpen
+        ? `ASR门控开 · 剩余 ${Math.round(pre.gateRemainingMs || 0)}ms · 缓存 ${pre.chunks}块/${pre.preRollMs}ms`
+        : `预录待命 · 缓存 ${pre.chunks}块/${pre.preRollMs}ms`;
+    }
+    updateVoiceDebugAux();
   });
   updateVoiceDebugPanel(window.bailongmaVoiceState?.getSnapshot?.() || {});
 

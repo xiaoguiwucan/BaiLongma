@@ -239,8 +239,10 @@ function createServer() {
     }
 
 
-
-
+    if (url.pathname === '/voice/events/publish') {
+      sendJson(res, { ok: true })
+      return
+    }
 
     if (url.pathname === '/voice/events/package') {
       const clientId = url.searchParams.get('clientId') || 'esp32-test'
@@ -1017,6 +1019,14 @@ try {
   if (presetSnapshot.duckChecked !== true || presetSnapshot.pttChecked !== true || presetSnapshot.aecChecked !== true || presetSnapshot.preRollChecked !== true || presetSnapshot.storedDuck !== 'true' || presetSnapshot.storedPreRoll !== 'true') throw new Error(`voice preset did not sync video toggles: ${JSON.stringify(presetSnapshot)}`)
   if (presetSnapshot.duckLevel !== '0.08' || presetSnapshot.duckLabel !== '8%' || presetSnapshot.storedDuckLevel !== '0.08') throw new Error(`voice preset did not sync video duck level: ${JSON.stringify(presetSnapshot)}`)
   if (presetSnapshot.preRollMs !== '3000' || presetSnapshot.preRollLabel !== '3.0s' || presetSnapshot.storedPreRollMs !== '3000') throw new Error(`voice preset did not sync video pre-roll: ${JSON.stringify(presetSnapshot)}`)
+
+  await page.evaluate(() => {
+    window.dispatchEvent(new CustomEvent('bailongma:mic-level', { detail: { current: 0.021, peak: 0.034, threshold: 0.008, active: true, updatedAt: Date.now() } }))
+    window.dispatchEvent(new CustomEvent('bailongma:voice-event', { detail: { type: 'wake:rejected', seq: 9001, detail: { reason: 'wake missing', confidence: 0.41 } } }))
+    window.dispatchEvent(new CustomEvent('bailongma:voice-event', { detail: { type: 'speaker:rejected', seq: 9002, detail: { score: 0.42, threshold: 0.58, reason: 'not owner' } } }))
+    window.dispatchEvent(new CustomEvent('bailongma:voice-event', { detail: { type: 'media:duck', seq: 9003, detail: { phase: 'asr_gate_open', holdMs: 3200, preRollChunks: 9, flushedChunks: 8 } } }))
+  })
+  await page.waitForFunction(() => document.querySelector('#voice-debug-mic')?.textContent.includes('cur 0.021') && document.querySelector('#voice-debug-wake')?.textContent.includes('拒绝：wake missing') && document.querySelector('#voice-debug-speaker')?.textContent.includes('拒绝：0.420') && document.querySelector('#voice-debug-media')?.textContent.includes('ASR门控开'))
 
   await page.click('#settings-close')
   await page.waitForFunction(() => document.querySelector('#settings-overlay')?.hidden === true)

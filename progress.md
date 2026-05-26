@@ -484,3 +484,17 @@
 - Extended Brain UI smoke coverage for server hydration and preset application of pre-roll controls.
 - Verified `node --check` for app/voice-panel/config/api/smoke and `npm run smoke:brain-ui`.
 - This is a post-v2.3.1 development checkpoint only; no tag/Release yet per meaningful-version cadence.
+
+
+## Checkpoint 60 - Voice debug panel observability
+
+- Continued after the media pre-roll checkpoint with a practical observability improvement instead of cutting a tiny release.
+- Enhanced the Brain UI voice debug panel to show:
+  - live microphone/VAD numbers: current, peak, trigger threshold;
+  - latest wake decision: accepted/rejected reason and confidence;
+  - latest speaker decision: accepted/rejected score, threshold and reason;
+  - media gate/pre-roll state: ASR gate open, remaining time, cached chunks, flushed pre-roll chunks.
+- This directly helps diagnose the user-facing problems: video masks wake word, wake rejected, speaker rejected, or mic below threshold.
+- Extended Brain UI smoke to synthesize mic-level, wake rejection, speaker rejection, and media pre-roll gate events, verifying the debug panel renders them.
+- Verified `node --check` for app/app-shell/smoke and `npm run smoke:brain-ui`.
+- This remains a post-v2.3.1 development checkpoint only; no tag/Release yet.
