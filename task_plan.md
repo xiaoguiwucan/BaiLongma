@@ -654,4 +654,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add “导入/下载模型” action and sync imported model into selector/path.
 - [x] Extend smoke tests for import/download endpoint and UI sync.
 - [x] Run validation checks and smoke suites.
-- [ ] Commit and push as a development checkpoint only, without tag/Release.
+- [x] Commit and push as a development checkpoint only, without tag/Release.
