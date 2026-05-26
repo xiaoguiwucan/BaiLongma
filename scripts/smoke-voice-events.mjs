@@ -267,9 +267,16 @@ try {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event: { type: 'wake:rejected', at: Date.now(), detail: { text: '龙马', reason: 'command too short', confidence: 0.80, threshold: 0.72, minCommandChars: 2 } } }),
   })
+  await fetch(`${API}/voice/events/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event: { type: 'speaker:rejected', at: Date.now(), detail: { score: 0.47, threshold: 0.63, reason: 'speaker verification failed' } } }),
+  })
   const summaryAfterRejects = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
   assert(summaryAfterRejects.summary?.recent?.wakeRejectedDetails?.some(item => item.reason === 'command too short' && item.advice?.includes('最短指令字数')), 'summary endpoint exposes wake reject details and tuning advice', JSON.stringify(summaryAfterRejects.summary?.recent))
   assert(summaryAfterRejects.summary?.issues?.some(item => item.includes('wake_guard_command_too_short')) && summaryAfterRejects.summary?.suggestions?.some(item => item.includes('最短指令字数')), 'summary endpoint promotes wake guard issues into suggestions', JSON.stringify(summaryAfterRejects.summary))
+  assert(summaryAfterRejects.summary?.recent?.speakerRejected >= 1 && summaryAfterRejects.summary?.recent?.speakerRejectedDetails?.some(item => item.advice?.includes('声纹严格度')), 'summary endpoint exposes speaker rejection details and advice', JSON.stringify(summaryAfterRejects.summary?.recent))
+  assert(summaryAfterRejects.summary?.issues?.includes('speaker_rejected_high') && summaryAfterRejects.summary?.suggestions?.some(item => item.includes('重新录入声纹')), 'summary endpoint promotes speaker rejection issues into suggestions', JSON.stringify(summaryAfterRejects.summary))
   const tuning = await fetch(`${API}/voice/wake/tuning?windowMs=60000`).then(r => r.json())
   assert(tuning.ok === true && tuning.actions?.some(item => item.reason === 'command too short' && item.patch?.wakeMinCommandChars != null), 'wake tuning endpoint suggests safe patch from rejection summary', JSON.stringify(tuning.actions))
   const applyTuning = await fetch(`${API}/voice/wake/tuning/apply`, {

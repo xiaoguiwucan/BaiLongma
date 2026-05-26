@@ -502,9 +502,10 @@ function wakeRejectAdvice(reason = '') {
 }
 
 function countRecentVoiceEvents({ since = Date.now() - 60000 } = {}) {
-  const counts = { total: 0, wakeAccepted: 0, wakeRejected: 0, asrFinal: 0, asrPartial: 0, ttsStart: 0, ttsStop: 0, interrupt: 0, unknown: 0 }
+  const counts = { total: 0, wakeAccepted: 0, wakeRejected: 0, speakerAccepted: 0, speakerRejected: 0, asrFinal: 0, asrPartial: 0, ttsStart: 0, ttsStop: 0, interrupt: 0, unknown: 0 }
   const wakeRejectedReasons = {}
   const wakeRejectedDetails = []
+  const speakerRejectedDetails = []
   for (const item of history) {
     const event = item.event || {}
     const detail = event.detail || {}
@@ -526,6 +527,16 @@ function countRecentVoiceEvents({ since = Date.now() - 60000 } = {}) {
         advice: wakeRejectAdvice(reason),
       })
     }
+    else if (event.type === 'speaker:accepted') counts.speakerAccepted += 1
+    else if (event.type === 'speaker:rejected') {
+      counts.speakerRejected += 1
+      speakerRejectedDetails.push({
+        reason: detail.reason || 'speaker verification failed',
+        score: detail.score,
+        threshold: detail.threshold,
+        advice: '声纹拒绝：如果这是你的声音，请降低“声纹严格度”、重新录入 6–8 秒声纹，或暂时关闭“只响应我的声音”。',
+      })
+    }
     else if (event.type === 'asr:final') counts.asrFinal += 1
     else if (event.type === 'asr:partial') counts.asrPartial += 1
     else if (event.type === 'tts:start') counts.ttsStart += 1
@@ -535,6 +546,7 @@ function countRecentVoiceEvents({ since = Date.now() - 60000 } = {}) {
   }
   counts.wakeRejectedReasons = wakeRejectedReasons
   counts.wakeRejectedDetails = wakeRejectedDetails.slice(-8)
+  counts.speakerRejectedDetails = speakerRejectedDetails.slice(-8)
   return counts
 }
 
@@ -563,6 +575,10 @@ export function getVoiceEventLinkSummary({ windowMs = 60000 } = {}) {
     issues.push('wake_rejected_high')
     const topReject = Object.entries(recent.wakeRejectedReasons || {}).sort((a, b) => b[1] - a[1])[0]
     suggestions.push(topReject ? `最近唤醒拒绝偏多，主要原因：${topReject[0]}（${topReject[1]} 次）。${wakeRejectAdvice(topReject[0])}` : '最近唤醒拒绝偏多：检查唤醒词、声纹阈值和视频抗干扰设置。')
+  }
+  if (recent.speakerRejected > 0 && recent.speakerRejected >= recent.speakerAccepted) {
+    issues.push('speaker_rejected_high')
+    suggestions.push('最近声纹拒绝偏多：如果被拒绝的是你本人，请降低“声纹严格度”、重新录入声纹，或暂时关闭“只响应我的声音”。')
   }
   for (const detail of recent.wakeRejectedDetails || []) {
     if (detail.reason && !issues.includes(`wake_guard_${detail.reason.replace(/\W+/g, '_')}`)) {

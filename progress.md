@@ -206,3 +206,11 @@
 - Verification passed: syntax checks for config, Brain UI app, and smoke scripts; `npm run smoke:voice-config` 22/22; `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Added speaker verification diagnostics into the voice link summary so “it cannot recognize my voice after enrollment” becomes visible in the command center instead of only raw event history.
+- `/voice/events/summary` now counts `speaker:accepted` and `speaker:rejected`, keeps recent speaker rejection details with score/threshold, and promotes excessive speaker rejection into `speaker_rejected_high` suggestions.
+- Brain UI “语音链路总控” now shows speaker accepted/rejected metrics and renders speaker rejection advice cards with score/threshold when available.
+- Extended `smoke:voice-events` to 60/60 checks for speaker rejection summary details and promoted suggestions.
+- Extended `smoke:brain-ui` to verify speaker rejection diagnostics render in the voice link summary.
+- Verification passed: syntax checks for voice event bus, Brain UI app, and smoke scripts; `npm run smoke:voice-events` 60/60; `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

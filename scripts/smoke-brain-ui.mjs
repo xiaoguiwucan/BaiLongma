@@ -243,9 +243,9 @@ new WebSocket(url)`,
           windowMs: 60000,
           checkedAt: Date.now(),
           status: { clients: 1, audioSubscribers: 1, binaryAudioSubscribers: 1, history: 4, version: 3 },
-          recent: { total: 5, wakeAccepted: 1, wakeRejected: 1, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0, wakeRejectedDetails: [{ reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2, advice: '唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。' }] },
+          recent: { total: 6, wakeAccepted: 1, wakeRejected: 1, speakerAccepted: 0, speakerRejected: 1, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0, wakeRejectedDetails: [{ reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2, advice: '唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。' }], speakerRejectedDetails: [{ reason: 'speaker verification failed', score: 0.47, threshold: 0.63, advice: '声纹拒绝：如果这是你的声音，请降低“声纹严格度”、重新录入 6–8 秒声纹，或暂时关闭“只响应我的声音”。' }] },
           issues: [],
-          suggestions: ['唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。'],
+          suggestions: ['唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。', '最近声纹拒绝偏多：如果被拒绝的是你本人，请降低“声纹严格度”、重新录入声纹，或暂时关闭“只响应我的声音”。'],
           clientDetails: [],
         },
       })
@@ -263,9 +263,9 @@ new WebSocket(url)`,
           windowMs: 60000,
           checkedAt: Date.now(),
           status: { clients: 1, audioSubscribers: 1, binaryAudioSubscribers: 1, history: 4, version: 3 },
-          recent: { total: 5, wakeAccepted: 1, wakeRejected: 1, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0, wakeRejectedDetails: [{ reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2, advice: '唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。' }] },
+          recent: { total: 6, wakeAccepted: 1, wakeRejected: 1, speakerAccepted: 0, speakerRejected: 1, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0, wakeRejectedDetails: [{ reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2, advice: '唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。' }], speakerRejectedDetails: [{ reason: 'speaker verification failed', score: 0.47, threshold: 0.63, advice: '声纹拒绝：如果这是你的声音，请降低“声纹严格度”、重新录入 6–8 秒声纹，或暂时关闭“只响应我的声音”。' }] },
           issues: [],
-          suggestions: ['唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。'],
+          suggestions: ['唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。', '最近声纹拒绝偏多：如果被拒绝的是你本人，请降低“声纹严格度”、重新录入声纹，或暂时关闭“只响应我的声音”。'],
           clientDetails: [],
         },
       })
@@ -605,6 +605,7 @@ try {
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/check')) throw new Error('voice clients protocol diagnostics did not render check endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/package')) throw new Error('voice clients protocol diagnostics did not render package endpoint')
   if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('最短指令字数')) throw new Error('voice link summary did not render wake reject tuning advice')
+  if (!voiceClientSnapshot.summary.includes('声纹拒绝') || !voiceClientSnapshot.summary.includes('声纹严格度')) throw new Error('voice link summary did not render speaker rejection diagnostics')
   await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('安全自动调参'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))

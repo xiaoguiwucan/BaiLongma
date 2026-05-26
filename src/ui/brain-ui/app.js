@@ -1819,6 +1819,7 @@ function renderVoiceLinkSummary(summary = {}) {
   const suggestions = Array.isArray(summary.suggestions) ? summary.suggestions : [];
   const issues = Array.isArray(summary.issues) ? summary.issues : [];
   const wakeDetails = Array.isArray(recent.wakeRejectedDetails) ? recent.wakeRejectedDetails : [];
+  const speakerDetails = Array.isArray(recent.speakerRejectedDetails) ? recent.speakerRejectedDetails : [];
   const levelText = level === "ok" ? "链路正常" : level === "offline" ? "未连接" : "需要注意";
   return `
     <div class="voice-link-summary-head">
@@ -1834,12 +1835,17 @@ function renderVoiceLinkSummary(summary = {}) {
       <div><span>二进制</span><strong>${escapeFocusText(status.binaryAudioSubscribers ?? 0)}</strong></div>
       <div><span>事件</span><strong>${escapeFocusText(recent.total ?? 0)}</strong></div>
       <div><span>唤醒成功</span><strong>${escapeFocusText(recent.wakeAccepted ?? 0)}</strong></div>
+      <div><span>声纹通过</span><strong>${escapeFocusText(recent.speakerAccepted ?? 0)}</strong></div>
+      <div><span>声纹拒绝</span><strong>${escapeFocusText(recent.speakerRejected ?? 0)}</strong></div>
       <div><span>识别完成</span><strong>${escapeFocusText(recent.asrFinal ?? 0)}</strong></div>
       <div><span>TTS</span><strong>${escapeFocusText(`${recent.ttsStart ?? 0}/${recent.ttsStop ?? 0}`)}</strong></div>
       <div><span>中断</span><strong>${escapeFocusText(recent.interrupt ?? 0)}</strong></div>
     </div>
     ${wakeDetails.length ? `<div class="voice-link-wake-rejects">
       ${wakeDetails.slice(-4).map(item => `<span><strong>${escapeFocusText(item.reason || "unknown")}</strong>${escapeFocusText(item.advice || voiceWakeRejectAdvice(item.reason || ""))}${Number.isFinite(Number(item.confidence)) ? `<code>${escapeFocusText(Number(item.confidence).toFixed(2))}</code>` : ""}</span>`).join("")}
+    </div>` : ""}
+    ${speakerDetails.length ? `<div class="voice-link-wake-rejects">
+      ${speakerDetails.slice(-4).map(item => `<span><strong>声纹拒绝</strong>${escapeFocusText(item.advice || "建议降低声纹严格度或重新录入声纹。")}${Number.isFinite(Number(item.score)) ? `<code>${escapeFocusText(Number(item.score).toFixed(2))}/${escapeFocusText(Number(item.threshold ?? 0).toFixed(2))}</code>` : ""}</span>`).join("")}
     </div>` : ""}
     <div class="voice-link-suggestions">
       ${suggestions.map(item => `<span>${escapeFocusText(item)}</span>`).join("")}

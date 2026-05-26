@@ -224,3 +224,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-config and brain-ui smoke coverage.
 - [x] Verify syntax plus voice-config and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 23: Speaker verification rejection diagnostics
+- [x] Count `speaker:accepted` and `speaker:rejected` in voice link summary metrics.
+- [x] Keep recent speaker rejection details with score, threshold, reason, and user-facing advice.
+- [x] Promote excessive speaker rejection into summary issues and suggestions.
+- [x] Render speaker accepted/rejected metrics in Brain UI “语音链路总控”.
+- [x] Render speaker rejection advice cards in Brain UI with score/threshold diagnostics.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.
