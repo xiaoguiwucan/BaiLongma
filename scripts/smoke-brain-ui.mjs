@@ -182,6 +182,8 @@ function createServer() {
               shouldSubscribeAudio: false,
               reason: 'client_capability',
             },
+            health: { level: 'ok', ok: true, advice: ['链路正常'] },
+            advice: ['链路正常'],
           },
         ],
       })
@@ -385,6 +387,7 @@ try {
   if (voiceClientSnapshot.count !== '1') throw new Error('voice clients panel did not show connected client count')
   if (!voiceClientSnapshot.card.includes('binary')) throw new Error('voice clients panel did not render negotiated binary mode')
   if (!voiceClientSnapshot.card.includes('链路正常')) throw new Error('voice clients panel did not render human advice')
+  if (!voiceClientSnapshot.card.includes('Healthok')) throw new Error('voice clients panel did not render backend health level')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/clients')) throw new Error('voice clients protocol diagnostics did not render clients endpoint')
   if (!voiceClientSnapshot.guide.includes('npm run voice:events -- listen')) throw new Error('voice clients guide did not render debug connect command')
   if (!voiceClientSnapshot.guide.includes('esp32-test') || !voiceClientSnapshot.guide.includes('client:hello')) throw new Error('voice clients guide did not render LAN command and handshake example')

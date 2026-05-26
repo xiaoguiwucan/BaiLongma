@@ -81,7 +81,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
     },
     clientMessages: ['ping', 'client:hello', 'client:identify', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
     identityFields: ['clientId', 'device', 'app', 'version', 'platform', 'capabilities'],
-    diagnosticsFields: ['audio', 'binaryAudio', 'identity', 'negotiated'],
+    diagnosticsFields: ['audio', 'binaryAudio', 'identity', 'negotiated', 'health', 'advice'],
     clientCapabilityExamples: ['binary_audio', 'base64_audio', 'tts_speak', 'wake', 'display'],
     negotiation: {
       audioModes: ['none', 'binary', 'base64'],
@@ -411,14 +411,36 @@ export function publishTTSAudioError({ sessionId, index, error, targetClient = n
   return { delivered: subscribers.length }
 }
 
+
+export function getVoiceEventClientHealth({ identity = {}, options = {}, negotiated = {} } = {}) {
+  const capabilities = Array.isArray(identity.capabilities) ? identity.capabilities : sanitizeClientCapabilities(identity.capabilities)
+  const advice = []
+  if (!identity.clientId || String(identity.clientId).startsWith('ws_')) advice.push('建议发送 client:hello 标识设备')
+  if (!capabilities.length) advice.push('未声明 capabilities')
+  if (negotiated.audioMode === 'none') advice.push('未声明 binary_audio/base64_audio')
+  if (negotiated.audioMode !== 'none' && !options.audio) advice.push('可发送 subscribe 开启音频')
+  if (options.audio && negotiated.audioMode === 'binary' && !options.binaryAudio) advice.push('建议 binaryAudio=true')
+  const level = advice.length === 0 ? 'ok' : advice.some(item => item.includes('client:hello') || item.includes('capabilities')) ? 'warn' : 'info'
+  return {
+    level,
+    ok: level === 'ok',
+    advice: advice.length ? advice : ['链路正常'],
+  }
+}
+
 export function getVoiceEventClientDetails() {
   return [...clients].map(ws => {
     const identity = getVoiceEventClientIdentity(ws)
+    const options = getOptions(ws)
+    const negotiated = negotiateVoiceEventClientCapabilities(identity)
+    const health = getVoiceEventClientHealth({ identity, options, negotiated })
     return {
-      audio: getOptions(ws).audio,
-      binaryAudio: getOptions(ws).binaryAudio,
+      audio: options.audio,
+      binaryAudio: options.binaryAudio,
       identity,
-      negotiated: negotiateVoiceEventClientCapabilities(identity),
+      negotiated,
+      health,
+      advice: health.advice,
     }
   })
 }

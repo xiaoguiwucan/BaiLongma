@@ -54,3 +54,11 @@
 - Extended brain-ui smoke mock with `/voice/events/onboarding`.
 - Verification passed: `npm run smoke:voice-mapping` 39/39, `npm run smoke:voice-events` 43/43, `npm run smoke:brain-ui`, and `npm run smoke:voice-events-client` 8/8.
 - Verification passed: syntax checks for `src/voice/voice-event-bus.js`, `src/api.js`, `scripts/smoke-voice-mapping.mjs`, `scripts/smoke-voice-events.mjs`, `src/ui/brain-ui/app.js`, and `scripts/smoke-brain-ui.mjs`.
+- Added backend client health/advice diagnostics to `/voice/events/clients` and `/voice/events/status` clientDetails.
+- Added `getVoiceEventClientHealth()` with normalized `health.level`, `health.ok`, and `health.advice`.
+- Protocol metadata `diagnosticsFields` now includes `health` and `advice`.
+- Brain UI external clients panel now renders backend-provided health/advice instead of duplicating the full rule set in the frontend.
+- Extended smoke mapping to 41/41 and voice events smoke to 43/43 for client health coverage.
+- Extended brain-ui smoke fixture and assertion to verify backend health level renders in the client card.
+- Verification passed: syntax checks for voice bus, API, Brain UI app, and smoke scripts.
+- Verification passed: `npm run smoke:voice-mapping` 41/41, `npm run smoke:voice-events` 43/43, `npm run smoke:brain-ui`, and `npm run smoke:voice-events-client` 8/8.

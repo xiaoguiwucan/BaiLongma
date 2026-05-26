@@ -76,3 +76,11 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Update Brain UI to use backend onboarding data when available.
 - [x] Extend mapping, voice-events, and brain-ui smoke coverage.
 - [x] Verify all relevant smoke suites for this checkpoint.
+
+## Checkpoint 7: Backend client health/advice diagnostics
+- [x] Add backend `getVoiceEventClientHealth()` helper.
+- [x] Include `health` and `advice` in `/voice/events/clients` and status `clientDetails`.
+- [x] Expose health/advice in protocol diagnostics fields.
+- [x] Update Brain UI to render backend health/advice.
+- [x] Extend mapping, voice-events, and brain-ui smoke coverage.
+- [x] Verify all relevant smoke suites.

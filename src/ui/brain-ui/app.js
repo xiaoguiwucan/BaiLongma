@@ -1708,21 +1708,14 @@ function renderVoiceClientTags(capabilities = []) {
 
 
 function voiceClientAdvice(client = {}) {
-  const identity = client.identity || {};
-  const negotiated = client.negotiated || {};
-  const capabilities = Array.isArray(identity.capabilities) ? identity.capabilities : [];
-  const tips = [];
-  if (!identity.clientId || String(identity.clientId).startsWith("ws_")) tips.push("建议发送 client:hello 标识设备");
-  if (!capabilities.length) tips.push("未声明 capabilities");
-  if (negotiated.audioMode === "none") tips.push("未声明 binary_audio/base64_audio");
-  if (negotiated.audioMode !== "none" && !client.audio) tips.push("可发送 subscribe 开启音频");
-  if (client.audio && negotiated.audioMode === "binary" && !client.binaryAudio) tips.push("建议 binaryAudio=true");
-  if (!tips.length) tips.push("链路正常");
-  return tips;
+  if (Array.isArray(client.advice) && client.advice.length) return client.advice;
+  if (Array.isArray(client.health?.advice) && client.health.advice.length) return client.health.advice;
+  return ["链路状态未知"];
 }
 
 function renderVoiceClientAdvice(client = {}) {
-  return voiceClientAdvice(client).map(item => `<span class="voice-client-advice">${escapeFocusText(item)}</span>`).join("");
+  const level = client.health?.level || "info";
+  return voiceClientAdvice(client).map(item => `<span class="voice-client-advice voice-client-advice-${escapeFocusText(level)}">${escapeFocusText(item)}</span>`).join("");
 }
 
 function renderVoiceClientCard(client = {}) {
@@ -1745,6 +1738,7 @@ function renderVoiceClientCard(client = {}) {
         <div class="voice-client-kv"><span>Audio</span><strong>${escapeFocusText(audioState)}</strong></div>
         <div class="voice-client-kv"><span>Last Seen</span><strong>${escapeFocusText(formatVoiceClientSeenAt(identity.lastSeenAt || identity.updatedAt || identity.connectedAt))}</strong></div>
         <div class="voice-client-kv"><span>Negotiated</span><strong>${escapeFocusText(negotiated.reason || "—")}</strong></div>
+        <div class="voice-client-kv"><span>Health</span><strong>${escapeFocusText(client.health?.level || "unknown")}</strong></div>
       </div>
       <div class="voice-client-tags">${renderVoiceClientTags(identity.capabilities)}</div>
       <div class="voice-client-advice-row">${renderVoiceClientAdvice(client)}</div>

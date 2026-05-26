@@ -138,7 +138,7 @@ try {
   const statusWithIdentity = await fetch(`${API}/voice/events/status`).then(r => r.json())
   assert(Array.isArray(statusWithIdentity.clientDetails), 'status exposes clientDetails array', JSON.stringify(statusWithIdentity))
   assert(statusWithIdentity.clientDetails.every(item => item.identity?.lastSeenAt), 'status clientDetails include lastSeenAt diagnostics', JSON.stringify(statusWithIdentity.clientDetails))
-  assert(clientsDuringIdentity?.clients >= 1 && clientsDuringIdentity.clientDetails?.some(item => item.identity?.clientId === 'status-client' && item.negotiated?.audioMode === 'none'), 'clients endpoint exposes focused identity and negotiated diagnostics', JSON.stringify(clientsDuringIdentity))
+  assert(clientsDuringIdentity?.clients >= 1 && clientsDuringIdentity.clientDetails?.some(item => item.identity?.clientId === 'status-client' && item.negotiated?.audioMode === 'none' && item.health?.level === 'warn' && item.advice?.includes('未声明 binary_audio/base64_audio')), 'clients endpoint exposes focused identity and negotiated diagnostics', JSON.stringify(clientsDuringIdentity))
 
   const pingMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'ping' })),
