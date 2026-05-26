@@ -305,12 +305,14 @@ try {
   assert(persistedAutoVoice.voice?.wakeAutoTuningEnabled === true && persistedAutoVoice.voice?.wakeAutoTuningMinRejects === 2, 'wake auto tuning policy persists in voice config', JSON.stringify(persistedAutoVoice.voice))
   const presets = await fetch(`${API}/settings/voice/presets`).then(r => r.json())
   assert(presets.ok === true && presets.presets?.some(item => item.id === 'video-guard' && item.patch?.wakeConfidenceThreshold >= 0.78), 'voice presets endpoint exposes stability presets', JSON.stringify(presets.presets))
+  assert(presets.recommended?.id && presets.recommended?.reason && Object.prototype.hasOwnProperty.call(presets, 'currentPreset'), 'voice presets endpoint exposes current and recommended preset metadata', JSON.stringify({ currentPreset: presets.currentPreset, recommended: presets.recommended }))
   const appliedPreset = await fetch(`${API}/settings/voice/preset/apply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ id: 'video-guard' }),
   }).then(r => r.json())
   assert(appliedPreset.ok === true && appliedPreset.preset?.id === 'video-guard' && appliedPreset.voice?.wakeConfidenceThreshold === 0.78 && appliedPreset.voice?.videoVoiceDuckLevel === 0.08, 'voice preset apply endpoint persists bounded preset settings', JSON.stringify(appliedPreset))
+  assert(appliedPreset.currentPreset?.id === 'video-guard' && appliedPreset.currentPreset?.exact === true && appliedPreset.recommended?.id, 'voice preset apply endpoint returns refreshed preset metadata', JSON.stringify(appliedPreset.currentPreset))
   setVoiceConfig({ wakeAutoTuningLastAppliedAt: 0 })
   const autoApply = await fetch(`${API}/voice/wake/tuning/auto/apply`, { method: 'POST' }).then(r => r.json())
   assert(autoApply.ok === true && autoApply.applied?.speakerThreshold != null && autoApply.record?.auto === true, 'wake auto tuning apply can persist speaker threshold action', JSON.stringify(autoApply))

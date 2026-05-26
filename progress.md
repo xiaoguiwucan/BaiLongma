@@ -281,3 +281,10 @@
 - Verification passed: `node --check src/api.js`; `node --check src/ui/brain-ui/app.js`; `node --check src/ui/brain-ui/app-shell.js`; `node --check scripts/smoke-brain-ui.mjs`; `npm run smoke:brain-ui`; `npm run smoke:voice-events` 67/67.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added current/recommended awareness to voice stability presets so the settings page no longer shows static scenario cards without context.
+- `/settings/voice/presets` now returns `currentPreset` when the current voice config exactly or mostly matches a preset, plus `recommended` with a human reason derived from recent wake/speaker/video-protection signals.
+- `/settings/voice/preset/apply` now returns refreshed `currentPreset` and `recommended` metadata after persisting the preset.
+- Brain UI now shows a compact recommendation hint above preset cards and badges cards as “当前” or “推荐”.
+- Extended `smoke:voice-events` to verify preset metadata and apply metadata.
+- Extended `smoke:brain-ui` to verify the recommendation hint and current-card badge after applying a preset.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

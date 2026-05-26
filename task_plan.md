@@ -315,3 +315,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui smoke coverage for preset rendering, apply feedback, UI values, and localStorage sync.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 32: Preset recommendation and current-state awareness
+- [x] Add backend current preset detection for exact and near-match voice settings.
+- [x] Add backend recommended preset metadata based on recent voice link summary and current config.
+- [x] Return `currentPreset`, `recommended`, and a compact summary from `/settings/voice/presets`.
+- [x] Return refreshed preset metadata after `/settings/voice/preset/apply`.
+- [x] Render current/recommended preset hints in Brain UI settings.
+- [x] Mark preset cards with “当前” and “推荐” badges.
+- [x] Extend voice-events and brain-ui smoke coverage for preset metadata and UI badges.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

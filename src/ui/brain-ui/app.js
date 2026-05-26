@@ -3118,14 +3118,22 @@ function initTTSSettings() {
         list.innerHTML = '<div class="voice-clients-empty">暂无可用语音预设。</div>';
         return;
       }
-      list.innerHTML = presets.map(preset => {
+      const currentPreset = data.currentPreset || null;
+      const recommended = data.recommended || null;
+      const helper = [
+        currentPreset?.label ? `当前接近：${currentPreset.label}${currentPreset.exact ? "（完全匹配）" : ""}` : "当前使用自定义语音参数",
+        recommended?.label ? `建议：${recommended.label} — ${recommended.reason || "根据最近语音链路自动判断。"}` : "建议：先用均衡推荐作为稳定基线",
+      ].filter(Boolean).join(" · ");
+      list.innerHTML = `${helper ? `<div class="voice-preset-recommendation">${escapeFocusText(helper)}</div>` : ""}${presets.map(preset => {
         const chips = voicePresetPatchSummary(preset.patch || {}).map(chip => `<span>${escapeFocusText(chip)}</span>`).join("");
-        return `<button class="voice-preset-card" type="button" data-preset-id="${escapeFocusText(preset.id)}">
-          <strong>${escapeFocusText(preset.label || preset.id)}</strong>
+        const isCurrent = currentPreset?.id === preset.id;
+        const isRecommended = recommended?.id === preset.id;
+        return `<button class="voice-preset-card${isCurrent ? " is-current" : ""}${isRecommended ? " is-recommended" : ""}" type="button" data-preset-id="${escapeFocusText(preset.id)}">
+          <strong>${escapeFocusText(preset.label || preset.id)}${isCurrent ? `<em>当前</em>` : ""}${isRecommended && !isCurrent ? `<em>推荐</em>` : ""}</strong>
           <p>${escapeFocusText(preset.description || "一键应用这组语音稳定参数。")}</p>
           <div class="voice-preset-patch">${chips}</div>
         </button>`;
-      }).join("");
+      }).join("")}`;
       list.querySelectorAll(".voice-preset-card").forEach(card => {
         card.addEventListener("click", async () => {
           const id = card.dataset.presetId;
@@ -3141,6 +3149,7 @@ function initTTSSettings() {
             if (!applyResp.ok || !applied?.ok) throw new Error(applied?.error || "应用预设失败");
             const synced = hydrateVoiceControlsFromConfig(applied.voice || applied.preset?.patch || {});
             if (!synced) syncVoiceConfigToSettingsUi(applied.voice || applied.preset?.patch || {});
+            await loadVoiceStabilityPresets();
             showFeedback(feedback, `已应用：${applied.preset?.label || id}`);
           } catch (err) {
             showFeedback(feedback, err?.message || "应用预设失败", true);

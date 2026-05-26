@@ -135,6 +135,72 @@ function getVoiceStabilityPreset(id = '') {
   return VOICE_STABILITY_PRESETS.find(item => item.id === String(id || '').trim()) || null
 }
 
+function voicePresetPatchMatchesConfig(patch = {}, voice = {}) {
+  const keys = Object.keys(patch || {})
+  if (!keys.length) return false
+  return keys.every(key => {
+    const a = patch[key]
+    const b = voice[key]
+    if (typeof a === 'number' || typeof b === 'number') return Math.abs(Number(a) - Number(b)) < 0.0001
+    return a === b
+  })
+}
+
+function getCurrentVoiceStabilityPreset(voice = getVoiceConfig()) {
+  const exact = VOICE_STABILITY_PRESETS.find(item => voicePresetPatchMatchesConfig(item.patch, voice))
+  if (exact) return { id: exact.id, label: exact.label, reason: '当前设置与该预设完全一致。', exact: true }
+  let best = null
+  for (const item of VOICE_STABILITY_PRESETS) {
+    const keys = Object.keys(item.patch || {})
+    const matched = keys.filter(key => {
+      const a = item.patch[key]
+      const b = voice[key]
+      if (typeof a === 'number' || typeof b === 'number') return Math.abs(Number(a) - Number(b)) < 0.0001
+      return a === b
+    }).length
+    const score = keys.length ? matched / keys.length : 0
+    if (!best || score > best.score) best = { id: item.id, label: item.label, score }
+  }
+  return best && best.score >= 0.7 ? { ...best, reason: '当前设置大部分接近该预设。', exact: false } : null
+}
+
+function recommendVoiceStabilityPreset({ summary = null, voice = getVoiceConfig() } = {}) {
+  const recent = summary?.recent || {}
+  const issues = Array.isArray(summary?.issues) ? summary.issues : []
+  const wakeRejected = Number(recent.wakeRejected || 0)
+  const speakerRejected = Number(recent.speakerRejected || 0)
+  const asrFinal = Number(recent.asrFinal || 0)
+  const ttsStop = Number(recent.ttsStop || 0)
+  const videoProtectionOff = voice.videoVoiceDuckEnabled === false || voice.videoVoicePttEnabled === false || voice.videoVoiceAecEnabled === false
+  if (speakerRejected >= 2 || issues.includes('speaker_rejected_high')) {
+    return { id: 'balanced', label: '均衡推荐', reason: '最近出现多次声纹误拒，先回到较稳的声纹阈值，再重新测试。' }
+  }
+  if (wakeRejected >= 2 || issues.some(item => String(item).startsWith('wake_guard_')) || videoProtectionOff) {
+    return { id: 'video-guard', label: '视频抗干扰', reason: '最近有唤醒拒绝/视频保护未全开，建议先启用更抗干扰的整组参数。' }
+  }
+  if (voice.speakerVerificationEnabled && voice.speakerThreshold >= 0.62) {
+    return { id: 'strict-speaker', label: '严格声纹', reason: '你已启用较严格声纹，适合多人环境继续使用严格声纹预设。' }
+  }
+  if (asrFinal > 0 && ttsStop > 0 && wakeRejected === 0 && speakerRejected === 0) {
+    return { id: 'quiet-room', label: '安静环境', reason: '最近链路正常且没有拒绝记录，可以使用响应更自然的安静环境预设。' }
+  }
+  return { id: 'balanced', label: '均衡推荐', reason: '没有足够异常证据时，默认使用均衡推荐作为稳定基线。' }
+}
+
+function buildVoiceStabilityPresetResponse({ windowMs = 60000 } = {}) {
+  const voice = getVoiceConfig()
+  let summary = null
+  try { summary = getVoiceEventLinkSummary({ windowMs }) } catch (_) {}
+  return {
+    ok: true,
+    presets: publicVoiceStabilityPresets(),
+    current: voice,
+    currentPreset: getCurrentVoiceStabilityPreset(voice),
+    recommended: recommendVoiceStabilityPreset({ summary, voice }),
+    summary: summary ? { level: summary.level, recent: summary.recent, issues: summary.issues } : null,
+  }
+}
+
 const wakeTuningHistory = getVoiceConfig().wakeTuningHistory || []
 
 
@@ -1283,7 +1349,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /settings/voice/presets — recommended voice stability presets
     if (req.method === 'GET' && url.pathname === '/settings/voice/presets') {
-      jsonResponse(res, 200, { ok: true, presets: publicVoiceStabilityPresets(), current: getVoiceConfig() })
+      const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))
+      jsonResponse(res, 200, buildVoiceStabilityPresetResponse({ windowMs }))
       return
     }
 
@@ -1300,7 +1367,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
             return
           }
           setVoiceConfig(preset.patch)
-          jsonResponse(res, 200, { ok: true, preset: { id: preset.id, label: preset.label, description: preset.description, patch: { ...preset.patch } }, voice: getVoiceConfig() })
+          const voice = getVoiceConfig()
+          jsonResponse(res, 200, { ok: true, preset: { id: preset.id, label: preset.label, description: preset.description, patch: { ...preset.patch } }, voice, currentPreset: getCurrentVoiceStabilityPreset(voice), recommended: recommendVoiceStabilityPreset({ voice }) })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
         }

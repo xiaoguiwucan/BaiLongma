@@ -149,6 +149,8 @@ function createServer() {
           { id: 'quiet-room', label: '安静房间', description: '普通近场聊天，保留较自然的唤醒体验。', patch: { wakeMode: 'strict', wakeConfidenceThreshold: 0.70, speakerThreshold: 0.55, videoVoiceDuckEnabled: false, videoVoicePttEnabled: false, videoVoiceAecEnabled: true } },
           { id: 'video-guard', label: '视频抗干扰', description: '播放视频或别人说话时，优先避免误唤醒并打开降音/PTT/AEC。', patch: { wakeMode: 'strict', wakeConfidenceThreshold: 0.78, wakeMinCommandChars: 2, wakeCooldownMs: 1600, wakeRepeatSuppression: true, wakeRequireSpeakerWhenEnabled: true, speakerThreshold: 0.58, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.08, videoVoiceDuckHoldMs: 3200, videoVoiceDuckSensitivity: 0.85 } },
         ],
+        currentPreset: { id: 'balanced', label: '均衡推荐', exact: false, reason: '当前接近均衡推荐。' },
+        recommended: { id: 'video-guard', label: '视频抗干扰', reason: '最近有唤醒拒绝/视频保护未全开，建议启用抗干扰预设。' },
       })
       return
     }
@@ -157,6 +159,8 @@ function createServer() {
       sendJson(res, {
         ok: true,
         preset: { id: 'video-guard', label: '视频抗干扰', description: '播放视频或别人说话时使用。', patch: {} },
+        currentPreset: { id: 'video-guard', label: '视频抗干扰', exact: true },
+        recommended: { id: 'video-guard', label: '视频抗干扰', reason: '已应用推荐预设。' },
         voice: {
           wakeMode: 'strict',
           wakeRepeatSuppression: true,
@@ -621,8 +625,9 @@ try {
   if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35') throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
   if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
-  await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰'), null, { timeout: 5000 })
+  await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰') && document.querySelector('#voice-preset-list')?.textContent.includes('建议：视频抗干扰'), null, { timeout: 5000 })
   await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))
   await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))
   const presetSnapshot = await page.evaluate(() => ({
     wakeConfidence: document.querySelector('#voice-wake-confidence')?.value,
