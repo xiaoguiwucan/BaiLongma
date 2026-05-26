@@ -386,3 +386,11 @@
 - Reset smoke-mutated `config.json` back to tracked state.
 - Pushed development checkpoint `851b17d feat: add local voice self test` to `origin/main`.
 - No tag/GitHub Release created; this remains part of the next large-version milestone bundle.
+- Improved local ASR process management so port 3723 conflicts no longer make one-click readiness/self-test spawn a duplicate service and then report a crash.
+- `src/voice/manager.js` can now detect an already-open local voice WebSocket port and adopt/reuse it as an external running service with `external: true` instead of launching another Python process.
+- Added `detectExternalVoiceServer()` and exposed `GET /voice/local/status?detect=1` for runtime status refreshes that can discover an already running local voice service.
+- `stopVoiceServer()` now clears tracking for externally adopted services without killing unrelated processes.
+- Added `scripts/smoke-voice-manager.mjs` / `npm run smoke:voice-manager` to verify external-port adoption, duplicate-start prevention, and safe stop tracking.
+- Tightened API startup paths (`readiness/apply`, `doctor/fix`, `self-test/start`, and `/voice/local/start`) to call `ensureLocalVoiceServer()`, which detects an already-running port before spawning.
+- Updated voice-events smoke assertions to tolerate real-world state where an external local voice service is already running, while still verifying runtime speaker diagnostics.
+- Verification passed: `npm run smoke:voice-manager`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.

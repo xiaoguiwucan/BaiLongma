@@ -1,6 +1,7 @@
 // 语音服务进程管理：启动/停止本地 ASR Python 服务
 // 兼容开发模式和 Electron 打包后（asarUnpack）两种路径
 import { spawn } from 'child_process'
+import net from 'net'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -81,12 +82,46 @@ function findPython() {
   return process.platform === 'win32' ? 'python' : 'python3'
 }
 
+
+function isPortOpen(port = VOICE_WS_PORT, host = '127.0.0.1', timeoutMs = 220) {
+  return new Promise(resolve => {
+    const socket = net.createConnection({ host, port })
+    let settled = false
+    const finish = value => {
+      if (settled) return
+      settled = true
+      try { socket.destroy() } catch {}
+      resolve(value)
+    }
+    socket.setTimeout(timeoutMs)
+    socket.once('connect', () => finish(true))
+    socket.once('timeout', () => finish(false))
+    socket.once('error', () => finish(false))
+  })
+}
+
+function adoptExternalVoiceServer({ model = DEFAULT_LOCAL_MODEL, profile = 'balanced', engine = null, reason = 'port_in_use' } = {}) {
+  proc = null
+  currentModel = normalizeLocalAsrModel(model)
+  currentEngine = engine || engineForModel(currentModel)
+  currentProfile = normalizeAsrProfile(profile)
+  status = 'running'
+  statusMessage = `复用已运行的本地语音服务 (${currentEngine}, port ${VOICE_WS_PORT})`
+  return { ...getVoiceStatus(), external: true, reason }
+}
+
+export async function detectExternalVoiceServer({ model = DEFAULT_LOCAL_MODEL, profile = 'balanced' } = {}) {
+  const open = await isPortOpen(VOICE_WS_PORT)
+  return open ? adoptExternalVoiceServer({ model, profile, reason: 'detected_existing_port' }) : getVoiceStatus()
+}
+
 export function getVoiceStatus() {
   return {
     status,
     message: statusMessage,
     port: VOICE_WS_PORT,
     pid: proc?.pid ?? null,
+    external: !proc && status === 'running',
     engine: currentEngine,
     model: currentModel,
     profile: currentProfile,
@@ -103,6 +138,10 @@ export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel, p
   if (proc) {
     if (currentModel === requestedModel && currentEngine === requestedEngine && currentProfile === requestedProfile) return getVoiceStatus()
     return restartVoiceServer(requestedModel, requestedProfile)
+  }
+
+  if (status === 'running' && !proc) {
+    return adoptExternalVoiceServer({ model: requestedModel, profile: requestedProfile, engine: requestedEngine, reason: 'already_adopted' })
   }
 
   const server = resolveServer(requestedEngine)
@@ -149,11 +188,15 @@ export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel, p
   proc.stderr.on('data', (data) => {
     const text = data.toString().trim()
     if (text) console.error(`[Voice] ${text}`)
+    if (text.includes('EADDRINUSE') || text.includes('address already in use') || text.includes('Errno 48')) {
+      adoptExternalVoiceServer({ model: requestedModel, profile: requestedProfile, engine: requestedEngine, reason: 'port_in_use' })
+    }
   })
 
   proc.on('exit', (code, signal) => {
     console.log(`[Voice] 进程退出: code=${code} signal=${signal}`)
     proc = null
+    if (status === 'running' && statusMessage.includes('复用已运行')) return
     status = code === 0 ? 'stopped' : 'error'
     statusMessage = code === 0 ? '已停止' : `异常退出 (code ${code})`
     if (code === 0) {
@@ -177,7 +220,14 @@ export function startVoiceServer({ model = DEFAULT_LOCAL_MODEL, localAsrModel, p
 }
 
 export function stopVoiceServer() {
-  if (!proc) return getVoiceStatus()
+  if (!proc) {
+    status = 'stopped'
+    statusMessage = '已停止跟踪本地语音服务'
+    currentModel = null
+    currentEngine = null
+    currentProfile = null
+    return getVoiceStatus()
+  }
   try { proc.kill('SIGTERM') } catch {}
   proc = null
   status = 'stopped'

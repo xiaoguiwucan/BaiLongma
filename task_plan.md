@@ -474,3 +474,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend backend and Brain UI smoke coverage for the self-test loop.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 48: Reuse existing local voice service
+- [x] Detect an already-open local ASR WebSocket port.
+- [x] Adopt/reuse existing local voice service instead of spawning a duplicate process.
+- [x] Preserve status metadata with `external: true` for adopted services.
+- [x] Make stop tracking safe for externally adopted services.
+- [x] Add voice manager smoke coverage for port reuse.
+- [x] Verify syntax plus voice manager, brain-ui, and voice-events smoke suites.
+- [ ] Push as a development checkpoint only, without tag/Release.

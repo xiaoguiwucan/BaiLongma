@@ -15,7 +15,7 @@ import { config, activate as activateLLM, getActivationStatus, switchModel, setT
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { createTTSSession, cancelTTSSession, streamTTSSegment, getTTSSession } from './voice/tts-session.js'
 import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventClientDetails, getVoiceEventHistory, getVoiceEventMetricsWindow, getVoiceEventLinkSummary, getVoiceEventLinkSelfCheck, getVoiceEventsOnboardingPackage, getVoiceEventsOnboarding, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, normalizeVoiceEventsTTSSpeakLimits, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
-import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
+import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer, detectExternalVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
 import { persistAppState } from './capabilities/executor.js'
@@ -526,6 +526,12 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
   }
 }
 
+async function ensureLocalVoiceServer({ model = 'sensevoice-small', profile = 'balanced' } = {}) {
+  const detected = await detectExternalVoiceServer({ model, profile }).catch(() => getVoiceStatus())
+  if (detected?.status === 'running' || detected?.status === 'starting') return detected
+  return startVoiceServer({ model, localAsrModel: model, profile })
+}
+
 async function applyVoiceReadinessWizard({ enableSpeaker = false, presetId = 'balanced' } = {}) {
   const before = getVoiceConfig()
   const requestedPreset = getVoiceStabilityPreset(presetId) || getVoiceStabilityPreset('balanced')
@@ -544,7 +550,7 @@ async function applyVoiceReadinessWizard({ enableSpeaker = false, presetId = 'ba
   }
   setVoiceConfig(applied)
   const voice = getVoiceConfig()
-  const started = startVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', localAsrModel: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
+  const started = await ensureLocalVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
   const record = appendVoiceLocalDoctorHistory({
     action: 'voice_readiness_wizard',
     label: '一键语音准备',
@@ -586,7 +592,7 @@ function appendVoiceLocalDoctorHistory(record = {}) {
   return getVoiceConfig().voiceLocalDoctorHistory.slice(-1)[0] || null
 }
 
-function applyVoiceLocalDoctorFix(action = '') {
+async function applyVoiceLocalDoctorFix(action = '') {
   const id = String(action || '').trim()
   const before = getVoiceConfig()
   let applied = {}
@@ -611,7 +617,7 @@ function applyVoiceLocalDoctorFix(action = '') {
       setVoiceConfig(applied)
     }
     const voice = getVoiceConfig()
-    started = startVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', localAsrModel: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
+    started = await ensureLocalVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
   } else {
     const err = new Error('Unknown local voice doctor fix action.')
     err.statusCode = 404
@@ -2122,7 +2128,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       const local = getVoiceStatus()
       let started = null
       if (voice.asrProvider === 'local' && local.status !== 'running' && local.status !== 'starting') {
-        started = startVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', localAsrModel: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
+        started = await ensureLocalVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
       }
       const since = Date.now()
       jsonResponse(res, 200, { ok: true, since, started, selfTest: buildLocalVoiceSelfTest({ since }) })
@@ -2174,8 +2180,11 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       req.on('end', () => {
         try {
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
-          const result = applyVoiceLocalDoctorFix(body.action || body.id || '')
-          jsonResponse(res, 200, { ok: true, ...result })
+          applyVoiceLocalDoctorFix(body.action || body.id || '').then(result => {
+            jsonResponse(res, 200, { ok: true, ...result })
+          }).catch(err => {
+            jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message })
+          })
         } catch (err) {
           jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message })
         }
@@ -2202,6 +2211,11 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /voice/local/status — local ASR server status
     if (req.method === 'GET' && url.pathname === '/voice/local/status') {
+      if (url.searchParams.get('detect') === '1') {
+        const voice = getVoiceConfig()
+        detectExternalVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' }).then(status => jsonResponse(res, 200, { ok: true, ...status })).catch(() => jsonResponse(res, 200, { ok: true, ...getVoiceStatus() }))
+        return
+      }
       jsonResponse(res, 200, { ok: true, ...getVoiceStatus() })
       return
     }
@@ -2215,8 +2229,11 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
           const model = String(body.localAsrModel || body.model || body.whisperModel || 'sensevoice-small').trim() || 'sensevoice-small'
           const profile = String(body.asrProfile || body.profile || 'balanced').trim() || 'balanced'
-          const status = startVoiceServer({ model, localAsrModel: model, profile })
-          jsonResponse(res, 200, { ok: true, ...status })
+          ensureLocalVoiceServer({ model, profile }).then(status => {
+            jsonResponse(res, 200, { ok: true, ...status })
+          }).catch(err => {
+            jsonResponse(res, 400, { ok: false, error: err.message })
+          })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
         }
