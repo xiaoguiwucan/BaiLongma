@@ -19,3 +19,9 @@
 - Verification passed: `npm run smoke:voice-events` 41/41.
 - Verification passed: `npm run smoke:voice-events-client` 8/8.
 - Verification passed: `npm run smoke:tools` 6/6. Known local Node v24 / better-sqlite3 ABI audit-log warning remains non-blocking.
+- Committed v2.1.240 as `af0ca82 feat: add voice event client diagnostics endpoint`.
+- Tagged and pushed `v2.1.240` to origin.
+- Created local release assets: `backups/v2.1.240/BaiLongma-v2.1.240-source.tar.gz` and `backups/v2.1.240/BaiLongma-v2.1.240.bundle`.
+- Created GitHub Release: https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v2.1.240
+- Uploaded release assets: source tarball and git bundle.
+- User clarified release cadence: stop publishing tiny releases for every small change; next work should be accumulated into a larger milestone release, e.g. v2.2.0.

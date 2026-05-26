@@ -4,7 +4,7 @@
 Continue the Xiaozhi-inspired voice server work by adding a focused `/voice/events/clients` diagnostics endpoint, so external devices and the Brain UI/debug tools can inspect connected clients, identities, subscriptions, capabilities, and negotiated audio mode without parsing the broader status payload.
 
 ## Current Phase
-GitHub release
+Complete
 
 ## Phases
 
@@ -27,11 +27,11 @@ GitHub release
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [ ] Commit changes
-- [ ] Tag and push v2.1.240
-- [ ] Create source tarball and git bundle assets
-- [ ] Create GitHub Release with detailed notes and upload assets
-- **Status:** pending
+- [x] Commit changes
+- [x] Tag and push v2.1.240
+- [x] Create source tarball and git bundle assets
+- [x] Create GitHub Release with detailed notes and upload assets
+- **Status:** complete
 
 ## Decisions Made
 | Decision | Rationale |
@@ -43,3 +43,6 @@ GitHub release
 | Error | Attempt | Resolution |
 |-------|---------|------------|
 | None yet | - | - |
+
+## Release Cadence Update
+- User requested larger updates instead of releasing every small change. Future work should be accumulated into a larger milestone release, such as v2.2.0, unless a hotfix is necessary.
