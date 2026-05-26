@@ -4561,3 +4561,46 @@ body.person-card-mode .person-card-panel,
 .voice-wake-tuning-advice-ok { border-color: rgba(143,240,179,0.28); background: rgba(143,240,179,0.06); }
 .voice-wake-tuning-advice-warn { border-color: rgba(211,152,114,0.32); background: rgba(211,152,114,0.08); }
 .voice-wake-tuning-advice-pending { color: var(--dim); }
+
+.voice-wake-auto-panel {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 8px;
+  border: 1px solid rgba(130,210,255,0.20);
+  border-radius: 10px;
+  padding: 8px;
+  background: rgba(130,210,255,0.035);
+}
+.voice-wake-auto-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--ink);
+  font-size: 11px;
+}
+.voice-wake-auto-head span,
+.voice-wake-auto-meta {
+  color: var(--dim);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+}
+.voice-wake-auto-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.voice-wake-auto-toggle,
+.voice-wake-auto-apply {
+  border: 1px solid rgba(130,210,255,0.30);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--cool);
+  background: rgba(130,210,255,0.07);
+  cursor: pointer;
+  font-size: 10px;
+}
+.voice-wake-auto-apply {
+  color: #8ff0b3;
+  border-color: rgba(143,240,179,0.30);
+  background: rgba(143,240,179,0.07);
+}

@@ -172,3 +172,12 @@
 - Extended `smoke:brain-ui` to verify improved verdict advice is rendered with before/after metrics.
 - Verification passed: `npm run smoke:voice-events` 55/55, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
+- Added safe wake auto-tuning policy state with explicit enable/disable, minimum repeated rejection count, cooldown, hourly action limit, and last-applied timestamp.
+- Added backend `GET /voice/wake/tuning/auto` to report auto-tuning policy, top rejection reason, eligibility, blocking reasons, and candidate action.
+- Added backend `POST /voice/wake/tuning/auto` to safely update auto-tuning policy bounds.
+- Added backend `POST /voice/wake/tuning/auto/apply` to apply one eligible safe action while respecting cooldown and hourly limits.
+- Brain UI wake tuning area now shows a “安全自动调参” panel with policy state, top reason, eligibility/blockers, enable/disable button, and one-shot auto apply when eligible.
+- Extended `smoke:voice-events` to 57/57 for auto-tuning policy endpoints.
+- Extended `smoke:brain-ui` to verify the auto-tuning panel renders.
+- Verification passed: `npm run smoke:voice-events` 57/57, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.

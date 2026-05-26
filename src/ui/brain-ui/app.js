@@ -2026,10 +2026,12 @@ function initVoiceClientsPanel() {
     latestWakeTuningActions = safeActions;
     const latest = tuningHistory[tuningHistory.length - 1];
     if (!safeActions.length && !latest) {
-      host.innerHTML = "";
+      host.innerHTML = `<div class="voice-wake-auto-panel" id="voice-wake-auto-panel"></div>`;
+      refreshWakeAutoTuning();
       return;
     }
     host.innerHTML = `
+      <div class="voice-wake-auto-panel" id="voice-wake-auto-panel"></div>
       ${safeActions.length ? `<div class="voice-wake-tuning-title">可一键应用的调参建议</div>
       ${safeActions.map((item, index) => `<button class="voice-wake-tuning-action" data-index="${index}" type="button"><strong>${escapeFocusText(item.label || item.reason)}</strong><span>${escapeFocusText(item.reason || "")}</span></button>`).join("")}` : ""}
       ${latest ? `<div class="voice-wake-tuning-history"><span>最近调参：${escapeFocusText(latest.label || latest.reason || latest.id)}</span><span class="voice-wake-tuning-verdict voice-wake-tuning-verdict-${escapeFocusText(latest.evaluation?.advice?.level || latest.evaluation?.verdict || "pending")}">${escapeFocusText(latest.evaluation?.verdict || "pending")}</span><button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">回滚</button></div>${latest.evaluation ? `<div class="voice-wake-tuning-eval"><span>应用前拒绝 ${escapeFocusText(latest.evaluation.before?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.before?.wakeAccepted ?? 0)}</span><span>应用后拒绝 ${escapeFocusText(latest.evaluation.after?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.after?.wakeAccepted ?? 0)}</span></div><div class="voice-wake-tuning-advice voice-wake-tuning-advice-${escapeFocusText(latest.evaluation.advice?.level || "pending")}"><span>${escapeFocusText(latest.evaluation.advice?.text || "继续观察调参效果。")}</span>${latest.evaluation.advice?.action === "rollback" ? `<button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">建议回滚</button>` : ""}</div>` : ""}` : ""}`;
@@ -2037,6 +2039,64 @@ function initVoiceClientsPanel() {
       btn.addEventListener("click", () => applyWakeTuningAction(Number(btn.dataset.index || -1)));
     });
     host.querySelector(".voice-wake-tuning-rollback")?.addEventListener("click", (event) => rollbackWakeTuning(event.currentTarget?.dataset?.id || ""));
+    refreshWakeAutoTuning();
+  }
+
+  async function refreshWakeAutoTuning() {
+    const panel = document.getElementById("voice-wake-auto-panel");
+    if (!panel) return;
+    try {
+      const res = await fetch(`${API}/voice/wake/tuning/auto?windowMs=60000`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const blocked = Array.isArray(data.blocked) ? data.blocked : [];
+      panel.innerHTML = `
+        <div class="voice-wake-auto-head"><strong>安全自动调参</strong><span>${data.enabled ? "已开启" : "未开启"}</span></div>
+        <div class="voice-wake-auto-meta">${data.topReason ? `主要原因 ${escapeFocusText(data.topReason.reason)} × ${escapeFocusText(data.topReason.count)}` : "等待足够样本"} · ${data.eligible ? "可自动应用" : escapeFocusText(blocked.join(" · ") || "观察中")}</div>
+        <div class="voice-wake-auto-actions">
+          <button class="voice-wake-auto-toggle" type="button">${data.enabled ? "关闭自动模式" : "开启自动模式"}</button>
+          ${data.eligible ? '<button class="voice-wake-auto-apply" type="button">自动应用一次</button>' : ""}
+        </div>`;
+      panel.querySelector(".voice-wake-auto-toggle")?.addEventListener("click", () => setWakeAutoTuning(!data.enabled));
+      panel.querySelector(".voice-wake-auto-apply")?.addEventListener("click", () => applyWakeAutoTuning());
+    } catch (err) {
+      panel.innerHTML = `<div class="voice-clients-error">读取自动调参策略失败：${escapeFocusText(err.message || err)}</div>`;
+    }
+  }
+
+  async function setWakeAutoTuning(enabled) {
+    if (feedbackEl) feedbackEl.textContent = enabled ? "开启自动调参…" : "关闭自动调参…";
+    try {
+      const res = await fetch(`${API}/voice/wake/tuning/auto`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (feedbackEl) feedbackEl.textContent = enabled ? "自动调参已开启" : "自动调参已关闭";
+      refreshWakeAutoTuning();
+    } catch (err) {
+      if (feedbackEl) feedbackEl.textContent = `自动调参失败：${err.message || err}`;
+    }
+  }
+
+  async function applyWakeAutoTuning() {
+    if (feedbackEl) feedbackEl.textContent = "自动调参应用中…";
+    try {
+      const res = await fetch(`${API}/voice/wake/tuning/auto/apply`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const voice = data.voice || {};
+      if (voice.wakeConfidenceThreshold != null) localStorage.setItem("bailongma-voice-wake-confidence-threshold", String(voice.wakeConfidenceThreshold));
+      if (voice.wakeMinCommandChars != null) localStorage.setItem("bailongma-voice-wake-min-command-chars", String(voice.wakeMinCommandChars));
+      if (voice.wakeCooldownMs != null) localStorage.setItem("bailongma-voice-wake-cooldown-ms", String(voice.wakeCooldownMs));
+      if (voice.wakeRequireSpeakerWhenEnabled != null) localStorage.setItem("bailongma-voice-wake-require-speaker", String(voice.wakeRequireSpeakerWhenEnabled));
+      if (feedbackEl) feedbackEl.textContent = "自动调参已应用";
+      refreshVoiceLinkSummary({ quiet: true });
+    } catch (err) {
+      if (feedbackEl) feedbackEl.textContent = `自动调参未应用：${err.message || err}`;
+      refreshWakeAutoTuning();
+    }
   }
 
   async function refreshWakeTuningActions() {

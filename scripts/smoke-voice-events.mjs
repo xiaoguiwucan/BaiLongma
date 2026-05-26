@@ -280,6 +280,14 @@ try {
   assert(applyTuning.ok === true && applyTuning.applied?.wakeMinCommandChars === 1 && !('unknownUnsafeField' in applyTuning.applied) && applyTuning.record?.before && applyTuning.history?.length >= 1, 'wake tuning apply endpoint persists only safe fields and records history', JSON.stringify(applyTuning))
   const evalBeforeRollback = await fetch(`${API}/voice/wake/tuning/evaluate?id=${encodeURIComponent(applyTuning.record.id)}`).then(r => r.json())
   assert(evalBeforeRollback.ok === true && evalBeforeRollback.evaluations?.[0]?.evaluation?.before && evalBeforeRollback.evaluations?.[0]?.evaluation?.after && evalBeforeRollback.evaluations?.[0]?.evaluation?.advice?.text, 'wake tuning evaluate endpoint returns before/after metrics and advice', JSON.stringify(evalBeforeRollback))
+  const autoBefore = await fetch(`${API}/voice/wake/tuning/auto?windowMs=60000`).then(r => r.json())
+  assert(autoBefore.ok === true && autoBefore.enabled === false && autoBefore.blocked?.includes('auto_disabled'), 'wake auto tuning reports disabled policy by default', JSON.stringify(autoBefore))
+  const autoEnabled = await fetch(`${API}/voice/wake/tuning/auto`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ enabled: true, minRejects: 2, cooldownMs: 60000, maxActionsPerHour: 2 }),
+  }).then(r => r.json())
+  assert(autoEnabled.ok === true && autoEnabled.enabled === true && autoEnabled.policy?.minRejects === 2, 'wake auto tuning policy can be enabled safely', JSON.stringify(autoEnabled))
   const rollbackTuning = await fetch(`${API}/voice/wake/tuning/rollback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

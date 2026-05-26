@@ -184,3 +184,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 19: Safe wake auto-tuning policy
+- [x] Add bounded auto-tuning state: enabled, min rejections, cooldown, hourly limit, last applied time.
+- [x] Add `GET /voice/wake/tuning/auto` for policy state and eligibility.
+- [x] Add `POST /voice/wake/tuning/auto` for safe policy updates.
+- [x] Add `POST /voice/wake/tuning/auto/apply` for one eligible bounded automatic adjustment.
+- [x] Render Brain UI “安全自动调参” policy panel.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

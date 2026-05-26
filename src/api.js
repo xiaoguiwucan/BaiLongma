@@ -45,6 +45,35 @@ const DEFAULT_AGENT_NAME = '小白龙'
 const DEFAULT_API_HOST = '127.0.0.1'
 
 const wakeTuningHistory = []
+const wakeAutoTuningState = { enabled: false, minRejects: 3, cooldownMs: 5 * 60 * 1000, maxActionsPerHour: 3, lastAppliedAt: 0 }
+
+function countWakeAutoActionsSince(since = Date.now() - 3600000) {
+  return wakeTuningHistory.filter(item => item.auto === true && Number(item.at || 0) >= since).length
+}
+function evaluateWakeAutoTuning({ windowMs = 60000 } = {}) {
+  const summary = getVoiceEventLinkSummary({ windowMs })
+  const actions = buildWakeGuardTuningActions({ summary, current: getVoiceConfig() })
+  const reasons = summary?.recent?.wakeRejectedReasons || {}
+  const topReason = Object.entries(reasons).sort((a, b) => b[1] - a[1])[0] || null
+  const now = Date.now()
+  const hourlyCount = countWakeAutoActionsSince(now - 3600000)
+  const blocked = []
+  if (!wakeAutoTuningState.enabled) blocked.push('auto_disabled')
+  if (!topReason || topReason[1] < wakeAutoTuningState.minRejects) blocked.push('not_enough_rejections')
+  if (now - wakeAutoTuningState.lastAppliedAt < wakeAutoTuningState.cooldownMs) blocked.push('cooldown')
+  if (hourlyCount >= wakeAutoTuningState.maxActionsPerHour) blocked.push('hourly_limit')
+  if (!actions.length) blocked.push('no_safe_action')
+  return {
+    enabled: wakeAutoTuningState.enabled,
+    policy: { minRejects: wakeAutoTuningState.minRejects, cooldownMs: wakeAutoTuningState.cooldownMs, maxActionsPerHour: wakeAutoTuningState.maxActionsPerHour },
+    topReason: topReason ? { reason: topReason[0], count: topReason[1] } : null,
+    hourlyCount,
+    blocked,
+    eligible: blocked.length === 0,
+    action: actions[0] || null,
+    summary,
+  }
+}
 function evaluateWakeTuningRecord(item, now = Date.now()) {
   if (!item || item.reason === 'rollback') return null
   const windowMs = Math.max(30000, Math.min(10 * 60 * 1000, Number(item.windowMs || 60000)))
@@ -1168,6 +1197,49 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     }
 
 
+
+    // GET /voice/wake/tuning/auto — safe auto-tuning policy and eligibility
+    if (req.method === 'GET' && url.pathname === '/voice/wake/tuning/auto') {
+      const windowMs = Number(url.searchParams.get('windowMs') || 60000)
+      jsonResponse(res, 200, { ok: true, service: 'bailongma.voice.wake.auto_tuning', ...evaluateWakeAutoTuning({ windowMs }) })
+      return
+    }
+
+    // POST /voice/wake/tuning/auto — update safe auto-tuning policy
+    if (req.method === 'POST' && url.pathname === '/voice/wake/tuning/auto') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          if (typeof body.enabled === 'boolean') wakeAutoTuningState.enabled = body.enabled
+          if (Number.isFinite(Number(body.minRejects))) wakeAutoTuningState.minRejects = Math.max(2, Math.min(10, Math.round(Number(body.minRejects))))
+          if (Number.isFinite(Number(body.cooldownMs))) wakeAutoTuningState.cooldownMs = Math.max(60000, Math.min(30 * 60 * 1000, Math.round(Number(body.cooldownMs))))
+          if (Number.isFinite(Number(body.maxActionsPerHour))) wakeAutoTuningState.maxActionsPerHour = Math.max(1, Math.min(6, Math.round(Number(body.maxActionsPerHour))))
+          jsonResponse(res, 200, { ok: true, service: 'bailongma.voice.wake.auto_tuning', ...evaluateWakeAutoTuning({ windowMs: Number(body.windowMs || 60000) }) })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+    // POST /voice/wake/tuning/auto/apply — apply one eligible safe auto-tuning action
+    if (req.method === 'POST' && url.pathname === '/voice/wake/tuning/auto/apply') {
+      const windowMs = Number(url.searchParams.get('windowMs') || 60000)
+      const decision = evaluateWakeAutoTuning({ windowMs })
+      if (!decision.eligible || !decision.action?.patch) {
+        jsonResponse(res, 409, { ok: false, error: 'Auto tuning is not eligible.', decision })
+        return
+      }
+      const before = getVoiceConfig()
+      setVoiceConfig(decision.action.patch)
+      const after = getVoiceConfig()
+      wakeAutoTuningState.lastAppliedAt = Date.now()
+      const record = pushWakeTuningRecord({ reason: decision.action.reason, label: `[自动] ${decision.action.label}`, before, after, applied: decision.action.patch, windowMs, beforeMetrics: decision.summary.recent, auto: true })
+      jsonResponse(res, 200, { ok: true, applied: decision.action.patch, record, voice: after, decision: evaluateWakeAutoTuning({ windowMs }), history: publicWakeTuningHistory() })
+      return
+    }
 
     // GET /voice/wake/tuning — suggested safe setting patches from recent wake rejection diagnostics
     if (req.method === 'GET' && url.pathname === '/voice/wake/tuning') {

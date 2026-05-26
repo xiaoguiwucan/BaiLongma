@@ -291,6 +291,22 @@ new WebSocket(url)`,
     }
 
 
+
+    if (url.pathname === '/voice/wake/tuning/auto') {
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.wake.auto_tuning',
+        enabled: false,
+        policy: { minRejects: 3, cooldownMs: 300000, maxActionsPerHour: 3 },
+        topReason: { reason: 'command too short', count: 3 },
+        hourlyCount: 0,
+        blocked: ['auto_disabled'],
+        eligible: false,
+        action: null,
+      })
+      return
+    }
+
     if (url.pathname === '/voice/wake/tuning') {
       sendJson(res, {
         ok: true,
@@ -524,7 +540,7 @@ try {
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/check')) throw new Error('voice clients protocol diagnostics did not render check endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/package')) throw new Error('voice clients protocol diagnostics did not render package endpoint')
   if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('最短指令字数')) throw new Error('voice link summary did not render wake reject tuning advice')
-  await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数'))
+  await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('安全自动调参'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))
   await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('建议暂时保持当前参数'))
