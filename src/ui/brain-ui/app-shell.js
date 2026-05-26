@@ -785,6 +785,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.2.0</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">小智式语音设备控制台大版本：客户端诊断、事件历史、链路总控、一键自检和设备接入包。</p>
+                <ul class="release-note-points">
+                  <li>新增 /voice/events/history、summary、check、package 与 onboarding，集中支持 LAN/ESP32 接入排障。</li>
+                  <li>Brain UI 语音页新增外部客户端、最近语音事件、语音链路总控、一键自检、生成接入包。</li>
+                  <li>smoke:voice-mapping 46/46、smoke:voice-events 49/49、voice-events-client 8/8、brain-ui smoke 通过。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.240</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

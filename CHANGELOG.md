@@ -4,6 +4,76 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.2.0 - 2026-05-26
+
+### 更新内容
+
+这是小智式语音设备控制台大版本，集中发布前面多个 v2.2.0 开发检查点，不再按小改动拆分 Release。
+
+- Brain UI 新增“外部语音客户端”控制台：连接数、音频订阅数、二进制订阅数、客户端身份、capabilities、lastSeenAt、negotiated 音频模式和后端健康建议。
+- 新增协议自检和 LAN/ESP32 接入向导，前端优先读取后端 `/voice/events/onboarding`，生成本机调试命令、局域网设备命令和 `client:hello` JSON。
+- 新增 `GET /voice/events/history`，返回最近 raw voice_event 和小智式映射事件，支持 `limit` 与 `type` 过滤。
+- Brain UI 新增“最近语音事件”时间线，展示 wake/asr/tts/interrupt，支持类型过滤、手动刷新和自动刷新。
+- 新增 `GET /voice/events/summary` 与 `link_summary` capability，聚合客户端、订阅、最近事件、问题和中文排障建议。
+- Brain UI 新增“语音链路总控”卡片，显示链路正常/未连接/需要注意，以及客户端、音频、二进制、唤醒、ASR、TTS、中断指标。
+- 新增 `GET /voice/events/check` 与 `link_self_check` capability，一键检查协议、客户端、握手、订阅、binary audio、最近事件和“唤醒→ASR→TTS”闭环。
+- Brain UI 新增“一键自检”按钮和自检结果面板，显示每一步状态、下一步建议和接入命令。
+- 新增 `GET /voice/events/package` 与 `onboarding_package` capability，生成 README、`.env.voice`、`client-hello.json`、`subscribe.json`、Node WebSocket 示例、ESP32 桥接伪配置和 checklist。
+- Brain UI 新增“生成接入包”按钮，可展开查看接入包文件并复制 README。
+- `/voice/events/protocol` 新增/完善 endpoints：`clients`、`history`、`summary`、`check`、`package`、`onboarding`。
+- `/voice/events/clients` 和 `/voice/events/status` 的 `clientDetails` 增加后端 `health` / `advice`。
+- 扩展 smoke 测试：`smoke:voice-mapping` 46/46，`smoke:voice-events` 49/49，`smoke:voice-events-client` 8/8，`smoke:brain-ui` 覆盖控制台、自检、接入包。
+
+### 改变原因
+
+- 用户目标是借鉴小智项目，把 Mac/Electron 版白龙马改造成可稳定接入本地/局域网语音设备的助手，而不是只停留在 WebSocket 协议底座。
+- 播放视频、多人说话、唤醒词、声纹、本地 ASR 和外部设备接入会让问题定位变复杂，需要可视化看到“设备是否连上、有没有订阅音频、是否收到唤醒、是否产生最终识别、TTS 是否结束”。
+- 大版本集中发布，避免“一点点就更新”的碎片化 Release。
+
+### 影响范围
+
+- 向后兼容旧 `/voice/events` WebSocket 客户端。
+- 新端点只暴露安全摘要、接入模板和调试建议，不返回 token 明文。
+- 旧客户端可以继续只使用 hello/ping/subscribe/tts:speak；新客户端建议读取 `/voice/events/protocol`、`/voice/events/check` 和 `/voice/events/package`。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `node --check scripts/smoke-brain-ui.mjs` 通过。
+- `npm run smoke:voice-mapping` 46/46 通过。
+- `npm run smoke:voice-events` 49/49 通过。
+- `npm run smoke:voice-events-client` 8/8 通过。
+- `npm run smoke:brain-ui` 通过。
+
+### 部署注意事项
+
+源码部署方式不变：
+
+```bash
+npm install
+npm start
+```
+
+语音设备调试建议：
+
+```bash
+npm run voice:events -- protocol
+npm run voice:events -- listen --audio --binary --client-id mac-debug --device mac --platform macos --capability binary_audio --capability wake --capability display
+curl http://127.0.0.1:3721/voice/events/check
+curl http://127.0.0.1:3721/voice/events/package
+```
+
+局域网设备需要将 `<Mac局域网IP>` 替换为 Mac 的实际 IP。如配置了 `BAILONGMA_API_TOKEN`，远端设备需要使用 `?token=<token>` 或 `Authorization: Bearer <token>`。
+
+### 已知限制
+
+- v2.2.0 提供的是设备接入、诊断、自检和接入包；真正的硬件端固件/ESP32 播放代码仍需按接入包模板在设备侧实现。
+- 声纹、视频抗干扰、本地 ASR 的底层识别效果仍依赖麦克风、系统音量、模型和设备环境；本版本重点提升可观测和排障能力。
+
 ## v2.1.240 - 2026-05-26
 
 ### 更新内容
