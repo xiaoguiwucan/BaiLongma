@@ -15,3 +15,6 @@
 - Verification passed: `node --check scripts/smoke-brain-ui.mjs`.
 - Verification passed: `npm run smoke:voice-events` 41/41.
 - Verification passed: `npm run smoke:voice-events-client` 8/8.
+- Committed v2.2.0 development checkpoint as `380badf feat: add voice clients panel for v2.2.0`.
+- Pushed checkpoint to GitHub main for backup only.
+- No tag or GitHub Release created per user's major-release cadence request.

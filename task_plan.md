@@ -4,7 +4,7 @@
 Build a larger v2.2.0 milestone instead of publishing tiny releases. The milestone should make Xiaozhi-style external voice clients visible and operable from Brain UI, backed by `/voice/events` diagnostics, tests, and docs. Do not create a GitHub Release until the broader v2.2.0 feature set is ready.
 
 ## Current Phase
-GitHub backup only
+Checkpoint 1 complete; continue accumulating v2.2.0
 
 ## Phases
 
@@ -27,10 +27,10 @@ GitHub backup only
 - **Status:** complete
 
 ### Phase 4: GitHub backup only
-- [ ] Commit v2.2.0 development checkpoint
-- [ ] Push to GitHub main for backup
-- [ ] Do not tag or create Release yet
-- **Status:** pending
+- [x] Commit v2.2.0 development checkpoint
+- [x] Push to GitHub main for backup
+- [x] Do not tag or create Release yet
+- **Status:** complete
 
 ## Release Cadence
 - User explicitly requested: “制作大版本更新，不要改动一点点就更新”.
