@@ -526,6 +526,47 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
   }
 }
 
+
+async function buildLocalVoiceOverview({ windowMs = 60000 } = {}) {
+  const readiness = await buildVoiceReadinessWizard({ windowMs })
+  const selfTest = buildLocalVoiceSelfTest({ since: Date.now() - windowMs })
+  const voice = readiness.voice || getVoiceConfig()
+  const local = readiness.local || getVoiceStatus()
+  const speaker = readiness.speakerStatus || null
+  const issues = []
+  if (voice.asrProvider !== 'local') issues.push('当前没有使用本地 ASR。')
+  if (local.status !== 'running') issues.push('本地语音服务未运行。')
+  if (voice.speakerVerificationEnabled && speaker?.reachable && !speaker?.configured) issues.push('声纹门控已开启但没有可用声纹，可能导致唤不醒。')
+  if (!(voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled)) issues.push('视频抗干扰未完全开启。')
+  if (selfTest.metrics.wakeAccepted === 0 && selfTest.metrics.asrFinal === 0) issues.push('最近还没有完成真实唤醒/识别实测。')
+  const ready = issues.length === 0 || (issues.length === 1 && issues[0].includes('真实唤醒/识别实测'))
+  const level = local.status !== 'running' || issues.some(item => item.includes('声纹门控')) ? 'warn' : ready ? 'ok' : 'pending'
+  const primaryAction = local.status !== 'running'
+    ? { id: 'prepare', label: '一键准备', action: '点击一键语音准备，启动本地 SenseVoice 并应用稳定基线。' }
+    : selfTest.metrics.wakeAccepted === 0 && selfTest.metrics.asrFinal === 0
+      ? { id: 'self_test', label: '开始实测', action: '点击“开始实测”，然后说“龙马，测试一下”。' }
+      : speaker?.reachable && !speaker?.configured
+        ? { id: 'enroll_speaker', label: '录入声纹', action: '如果要只响应你本人，请录入声纹。' }
+        : { id: 'ready', label: '可以使用', action: '现在可以直接用唤醒词发指令。' }
+  return {
+    ok: true,
+    level,
+    ready: level === 'ok',
+    checkedAt: Date.now(),
+    title: level === 'ok' ? '本地语音基本可用' : level === 'warn' ? '本地语音需要处理' : '本地语音等待实测',
+    summary: local.status === 'running'
+      ? `${local.external ? '复用已运行服务' : '本应用服务'} · ${local.engineLabel || local.engine || 'local'} / ${local.model || voice.localAsrModel || 'sensevoice-small'} · ${speaker?.configured ? '声纹已录入' : '声纹未录入'} · wake ${selfTest.metrics.wakeAccepted}/${selfTest.metrics.wakeRejected} · ASR ${selfTest.metrics.asrFinal}`
+      : '本地语音服务尚未运行。',
+    issues,
+    primaryAction,
+    local,
+    speaker,
+    metrics: selfTest.metrics,
+    readiness: { level: readiness.level, nextActions: readiness.nextActions, recommendedPreset: readiness.recommendedPreset },
+    selfTest: { level: selfTest.level, nextActions: selfTest.nextActions },
+  }
+}
+
 async function ensureLocalVoiceServer({ model = 'sensevoice-small', profile = 'balanced' } = {}) {
   const detected = await detectExternalVoiceServer({ model, profile }).catch(() => getVoiceStatus())
   if (detected?.status === 'running' || detected?.status === 'starting') return detected
@@ -2139,6 +2180,15 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     if (req.method === 'GET' && url.pathname === '/voice/local/self-test') {
       const since = Number(url.searchParams.get('since') || Date.now() - 60000) || Date.now() - 60000
       jsonResponse(res, 200, buildLocalVoiceSelfTest({ since }))
+      return
+    }
+
+    // GET /voice/local/overview — one-card local voice readiness/service/speaker/self-test summary
+    if (req.method === 'GET' && url.pathname === '/voice/local/overview') {
+      const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))
+      buildLocalVoiceOverview({ windowMs }).then(result => jsonResponse(res, 200, result)).catch(err => {
+        jsonResponse(res, 500, { ok: false, error: err.message || 'Failed to build local voice overview.' })
+      })
       return
     }
 

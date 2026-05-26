@@ -2893,9 +2893,48 @@ function initTTSSettings() {
   document.getElementById("voice-local-doctor-refresh")?.addEventListener("click", refreshVoiceLocalDoctor);
   document.getElementById("voice-readiness-apply")?.addEventListener("click", applyVoiceReadinessWizard);
   document.getElementById("voice-self-test-start")?.addEventListener("click", startVoiceSelfTest);
+  document.getElementById("voice-local-overview-actions")?.addEventListener("click", handleVoiceOverviewAction);
   document.getElementById("voice-local-stop")?.addEventListener("click", stopLocalVoiceService);
   document.getElementById("voice-local-restart")?.addEventListener("click", restartLocalVoiceService);
   let voiceSelfTestSince = 0;
+
+
+  function renderVoiceOverview(overview = {}) {
+    const panel = document.getElementById("voice-local-overview");
+    const title = document.getElementById("voice-local-overview-title");
+    const level = document.getElementById("voice-local-overview-level");
+    const summary = document.getElementById("voice-local-overview-summary");
+    const actions = document.getElementById("voice-local-overview-actions");
+    if (!panel || !title || !level || !summary || !actions) return;
+    panel.hidden = false;
+    panel.className = `voice-local-overview voice-local-overview-${escapeFocusText(overview.level || "pending")}`;
+    title.textContent = overview.title || "本地语音总览";
+    level.textContent = overview.level || "pending";
+    summary.textContent = overview.summary || "暂无状态。";
+    const issueHtml = Array.isArray(overview.issues) && overview.issues.length ? `<div class="voice-local-overview-issues">${overview.issues.slice(0, 3).map(item => `<span>${escapeFocusText(item)}</span>`).join("")}</div>` : "";
+    const action = overview.primaryAction || {};
+    const buttonHtml = action.id && action.id !== "ready" ? `<button class="voice-readiness-action" data-overview-action="${escapeFocusText(action.id)}" type="button">${escapeFocusText(action.label || "处理")}</button>` : `<span class="voice-local-overview-ready">${escapeFocusText(action.label || "可以使用")}</span>`;
+    actions.innerHTML = `${issueHtml}${buttonHtml}<em>${escapeFocusText(action.action || "")}</em>`;
+  }
+
+  async function refreshVoiceOverview() {
+    try {
+      const resp = await fetch(`${API}/voice/local/overview?windowMs=60000`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "本地语音总览失败");
+      renderVoiceOverview(data);
+    } catch (err) {
+      renderVoiceOverview({ level: "warn", title: "本地语音总览失败", summary: err?.message || "读取失败", issues: [err?.message || "读取失败"], primaryAction: { id: "prepare", label: "一键准备", action: "尝试重新准备本地语音。" } });
+    }
+  }
+
+  function handleVoiceOverviewAction(event) {
+    const action = event.target?.dataset?.overviewAction;
+    if (!action) return;
+    if (action === "prepare") document.getElementById("voice-readiness-apply")?.click();
+    else if (action === "self_test") document.getElementById("voice-self-test-start")?.click();
+    else if (action === "enroll_speaker") document.getElementById("voice-enroll-speaker")?.click();
+  }
 
   async function stopLocalVoiceService() {
     const btn = document.getElementById("voice-local-stop");
@@ -2907,7 +2946,9 @@ function initTTSSettings() {
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "停止失败");
       showFeedback(fb, data.external ? "已取消跟踪复用服务" : "本地语音服务已停止");
+      await refreshVoiceOverview();
       await refreshVoiceReadinessWizard();
+      await refreshVoiceOverview();
       await refreshVoiceLocalDoctor();
       await refreshSpeakerStatus();
       await refreshVoiceSelfTest();
@@ -2934,6 +2975,7 @@ function initTTSSettings() {
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "重启失败");
       showFeedback(fb, data.requiresManualStop ? "已取消跟踪复用服务；请先停止旧的 3723 服务后再启动当前模型" : `已请求重启：${data.engineLabel || data.engine || model}`);
+      setTimeout(refreshVoiceOverview, 700);
       setTimeout(refreshVoiceReadinessWizard, 800);
       setTimeout(refreshVoiceLocalDoctor, 1000);
       setTimeout(refreshSpeakerStatus, 1100);
@@ -2969,6 +3011,7 @@ function initTTSSettings() {
       list.innerHTML = renderVoiceSelfTest(data);
       const fb = document.getElementById("voice-self-test-feedback");
       if (fb) fb.textContent = data.level === "ok" ? "闭环通过" : data.level === "warn" ? "部分通过，请看提示" : "等待你说唤醒词";
+      refreshVoiceOverview();
     } catch (err) {
       list.innerHTML = `<div class="voice-clients-error">${escapeFocusText(err?.message || "语音实测失败")}</div>`;
     }
@@ -3079,6 +3122,7 @@ function initTTSSettings() {
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "一键准备失败");
       if (data.voice) hydrateVoiceControlsFromConfig(data.voice);
+      await refreshVoiceOverview();
       await refreshVoiceReadinessWizard();
       showFeedback(fb, data.speaker?.skipped ? `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}；声纹未录入，已保持关闭防锁死` : `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}`);
       await refreshVoiceLocalDoctor();
@@ -3303,6 +3347,7 @@ function initTTSSettings() {
     if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
 
     applyVoiceProviderUI(savedProvider);
+    refreshVoiceOverview();
     refreshVoiceReadinessWizard();
     refreshVoiceSelfTest();
     refreshVoiceLocalDoctor();

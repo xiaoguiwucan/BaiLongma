@@ -4944,3 +4944,29 @@ body.person-card-mode .person-card-panel,
   color: var(--warm);
   background: rgba(181,154,116,0.07);
 }
+.voice-local-overview {
+  display: grid;
+  gap: 8px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(130,210,255,0.18);
+  border-radius: 14px;
+  background: rgba(130,210,255,0.045);
+}
+.voice-local-overview-ok { border-color: rgba(143,240,179,0.24); background: rgba(143,240,179,0.055); }
+.voice-local-overview-warn { border-color: rgba(211,152,114,0.28); background: rgba(211,152,114,0.07); }
+.voice-local-overview-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.voice-local-overview-head strong { color: var(--ink); font-size: 14px; }
+.voice-local-overview-head span,
+.voice-local-overview-ready {
+  padding: 3px 8px;
+  border-radius: 999px;
+  color: var(--cool);
+  background: rgba(130,210,255,0.10);
+  font-size: 11px;
+}
+.voice-local-overview p { margin: 0; color: var(--ink2); font-size: 12px; line-height: 1.55; }
+.voice-local-overview-actions { display:flex; flex-wrap:wrap; align-items:center; gap:7px; }
+.voice-local-overview-actions em { color: var(--dim); font-style: normal; font-size: 11px; }
+.voice-local-overview-issues { display:flex; flex-wrap:wrap; gap:6px; width:100%; }
+.voice-local-overview-issues span { padding:3px 7px; border-radius:999px; color:var(--warm); background:rgba(211,152,114,0.10); font-size:11px; }

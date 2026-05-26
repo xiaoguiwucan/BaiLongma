@@ -516,6 +516,22 @@ new WebSocket(url)`,
       return
     }
 
+    if (url.pathname === '/voice/local/overview') {
+      sendJson(res, {
+        ok: true,
+        level: readinessApplied ? 'ok' : 'pending',
+        ready: readinessApplied,
+        title: readinessApplied ? '本地语音基本可用' : '本地语音等待实测',
+        summary: readinessApplied ? `复用已运行服务 · SenseVoice / sensevoice-small · ${localDoctorFixed ? '声纹已录入' : '声纹未录入'} · wake 1/0 · ASR 1` : '本地语音服务尚未运行。',
+        issues: readinessApplied ? [] : ['最近还没有完成真实唤醒/识别实测。'],
+        primaryAction: readinessApplied ? { id: 'ready', label: '可以使用', action: '现在可以直接用唤醒词发指令。' } : { id: 'prepare', label: '一键准备', action: '点击一键语音准备。' },
+        local: { status: readinessApplied ? 'running' : 'stopped', external: externalVoiceService, model: 'sensevoice-small' },
+        speaker: { reachable: readinessApplied, configured: localDoctorFixed },
+        metrics: { wakeAccepted: readinessApplied ? 1 : 0, wakeRejected: 0, asrFinal: readinessApplied ? 1 : 0, ttsStop: readinessApplied ? 1 : 0 },
+      })
+      return
+    }
+
     if (url.pathname === '/voice/local/self-test/start') {
       sendJson(res, {
         ok: true,
@@ -846,11 +862,15 @@ try {
     refreshHidden: document.querySelector('#voice-speaker-refresh-status')?.hidden,
   }))
   if (speakerActionVisible.startHidden !== false || speakerActionVisible.enrollHidden !== true || speakerActionVisible.refreshHidden !== false) throw new Error(`speaker status action buttons not shown for unreachable service: ${JSON.stringify(speakerActionVisible)}`)
+  await page.waitForFunction(() => document.querySelector('#voice-local-overview')?.textContent.includes('本地语音'))
+  const overviewInitial = await page.textContent('#voice-local-overview')
+  if (!overviewInitial.includes('一键准备') && !overviewInitial.includes('等待实测')) throw new Error(`voice overview did not render initial action: ${overviewInitial}`)
   const readinessText = await page.textContent('#voice-readiness-list')
   if (!readinessText.includes('本地中文识别') || !readinessText.includes('本地服务启动') || !readinessText.includes('本人声纹')) throw new Error(`voice readiness wizard did not render guided steps: ${readinessText}`)
   await page.click('#voice-readiness-apply')
   await page.waitForFunction(() => document.querySelector('#voice-readiness-feedback')?.textContent.includes('已应用本地语音基线'))
   await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('运行中：SenseVoice'))
+  await page.waitForFunction(() => document.querySelector('#voice-local-overview')?.textContent.includes('本地语音基本可用') || document.querySelector('#voice-local-overview')?.textContent.includes('可以使用'))
   await fetch(`${baseUrl}/__smoke/external-voice-service`, { method: 'POST' })
   await page.click('#voice-local-doctor-refresh')
   await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('复用') || document.querySelector('#voice-local-doctor-list')?.textContent.includes('本地 ASR 进程'))

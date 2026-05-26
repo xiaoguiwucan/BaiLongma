@@ -108,6 +108,9 @@ try {
   const selfTestAfter = await fetch(`${API}/voice/local/self-test?since=${selfTestStart.since}`).then(r => r.json())
   assert(selfTestAfter.ok === true && selfTestAfter.metrics?.wakeAccepted >= 1 && selfTestAfter.metrics?.asrFinal >= 1 && selfTestAfter.metrics?.ttsStop >= 1 && selfTestAfter.steps?.some(item => item.id === 'wake_event' && item.status === 'ok') && selfTestAfter.steps?.some(item => item.id === 'tts_loop' && item.status === 'ok'), 'local voice self-test evaluates wake/asr/tts loop events', JSON.stringify(selfTestAfter.metrics))
 
+  const overviewBefore = await fetch(`${API}/voice/local/overview?windowMs=60000`).then(r => r.json())
+  assert(overviewBefore.ok === true && overviewBefore.title && overviewBefore.primaryAction?.id && overviewBefore.local?.status && overviewBefore.metrics, 'local voice overview aggregates readiness service and self-test state', JSON.stringify(overviewBefore))
+
   const readinessBefore = await fetch(`${API}/voice/local/readiness?windowMs=60000`).then(r => r.json())
   assert(readinessBefore.ok === true && readinessBefore.steps?.some(item => item.id === 'local_provider') && readinessBefore.steps?.some(item => item.id === 'local_process') && readinessBefore.steps?.some(item => item.id === 'speaker_voiceprint') && readinessBefore.steps?.some(item => item.id === 'speaker_gate_safe') && Array.isArray(readinessBefore.nextActions), 'local voice readiness wizard exposes guided steps and next actions', JSON.stringify(readinessBefore))
   assert(readinessBefore.recommendedPreset?.id, 'local voice readiness wizard includes recommended preset baseline', JSON.stringify(readinessBefore.recommendedPreset))

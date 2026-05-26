@@ -438,6 +438,14 @@ const createSettingsModal = () => `
                   <option value="accuracy">高精度：优先准确率</option>
                 </select>
               </div>
+              <div class="voice-local-overview" id="voice-local-overview" hidden>
+                <div class="voice-local-overview-head">
+                  <strong id="voice-local-overview-title">本地语音总览</strong>
+                  <span id="voice-local-overview-level">pending</span>
+                </div>
+                <p id="voice-local-overview-summary">正在读取本地语音状态…</p>
+                <div id="voice-local-overview-actions" class="voice-local-overview-actions"></div>
+              </div>
               <div class="settings-row voice-local-service-actions">
                 <label class="settings-label">本地服务控制</label>
                 <button class="settings-save-btn" id="voice-local-stop" type="button" style="width:auto;padding:0 12px;">停止/取消跟踪</button>

@@ -411,3 +411,8 @@
 - Verification passed: syntax checks for API/manager/Brain UI scripts, `npm run smoke:voice-manager` 7/7, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
 - Pushed development checkpoint `ec12e2f feat: control reused voice service` to `origin/main`.
 - No tag/GitHub Release created; this remains part of the next large-version milestone bundle.
+- Added `GET /voice/local/overview`, a one-card local voice summary that aggregates service source, readiness, speaker status, recent self-test metrics, issues, and the next primary action.
+- Brain UI now shows a “本地语音总览” card above service controls so users can immediately see whether local voice is ready, waiting for self-test, or needs repair.
+- The overview primary action can launch one-click preparation, start self-test, or guide speaker enrollment from the summary card.
+- Extended voice-events and Brain UI smoke coverage for the local voice overview endpoint and summary card rendering.
+- Verification passed: syntax checks for API/Brain UI scripts, `npm run smoke:voice-events` 88/88, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
