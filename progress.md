@@ -18,3 +18,10 @@
 - Committed v2.2.0 development checkpoint as `380badf feat: add voice clients panel for v2.2.0`.
 - Pushed checkpoint to GitHub main for backup only.
 - No tag or GitHub Release created per user's major-release cadence request.
+- Fixed Brain UI smoke root cause: unescaped backticks inside `app-shell.js` release notes broke the template literal and stopped `renderBrainUiApp()` before graph/client panel rendering.
+- Updated brain-ui smoke static server to serve `/src/voice/*` module imports used by `voice-panel.js`.
+- Updated brain-ui smoke to wait on rendered node-count stats instead of raw SVG circles, matching current graph rendering behavior.
+- Added `/voice/local/start` and `/voice/local/status` mocks to the brain-ui smoke server.
+- Verification passed: `npm run smoke:brain-ui` now completes and asserts voice clients panel renders `smoke-esp32` with binary negotiated mode.
+- Verification passed again: `node --check src/ui/brain-ui/app.js`, `node --check src/ui/brain-ui/app-shell.js`, `node --check scripts/smoke-brain-ui.mjs`.
+- Verification passed again: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.

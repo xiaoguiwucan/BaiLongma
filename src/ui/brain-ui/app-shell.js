@@ -1048,7 +1048,7 @@ const createSettingsModal = () => `
                 <p class="release-note-summary">新增分句式 TTS Session，让 AI 回复按句生成和播放。</p>
                 <ul class="release-note-points">
                   <li>新增中文分句器和 TTS Session Manager。</li>
-                  <li>新增 `/tts/session`、单句音频和取消接口。</li>
+                  <li>新增 <code>/tts/session</code>、单句音频和取消接口。</li>
                   <li>前端 TTS 改为播放队列，用户打断或新回复会取消旧会话。</li>
                 </ul>
               </article>

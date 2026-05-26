@@ -4,7 +4,7 @@
 Build a larger v2.2.0 milestone instead of publishing tiny releases. The milestone should make Xiaozhi-style external voice clients visible and operable from Brain UI, backed by `/voice/events` diagnostics, tests, and docs. Do not create a GitHub Release until the broader v2.2.0 feature set is ready.
 
 ## Current Phase
-Checkpoint 1 complete; continue accumulating v2.2.0
+Checkpoint 2 complete; continue accumulating v2.2.0
 
 ## Phases
 
@@ -39,4 +39,11 @@ Checkpoint 1 complete; continue accumulating v2.2.0
 ## Errors Encountered
 | Error | Attempt | Resolution |
 |-------|---------|------------|
-| `npm run smoke:brain-ui` timed out waiting for `#graph circle` | Full browser smoke after panel changes | Treated as pre-existing/local graph-render smoke issue because syntax checks pass and voice endpoint smokes pass; new mock/assertions are in place for next full UI smoke repair |
+| `npm run smoke:brain-ui` timed out waiting for graph | Full browser smoke after panel changes | Fixed by escaping release-note backticks in `app-shell.js`, serving `/src/voice/*` imports in smoke server, mocking voice local endpoints, and waiting on node-count stats. Smoke now passes. |
+
+## Checkpoint 2: Brain UI smoke repair
+- [x] Identify page bootstrap failure (`tts is not defined`) caused by unescaped backticks in settings release notes.
+- [x] Fix app-shell template literal by replacing raw backtick API path with `<code>`.
+- [x] Add missing static route for `/src/voice/*` modules in `smoke-brain-ui`.
+- [x] Mock voice local endpoints used by the voice panel.
+- [x] Verify `npm run smoke:brain-ui` passes and covers the new external clients panel.

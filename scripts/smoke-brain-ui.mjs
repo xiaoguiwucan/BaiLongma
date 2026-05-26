@@ -61,6 +61,18 @@ function createServer() {
       return
     }
 
+    if (url.pathname.startsWith('/src/voice/')) {
+      const relativePath = decodeURIComponent(url.pathname.slice('/src/voice/'.length))
+      const assetPath = path.resolve(root, 'src', 'voice', relativePath)
+      if (!isPathInside(path.join(root, 'src', 'voice'), assetPath)) {
+        res.writeHead(403)
+        res.end('forbidden')
+        return
+      }
+      sendFile(res, assetPath)
+      return
+    }
+
     if (url.pathname.startsWith('/src/ui/brain-ui/')) {
       const relativePath = decodeURIComponent(url.pathname.slice('/src/ui/brain-ui/'.length))
       const assetPath = path.resolve(brainUiRoot, relativePath)
@@ -215,6 +227,11 @@ function createServer() {
       return
     }
 
+    if (url.pathname === '/voice/local/start' || url.pathname === '/voice/local/status') {
+      sendJson(res, { ok: true, running: false, provider: 'local', model: 'sensevoice-small' })
+      return
+    }
+
     if (url.pathname === '/message') {
       sendJson(res, { ok: true })
       return
@@ -269,7 +286,8 @@ try {
   if (!vendorResponse?.ok()) throw new Error('local d3 vendor route failed')
 
   await page.goto(`${baseUrl}/brain-ui`, { waitUntil: 'domcontentloaded' })
-  await page.waitForSelector('#graph circle', { timeout: 5000 })
+  await page.waitForFunction(() => window.d3, null, { timeout: 5000 })
+  await page.waitForFunction(() => Number(document.querySelector('#node-count')?.textContent || 0) >= 2, null, { timeout: 5000 })
   await page.waitForFunction(() => window.d3 && document.querySelector('#agent-brand-name')?.textContent.includes('SmokeLongma'))
   await page.fill('#msg-input', '马云是谁')
   await page.click('#send-btn')
@@ -291,8 +309,8 @@ try {
 
   const snapshot = await page.evaluate(() => ({
     d3: Boolean(window.d3),
-    nodes: document.querySelectorAll('#graph circle').length,
-    links: document.querySelectorAll('#graph line').length,
+    nodes: Number(document.querySelector('#node-count')?.textContent || 0),
+    links: Number(document.querySelector('#link-count')?.textContent || 0),
     acuiHost: Boolean(document.getElementById('acui-host')),
     personCard: document.querySelector('#pc-name')?.textContent || '',
     personSummary: document.querySelector('#pc-summary')?.textContent || '',
