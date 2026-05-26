@@ -738,6 +738,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.239</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">新增 /voice/events 音频能力协商，client:accepted 返回 negotiated.audioMode。</p>
+                <ul class="release-note-points">
+                  <li>协议能力新增 audio_negotiation，并在 protocol 暴露 negotiation 元数据。</li>
+                  <li>binary_audio 优先协商为 binary，仅 base64_audio 协商为 base64。</li>
+                  <li>当前只推荐不自动订阅，smoke:voice-mapping 37 项、smoke:voice-events 39 项通过。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.238</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

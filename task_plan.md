@@ -1,43 +1,44 @@
-# Task Plan: v2.1.238 Voice Events Debug Client Identity
+# Task Plan: v2.1.239 Voice Events Audio Capability Negotiation
 
 ## Goal
-Continue the Xiaozhi-inspired voice server work by making the bundled `/voice/events` CLI debug client understand the new client identity/capability negotiation, so ESP32-style bridges and local debugging can identify themselves consistently.
+Continue the Xiaozhi-inspired voice server work by adding explicit audio capability negotiation to `/voice/events`, so ESP32-style clients that declare `binary_audio` or `base64_audio` receive a clear negotiated recommendation without changing old client behavior.
 
 ## Current Phase
-Complete
+GitHub release
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Confirm v2.1.237 clean baseline and latest release state
-- [x] Inspect `scripts/voice-events-client.mjs`, smoke tests, protocol docs, and UI release notes
-- [x] Choose a small concrete next feature: CLI identity/capability handshake
+- [x] Confirm v2.1.238 clean baseline and GitHub release state
+- [x] Inspect protocol metadata, client identity handling, and smoke coverage
+- [x] Choose next aligned feature: capability-based negotiated audio mode
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add CLI flags for client identity and capabilities
-- [x] Send `client:hello` automatically before listen/speak/cancel by default, with `--no-identify` escape hatch
-- [x] Add `protocol` convenience command
+- [x] Add protocol capability and metadata for audio negotiation
+- [x] Compute negotiated audio mode from sanitized client capabilities
+- [x] Return negotiation details in `client:accepted`
+- [x] Keep subscribe behavior backward-compatible unless client explicitly subscribes
 - **Status:** complete
 
 ### Phase 3: Tests, docs, UI notes
-- [x] Extend smoke tests for CLI-facing protocol behavior
-- [x] Bump version to 2.1.238 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
+- [x] Extend smoke tests and pure mapping/protocol checks
+- [x] Bump version to 2.1.239 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
 - [x] Run syntax checks and smoke suites
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [x] Commit changes
-- [x] Tag and push v2.1.238
-- [x] Create source tarball and git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag and push v2.1.239
+- [ ] Create source tarball and git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** pending
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Improve the CLI before deeper protocol changes | Makes existing v2.1.236-v2.1.237 server diagnostics usable immediately from Mac/ESP32 bridge debugging |
-| Keep this release low-risk | The user wants continual stable backed-up versions; small testable increments reduce regressions |
+| Negotiate but do not auto-subscribe audio in this step | Safer for existing clients; makes capability outcome explicit without unexpected audio traffic |
+| Prefer binary over base64 when both are declared | Binary is lower overhead and closer to hardware streaming patterns |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

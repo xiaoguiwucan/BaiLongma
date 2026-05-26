@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -42,6 +42,12 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
     clientMessages: ['ping', 'client:hello', 'client:identify', 'subscribe', 'voice:subscribe', 'unsubscribe', 'voice:unsubscribe', 'tts:speak', 'speak', 'tts:cancel', 'cancel'],
     identityFields: ['clientId', 'device', 'app', 'version', 'platform', 'capabilities'],
     clientCapabilityExamples: ['binary_audio', 'base64_audio', 'tts_speak', 'wake', 'display'],
+    negotiation: {
+      audioModes: ['none', 'binary', 'base64'],
+      prefer: ['binary_audio', 'base64_audio'],
+      returnedIn: 'client:accepted.negotiated',
+      autoSubscribe: false,
+    },
     errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text', 'text_too_long', 'rate_limited'],
     mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
     limits: {
@@ -109,6 +115,22 @@ function cleanIdentityValue(value, max = 80) {
 function sanitizeClientCapabilities(value) {
   const items = Array.isArray(value) ? value : String(value || '').split(/[,，、\s]+/)
   return [...new Set(items.map(item => cleanIdentityValue(item, 40).toLowerCase()).filter(Boolean))].slice(0, 16)
+}
+
+export function negotiateVoiceEventClientCapabilities(identity = {}) {
+  const capabilities = Array.isArray(identity.capabilities) ? identity.capabilities : sanitizeClientCapabilities(identity.capabilities)
+  const audioMode = capabilities.includes('binary_audio')
+    ? 'binary'
+    : capabilities.includes('base64_audio')
+      ? 'base64'
+      : 'none'
+  return {
+    audioMode,
+    binaryAudio: audioMode === 'binary',
+    base64Audio: audioMode === 'base64',
+    shouldSubscribeAudio: false,
+    reason: audioMode === 'none' ? 'client_did_not_declare_audio_capability' : 'client_capability',
+  }
 }
 
 export function sanitizeVoiceEventClientIdentity(msg = {}) {
@@ -224,8 +246,9 @@ export function handleVoiceEventClientMessage(ws, raw) {
   }
   if (msg?.type === 'client:hello' || msg?.type === 'client:identify') {
     const identity = setVoiceEventClientIdentity(ws, sanitizeVoiceEventClientIdentity(msg))
-    safeSend(ws, { type: 'client:accepted', service: 'bailongma.voice.events', identity })
-    return { handled: true, identity }
+    const negotiated = negotiateVoiceEventClientCapabilities(identity)
+    safeSend(ws, { type: 'client:accepted', service: 'bailongma.voice.events', identity, negotiated })
+    return { handled: true, identity, negotiated }
   }
   if (msg?.type === 'subscribe' || msg?.type === 'voice:subscribe') {
     touchVoiceEventClient(ws)

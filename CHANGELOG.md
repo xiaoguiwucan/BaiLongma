@@ -4,6 +4,55 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.239 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` 协议能力新增 `audio_negotiation`。
+- `/voice/events/protocol` 新增 `negotiation` 元数据：
+  - `audioModes`: `none` / `binary` / `base64`；
+  - `prefer`: `binary_audio` 优先，其次 `base64_audio`；
+  - `returnedIn`: `client:accepted.negotiated`；
+  - `autoSubscribe: false`，当前只协商推荐，不自动订阅音频，避免旧客户端收到意外音频流。
+- `client:hello` / `client:identify` 的 `client:accepted` 新增：
+  - `negotiated.audioMode`；
+  - `negotiated.binaryAudio`；
+  - `negotiated.base64Audio`；
+  - `negotiated.shouldSubscribeAudio`；
+  - `negotiated.reason`。
+- 新增 `negotiateVoiceEventClientCapabilities()`，集中处理客户端能力协商。
+- `smoke:voice-mapping` 从 33/33 扩展到 37/37。
+- `smoke:voice-events` 从 37/37 扩展到 39/39。
+
+### 改变原因
+
+- 小智式/ESP32/桥接客户端的音频能力不同：部分设备适合二进制 chunk，部分只方便处理 base64 JSON。
+- 之前客户端能声明 capabilities，但服务端没有明确告诉客户端“建议使用哪种音频模式”。
+- 本版本先把协商结果写进 `client:accepted`，为后续自动订阅、按设备策略、UI 客户端列表打基础，同时保持旧行为稳定。
+
+### 影响范围
+
+- 旧客户端兼容；不发送 `client:hello` 或不读取 `negotiated` 也能继续使用。
+- 声明 `binary_audio` 的客户端会得到 `audioMode: "binary"`。
+- 仅声明 `base64_audio` 的客户端会得到 `audioMode: "base64"`。
+- 未声明音频能力的客户端会得到 `audioMode: "none"`。
+- 当前不会自动订阅音频；客户端仍需显式发送 `subscribe`。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 37/37 通过。
+- `npm run smoke:voice-events` 39/39 通过。
+- 完整 smoke 结果见本版本发布记录。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端建议连接后发送 `client:hello`，并在 `capabilities` 中声明 `binary_audio` 或 `base64_audio`。
+- 客户端收到 `client:accepted.negotiated.audioMode` 后，再决定发送 `subscribe` 的 `binaryAudio` 参数。
+
 ## v2.1.238 - 2026-05-26
 
 ### 更新内容

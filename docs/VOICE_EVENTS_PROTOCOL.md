@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.238 更新：调试 CLI 支持 client:hello 身份/能力参数）
+版本：v3（BaiLongma v2.1.239 更新：client:accepted 音频能力协商）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -135,6 +135,13 @@ ws://<mac-ip>:3721/voice/events?token=<token>
     "platform": "esp32",
     "capabilities": ["binary_audio", "tts_speak", "wake"],
     "lastSeenAt": 1710000000000
+  },
+  "negotiated": {
+    "audioMode": "binary",
+    "binaryAudio": true,
+    "base64Audio": false,
+    "shouldSubscribeAudio": false,
+    "reason": "client_capability"
   }
 }
 ```
@@ -152,6 +159,8 @@ npm run voice:events -- listen --audio --binary \
 ```
 
 CLI 默认会发送 `client:hello`；如果要测试旧客户端行为，可加 `--no-identify`。
+
+`negotiated.audioMode` 规则：声明 `binary_audio` 时优先返回 `binary`；仅声明 `base64_audio` 时返回 `base64`；没有音频能力时返回 `none`。当前 `shouldSubscribeAudio` 固定为 `false`，表示服务端只给出推荐，不自动订阅音频，客户端仍需显式发送 `subscribe`。
 
 ## 4. 被动订阅音频块
 
