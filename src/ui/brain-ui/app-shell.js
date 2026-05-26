@@ -891,6 +891,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.3.0</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">本地语音稳定性大版本：一键准备、真实自测、服务复用、声纹恢复/校准、隐私诊断包、麦克风自检和阈值校准。</p>
+                <ul class="release-note-points">
+                  <li>新增本地语音总览、readiness wizard、自测闭环和诊断包，能直接看出下一步该准备、实测、录声纹还是修服务。</li>
+                  <li>增强声纹：防锁死、清除、离线清除、备份/恢复、选择备份和阈值校准，降低“录了声纹但本人唤不醒”的风险。</li>
+                  <li>新增麦克风自检仪表与触发阈值校准，并把麦克风状态并入总览，用来排查视频盖住声音/阈值不合适。</li>
+                  <li>验证通过：smoke:voice-manager 7/7、smoke:voice-events 92/92、smoke:brain-ui。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.2.0</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

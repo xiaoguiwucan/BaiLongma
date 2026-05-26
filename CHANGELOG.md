@@ -4,6 +4,91 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.3.0 - 2026-05-26
+
+### 更新内容
+
+这是本地语音稳定性大版本，把 v2.2.0 之后连续多个开发检查点收束成一次正式 Release。重点解决 Mac 上本地语音助手在视频播放、多人说话、声纹误拒绝、服务重复启动、麦克风听不见/阈值不合适时难以定位的问题。
+
+- 本地语音准备闭环：新增 `/voice/local/readiness` 和 `/voice/local/readiness/apply`，一键切到本地 SenseVoiceSmall、严格唤醒、视频抗干扰和稳定基线。
+- 声纹安全防锁死：新增 `speaker_gate_safe` readiness step、`disable_speaker_gate` doctor fix，避免“只响应我的声音”开启但无可用声纹导致本人也唤不醒。
+- 本地语音实测闭环：新增 `/voice/local/self-test/start` 和 `/voice/local/self-test`，用真实 wake/asr/tts 事件判断链路是否跑通。
+- 复用已有本地语音服务：检测 3723 端口上已运行的 ASR 服务，避免重复启动；UI 明确显示“复用已运行服务”，并提供停止/取消跟踪、按当前模型重启。
+- 本地语音总览：新增 `/voice/local/overview` 和 Brain UI “本地语音总览”，集中显示服务、readiness、声纹、自测、麦克风和下一步动作。
+- 隐私安全诊断包：新增 `/voice/local/diagnostics/package`，导出 overview/readiness/doctor/speaker/self-test/events/配置摘要，不包含 API Key、原始音频或声纹文件内容。
+- 声纹恢复与校准：支持声纹清除、离线清除、备份、选择备份恢复，以及 `/voice/local/speaker/calibration` / `apply` 根据测试分数和最近拒绝记录推荐安全阈值。
+- 麦克风自检与阈值校准：Brain UI 新增“麦克风自检”仪表，显示当前/峰值/噪声底/阈值，并可按当前峰值一键校准触发阈值。
+- 麦克风状态进入总览：总览卡片直接显示“麦克风未开启/低于阈值/已听见你”，不用滚到设置深处才能排查。
+- 扩展 smoke 覆盖：新增/扩展 voice manager、voice events、brain-ui 测试，覆盖复用服务、readiness/self-test、声纹备份/恢复/校准、诊断包、麦克风仪表和总览。
+
+### 改变原因
+
+- 用户反馈视频播放声音会盖住本人唤醒、声纹录入后反而识别不到本人、以及本地服务重复启动/状态不可见会造成排障困难。
+- 仅靠参数开关不足以稳定使用，需要“准备 -> 实测 -> 诊断 -> 校准 -> 恢复”的完整人类可操作闭环。
+- 前面已经积累多个检查点，继续不发版本会导致用户无法获得可安装/可追踪的大版本备份，因此本次收束为 v2.3.0。
+
+### 影响范围
+
+- 默认仍优先本地 ASR / SenseVoiceSmall，Whisper 继续保留为备用模型。
+- 新增端点均为本地诊断/配置摘要，不上传音频，不导出声纹内容。
+- 如果 3723 已有语音服务在运行，应用会复用并提示来源；切换模型时需要先停止旧服务或使用重启流程。
+- 声纹阈值校准会优先避免本人被锁死；如果环境中有相似声音，建议校准后再按需提高严格度。
+
+### 验证结果
+
+- `node --check src/api.js` 通过。
+- `node --check src/config.js` 通过。
+- `node --check src/voice/manager.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `node --check scripts/smoke-brain-ui.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `node --check scripts/smoke-voice-manager.mjs` 通过。
+- `python3 -m py_compile src/voice/sensevoice_server.py` 通过。
+- `npm run smoke:voice-manager` 7/7 通过。
+- `npm run smoke:voice-events` 92/92 通过。
+- `npm run smoke:brain-ui` 通过。
+
+### 部署注意事项
+
+源码部署方式不变：
+
+```bash
+npm install
+npm start
+```
+
+本地语音建议流程：
+
+1. 打开 Brain UI -> 设置 -> 语音识别。
+2. 选择“本地模型 / SenseVoiceSmall”。
+3. 点击“一键语音准备”。
+4. 点击“开始实测”，说“龙马，测试一下”。
+5. 如果总览显示麦克风低于阈值，打开“麦克风自检”并点击“按当前峰值校准阈值”。
+6. 如果启用“只响应我的声音”，先录入声纹，再用“测试我的声纹 / 校准阈值”确认本人不会被误拒绝。
+
+常用诊断端点：
+
+```bash
+curl http://127.0.0.1:3721/voice/local/overview
+curl http://127.0.0.1:3721/voice/local/readiness
+curl http://127.0.0.1:3721/voice/local/doctor
+curl http://127.0.0.1:3721/voice/local/diagnostics/package
+```
+
+### 备份附件说明
+
+- Release 会上传 `BaiLongma-source-v2.3.0.tar.gz`：Git 追踪源码快照，不包含 `.env`、`config.json`、`data/`、`node_modules/`、模型文件和打包产物。
+- Release 会上传 `BaiLongma-v2.3.0.bundle`：Git bundle，可离线恢复完整提交历史到本版本 tag。
+- 本次未上传 Mac/Windows 安装包；源码运行仍是推荐方式。
+
+### 已知限制
+
+- 麦克风自检和阈值校准依赖浏览器/Electron 的麦克风权限；如果系统权限被拒绝，需要先到 macOS 系统设置中授权。
+- 系统级 AEC 和视频降音效果受浏览器、播放器、外放音量、麦克风位置影响；跨域播放器可能只能短暂停/恢复，不能精确调音量。
+- 声纹不是魔法隔音：在视频外放很大、本人离麦克风远、或声纹样本质量差时，仍建议使用空格按住说话作为兜底。
+
 ## v2.2.0 - 2026-05-26
 
 ### 更新内容

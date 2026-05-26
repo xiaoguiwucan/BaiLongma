@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.2.0 更新：小智式语音设备控制台、链路总控、自检和接入包）
+版本：v3（BaiLongma v2.3.0 继续沿用：小智式语音设备控制台、链路总控、自检和接入包；v2.3.0 新增本地语音稳定性诊断闭环）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
