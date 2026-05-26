@@ -498,3 +498,17 @@
 - Extended Brain UI smoke to synthesize mic-level, wake rejection, speaker rejection, and media pre-roll gate events, verifying the debug panel renders them.
 - Verified `node --check` for app/app-shell/smoke and `npm run smoke:brain-ui`.
 - This remains a post-v2.3.1 development checkpoint only; no tag/Release yet.
+
+
+## Checkpoint 61 - Separate partial ASR display from gated command text
+
+- Continued toward the "wake detection separated from formal ASR command text" goal.
+- Changed Brain UI voice-panel handling so partial ASR results are display/debug only:
+  - partial text no longer writes `lastTranscriptText`;
+  - partial text no longer schedules auto-send;
+  - only final text that passes wake/speaker gates can become the command sent to the assistant.
+- Wake rejection now clears pending command text and displays a clear ignored reason instead of leaving stale partial text around.
+- Final hallucinated transcripts now clear accumulated/pending text and return to listening with an explicit filtered reason.
+- Added `scripts/smoke-voice-panel-gating.mjs` and `npm run smoke:voice-panel-gating` to protect this invariant.
+- Verified syntax and the new smoke check. Broader suites should be run before the next Release.
+- This is a post-v2.3.1 development checkpoint only; no tag/Release yet.

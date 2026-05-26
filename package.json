@@ -32,7 +32,8 @@
     "publish:mac": "electron-builder --mac --arm64 --publish always",
     "publish:win": "electron-builder --win --publish always",
     "build:mac:x64": "node scripts/prebuild-clean.mjs && electron-rebuild -f -w better-sqlite3 -v 33.4.11 && electron-builder --mac --x64",
-    "publish:mac:x64": "electron-builder --mac --x64 --publish always"
+    "publish:mac:x64": "electron-builder --mac --x64 --publish always",
+    "smoke:voice-panel-gating": "node scripts/smoke-voice-panel-gating.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

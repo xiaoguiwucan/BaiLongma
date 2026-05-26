@@ -615,6 +615,20 @@ export function initVoicePanel({
     return { accepted: false, text: '', wokeOnly: false, reason: cfg.mode === 'strict' ? 'wake not at prefix' : 'wake missing' };
   }
 
+  function wakeRejectDisplayText(reason = '') {
+    const key = String(reason || '').trim();
+    const labels = {
+      'repeat suppressed': '已忽略重复误识别',
+      'wake not at prefix': '已忽略：唤醒词不在开头',
+      'wake missing': '已忽略：没有听到唤醒词',
+      'command too short': '已忽略：唤醒后的指令太短',
+      'wake confidence too low': '已忽略：唤醒置信度过低',
+      'wake cooldown': '已忽略：唤醒冷却中',
+      'speaker verification required for wake': '已忽略：唤醒未通过声纹',
+    };
+    return labels[key] || `已忽略：${key || '唤醒未通过'}`;
+  }
+
   function looksLikeAsrHallucination(text = '') {
     const t = String(text || '').trim();
     if (!t) return true;
@@ -699,7 +713,15 @@ export function initVoicePanel({
       if (msg.type === 'transcript') {
         const text = (msg.text || '').trim();
         if (!text) return;
-        if (looksLikeAsrHallucination(text)) return;
+        if (looksLikeAsrHallucination(text)) {
+          if (msg.is_final) {
+            lastTranscriptText = '';
+            accumulatedText = '';
+            if (transcript) transcript.textContent = '';
+            setStatus(VOICE_STATES.LISTENING, { reason: 'filtered hallucination transcript' });
+          }
+          return;
+        }
         if (msg.is_final) {
           if (text === lastFinalTranscript) return;
           const gated = applyWakeWordGate(text, msg);
@@ -709,13 +731,21 @@ export function initVoicePanel({
               if (transcript) transcript.textContent = `已唤醒，请在 ${gated.windowSeconds || 8} 秒内继续说指令…`;
               setStatus(VOICE_STATES.WAKE_DETECTED, { reason: 'wake word detected, waiting command', word: gated.word, windowSeconds: gated.windowSeconds });
             } else {
+              if (transcript) transcript.textContent = wakeRejectDisplayText(gated.reason);
+              lastTranscriptText = '';
               setStatus(VOICE_STATES.LISTENING, { reason: gated.reason || 'wake rejected', repeatCount: gated.repeatCount });
             }
             return;
           }
           emitVoiceEvent(VOICE_EVENT_TYPES.WAKE_ACCEPTED, { text: gated.text, word: gated.word, reason: gated.reason, confidence: gated.confidence });
           const acceptedText = gated.text;
-          if (!acceptedText || looksLikeAsrHallucination(acceptedText)) return;
+          if (!acceptedText || looksLikeAsrHallucination(acceptedText)) {
+            lastTranscriptText = '';
+            accumulatedText = '';
+            if (transcript) transcript.textContent = '';
+            setStatus(VOICE_STATES.LISTENING, { reason: 'filtered accepted hallucination' });
+            return;
+          }
           lastFinalTranscript = acceptedText;
           accumulatedText = accumulatedText ? accumulatedText + '，' + acceptedText : acceptedText;
           lastTranscriptText = accumulatedText;
@@ -726,11 +756,12 @@ export function initVoicePanel({
           window.dispatchEvent(new CustomEvent('bailongma:assistant-wake', { detail: { text: acceptedText, wakeReason: gated.reason, wakeWord: gated.word } }));
           triggerDone();
         } else {
-          emitVoiceEvent(VOICE_EVENT_TYPES.ASR_PARTIAL, { text });
-          lastTranscriptText = accumulatedText ? accumulatedText + '，' + text : text;
-          if (transcript) transcript.textContent = lastTranscriptText;
+          emitVoiceEvent(VOICE_EVENT_TYPES.ASR_PARTIAL, { text, gated: false, displayOnly: true });
+          // Partial ASR is display/debug only. Do not put it into lastTranscriptText and do not
+          // schedule auto-send before the final transcript passes wake/speaker gates.
+          if (transcript) transcript.textContent = accumulatedText ? `${accumulatedText}，${text}` : text;
         }
-        scheduleAutoSend();
+        if (msg.is_final) scheduleAutoSend();
       } else if (msg.type === 'speaker_rejected') {
         emitVoiceEvent(VOICE_EVENT_TYPES.SPEAKER_REJECTED, { score: msg.score, threshold: msg.threshold, reason: msg.reason });
         setStatus(VOICE_STATES.LISTENING, { reason: 'speaker rejected' });

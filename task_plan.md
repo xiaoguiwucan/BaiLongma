@@ -592,3 +592,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend Brain UI smoke coverage for synthetic debug events.
 - [x] Run broader checks.
 - [x] Commit and push as a development checkpoint.
+
+
+## Checkpoint 61 plan - Partial ASR / wake gate separation
+
+- [x] Prevent partial ASR from becoming pending command text.
+- [x] Prevent partial ASR from scheduling auto-send before final wake/speaker gate.
+- [x] Clear pending command text on wake rejection and hallucination filtering.
+- [x] Add smoke coverage for the gating invariant.
+- [x] Run broader voice/UI smoke suites.
+- [x] Commit and push as a development checkpoint.
