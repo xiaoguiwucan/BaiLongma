@@ -190,6 +190,7 @@ export function initVoicePanel({
       micData.analyser.getByteFrequencyData(micData.dataArray);
       const sum = micData.dataArray.reduce((a, b) => a + b, 0);
       const vol = (sum / micData.dataArray.length) / 255;
+      publishMicMonitor(vol);
 
       // 视频播放中：连续检测到近场人声才通知媒体层降音量/暂停，让唤醒词和声纹有机会听清。
       if (mediaModeActive && localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== 'false') {
@@ -357,6 +358,25 @@ export function initVoicePanel({
     tailChunks: 0,
     ambientChunks: 0,
   };
+  let micMonitor = { current: 0, peak: 0, noiseFloor: getAmbientThreshold(), threshold: getVoiceThreshold(), active: false, updatedAt: 0 };
+
+  function publishMicMonitor(vol = 0) {
+    const threshold = getVoiceThreshold();
+    const ambient = getAmbientThreshold();
+    const current = Math.max(0, Number(vol) || 0);
+    const previousNoise = Number(micMonitor.noiseFloor || ambient) || ambient;
+    const noiseFloor = current < threshold ? previousNoise * 0.92 + current * 0.08 : previousNoise;
+    micMonitor = {
+      current,
+      peak: Math.max(Number(micMonitor.peak || 0), current),
+      noiseFloor,
+      threshold,
+      active: micActive,
+      updatedAt: Date.now(),
+    };
+    window.bailongmaVoiceMicMonitor = { ...micMonitor };
+    window.dispatchEvent(new CustomEvent('bailongma:mic-level', { detail: { ...micMonitor } }));
+  }
   // Cloud 专用
   let cloudAudioCtx = null;
   let cloudProcessor = null;
@@ -1016,6 +1036,8 @@ export function initVoicePanel({
     stop: () => stopVoiceInput(),
     pttStart,
     pttEnd,
+    getMicMonitor: () => ({ ...micMonitor }),
+    resetMicMonitor: () => { micMonitor = { current: 0, peak: 0, noiseFloor: getAmbientThreshold(), threshold: getVoiceThreshold(), active: micActive, updatedAt: Date.now() }; window.bailongmaVoiceMicMonitor = { ...micMonitor }; window.dispatchEvent(new CustomEvent('bailongma:mic-level', { detail: { ...micMonitor } })); },
   };
 
   window.addEventListener('bailongma:video-mode', (event) => {

@@ -528,3 +528,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and Brain UI smoke coverage for recommendation and apply flows.
 - [x] Verify syntax plus smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 54: Microphone level self-check meter
+- [x] Add live microphone level telemetry from the Brain UI voice panel.
+- [x] Track current level, peak level, noise floor, active state, timestamp, and current trigger threshold.
+- [x] Add a Brain UI “麦克风自检” meter in voice sensitivity settings with bar/threshold marker and human advice.
+- [x] Add reset action for peak/noise floor so users can retest after moving closer or changing threshold.
+- [x] Explain whether the mic is unheard, below threshold, or clearly crossing the threshold to separate mic problems from wake/speaker/ASR problems.
+- [x] Extend Brain UI smoke coverage for live mic-level rendering.
+- [x] Verify syntax plus smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

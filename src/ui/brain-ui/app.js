@@ -3391,6 +3391,7 @@ function initTTSSettings() {
     localStorage.setItem(VOICE_VIDEO_DUCK_LEVEL_KEY, String(savedDuckLevel));
     localStorage.setItem(VOICE_VIDEO_DUCK_HOLD_KEY, String(savedDuckHold));
     localStorage.setItem(VOICE_VIDEO_DUCK_SENSITIVITY_KEY, String(savedDuckSensitivity));
+    renderMicMeter();
     const debugEnabled = localStorage.getItem(VOICE_DEBUG_ENABLED_KEY) !== "false";
     if (voiceDebugEnabled) voiceDebugEnabled.checked = debugEnabled;
     if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
@@ -3748,6 +3749,49 @@ function initTTSSettings() {
       showFeedback(fb, err?.message || "声纹校准失败", true);
     }
   }
+
+  function renderMicMeter(detail = window.bailongmaVoice?.getMicMonitor?.() || window.bailongmaVoiceMicMonitor || {}) {
+    const currentEl = document.getElementById("voice-mic-current");
+    const peakEl = document.getElementById("voice-mic-peak");
+    const noiseEl = document.getElementById("voice-mic-noise");
+    const thresholdEl = document.getElementById("voice-mic-threshold-label");
+    const stateEl = document.getElementById("voice-mic-meter-state");
+    const barEl = document.getElementById("voice-mic-meter-bar");
+    const markerEl = document.getElementById("voice-mic-meter-threshold");
+    const adviceEl = document.getElementById("voice-mic-meter-advice");
+    if (!currentEl || !peakEl || !noiseEl || !thresholdEl || !stateEl || !barEl || !markerEl) return;
+    const threshold = Math.max(0.002, Math.min(0.04, Number(detail.threshold || localStorage.getItem("bailongma-voice-threshold") || 0.008) || 0.008));
+    const current = Math.max(0, Number(detail.current || 0) || 0);
+    const peak = Math.max(0, Number(detail.peak || 0) || 0);
+    const noise = Math.max(0, Number(detail.noiseFloor || 0) || 0);
+    const scaleMax = Math.max(0.04, threshold * 3, peak * 1.2, current * 1.2);
+    currentEl.textContent = current.toFixed(3);
+    peakEl.textContent = peak.toFixed(3);
+    noiseEl.textContent = noise.toFixed(3);
+    thresholdEl.textContent = threshold.toFixed(3);
+    barEl.style.width = `${Math.min(100, Math.round((current / scaleMax) * 100))}%`;
+    markerEl.style.left = `${Math.min(100, Math.round((threshold / scaleMax) * 100))}%`;
+    const stale = !detail.updatedAt || Date.now() - Number(detail.updatedAt) > 2500;
+    if (!detail.active && stale) {
+      stateEl.textContent = "麦克风未开启";
+      if (adviceEl) adviceEl.textContent = "点击主界面麦克风或开始语音实测后，再观察音量是否越过阈值。";
+    } else if (current >= threshold) {
+      stateEl.textContent = "已超过触发阈值";
+      if (adviceEl) adviceEl.textContent = "麦克风能听见你；如果仍无响应，继续看唤醒/声纹/ASR 诊断。";
+    } else if (peak > 0 && peak < threshold) {
+      stateEl.textContent = "声音低于阈值";
+      if (adviceEl) adviceEl.textContent = "说话峰值没有越过阈值：靠近麦克风、降低触发阈值，或使用空格按住说话。";
+    } else {
+      stateEl.textContent = "等待说话";
+      if (adviceEl) adviceEl.textContent = "对着 Mac 说“龙马，测试一下”，观察当前音量和峰值。";
+    }
+  }
+
+  window.addEventListener("bailongma:mic-level", event => renderMicMeter(event.detail || {}));
+  document.getElementById("voice-mic-meter-reset")?.addEventListener("click", () => {
+    window.bailongmaVoice?.resetMicMonitor?.();
+    renderMicMeter();
+  });
 
   async function startSpeakerVoiceService() {
     const btn = document.getElementById("voice-speaker-start-service");

@@ -670,6 +670,23 @@ const createSettingsModal = () => `
               <input type="range" id="settings-voice-threshold" min="0.002" max="0.04" step="0.001" value="0.008" style="flex:1;cursor:pointer;">
               <span id="settings-voice-threshold-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">0.008</span>
             </div>
+            <div class="voice-mic-meter" id="voice-mic-meter">
+              <div class="voice-mic-meter-head">
+                <strong>麦克风自检</strong>
+                <span id="voice-mic-meter-state">等待麦克风数据</span>
+              </div>
+              <div class="voice-mic-meter-bar"><i id="voice-mic-meter-bar" style="width:0%"></i><b id="voice-mic-meter-threshold" style="left:20%"></b></div>
+              <div class="voice-mic-meter-meta">
+                <span>当前 <code id="voice-mic-current">0.000</code></span>
+                <span>峰值 <code id="voice-mic-peak">0.000</code></span>
+                <span>噪声底 <code id="voice-mic-noise">0.000</code></span>
+                <span>阈值 <code id="voice-mic-threshold-label">0.008</code></span>
+              </div>
+              <div class="voice-mic-meter-actions">
+                <button class="voice-readiness-action" id="voice-mic-meter-reset" type="button">重置峰值/噪声底</button>
+                <span class="settings-feedback" id="voice-mic-meter-advice">打开麦克风后，对着 Mac 说唤醒词，看柱状条是否越过阈值。</span>
+              </div>
+            </div>
           </div>
 
           <div class="settings-section">

@@ -433,3 +433,11 @@
 - Applying calibration synchronizes the slider, localStorage, speaker status, local doctor, and local voice overview so the settings UI no longer drifts from saved config.
 - Extended smoke coverage for backend recommendation/apply behavior and Brain UI calibration application.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+
+- Continued the larger local-voice stability milestone with a visible microphone self-check meter for the “video is masking my voice / assistant cannot hear me” problem.
+- Brain UI voice capture now publishes live mic telemetry (`current`, `peak`, `noiseFloor`, `threshold`, active state, timestamp) through `bailongma:mic-level` and `window.bailongmaVoice.getMicMonitor()`.
+- Settings → Voice sensitivity now includes “麦克风自检” with a live level bar, threshold marker, current/peak/noise/threshold numbers, and practical advice.
+- The meter distinguishes “麦克风未开启”, “声音低于阈值”, and “已超过触发阈值”, helping users know whether to move closer, lower threshold, use push-to-talk, or debug wake/speaker/ASR instead.
+- Added a reset button for peak/noise-floor retesting after changing microphone position or threshold.
+- Extended Brain UI smoke coverage for the mic-level event and rendered advice.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

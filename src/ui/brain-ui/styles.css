@@ -4981,3 +4981,15 @@ body.person-card-mode .person-card-panel,
 .voice-speaker-calibration-head span, .voice-speaker-calibration p { color:var(--ink2); font-size:12px; margin:0; line-height:1.5; }
 .voice-speaker-calibration-meta, .voice-speaker-calibration-actions { display:flex; flex-wrap:wrap; gap:7px; align-items:center; }
 .voice-speaker-calibration-meta span { padding:3px 7px; border-radius:999px; color:var(--ink2); background:rgba(255,255,255,0.06); font-size:11px; }
+
+.voice-mic-meter { border:1px solid rgba(143,185,240,0.18); border-radius:12px; padding:10px 12px; margin-top:10px; background:rgba(143,185,240,0.045); display:flex; flex-direction:column; gap:8px; }
+.voice-mic-meter-head { display:flex; align-items:center; justify-content:space-between; gap:10px; }
+.voice-mic-meter-head strong { color:var(--ink); font-size:13px; }
+.voice-mic-meter-head span { color:var(--ink2); font-size:12px; }
+.voice-mic-meter-bar { position:relative; height:10px; border-radius:999px; overflow:hidden; background:rgba(255,255,255,0.08); box-shadow: inset 0 0 0 1px rgba(255,255,255,0.04); }
+.voice-mic-meter-bar i { position:absolute; left:0; top:0; bottom:0; border-radius:999px; background:linear-gradient(90deg, rgba(143,185,240,0.75), rgba(143,240,179,0.85)); transition:width .12s linear; }
+.voice-mic-meter-bar b { position:absolute; top:-2px; bottom:-2px; width:2px; background:var(--warm); box-shadow:0 0 8px rgba(211,152,114,0.55); }
+.voice-mic-meter-meta, .voice-mic-meter-actions { display:flex; flex-wrap:wrap; gap:8px; align-items:center; }
+.voice-mic-meter-meta span { padding:3px 7px; border-radius:999px; color:var(--ink2); background:rgba(255,255,255,0.06); font-size:11px; }
+.voice-mic-meter-meta code { color:var(--ink); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+.voice-mic-meter-actions .settings-feedback { font-size:11px; }
