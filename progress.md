@@ -350,3 +350,9 @@
 - Brain UI now has a “恢复备份” action beside enroll/test/clear, and clear feedback distinguishes “声纹已备份并清除”.
 - Extended smoke coverage for missing-backup restore errors and UI clear→restore flow.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Expanded voiceprint backup restore from “latest only” to selectable backups.
+- New `GET /voice/local/speaker/backups` returns retained backup names, sizes, and mtime metadata without exposing file contents.
+- `POST /voice/local/speaker/restore` now accepts a backup name and still falls back to the latest backup when omitted.
+- Brain UI now includes a backup selector next to “恢复备份”, refreshing it after clear/restore operations.
+- Extended smoke coverage for backup listing and selected-backup restore flow.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

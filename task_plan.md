@@ -437,3 +437,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui and voice-events smoke coverage for missing backup and restore flow.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 44: Selectable voiceprint backups
+- [x] Add backend `GET /voice/local/speaker/backups` to list retained voiceprint backup metadata.
+- [x] Allow `POST /voice/local/speaker/restore` to restore a selected backup by name, falling back to latest when omitted.
+- [x] Add Brain UI backup selector beside “恢复备份”.
+- [x] Refresh backup selector after clear and restore operations.
+- [x] Extend brain-ui smoke coverage for selecting a backup before restore.
+- [x] Extend voice-events smoke coverage for backup list endpoint.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

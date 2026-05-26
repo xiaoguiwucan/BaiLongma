@@ -93,6 +93,8 @@ try {
   assert(summaryBefore.ok === true && summaryBefore.summary?.level === 'offline' && summaryBefore.summary?.issues?.includes('no_clients'), 'summary endpoint reports offline before clients connect', JSON.stringify(summaryBefore))
   const speakerStatusBefore = await fetch(`${API}/voice/local/speaker/status`).then(r => r.json())
   assert(speakerStatusBefore.ok === true && speakerStatusBefore.speaker?.reachable === false && speakerStatusBefore.local?.status, 'local speaker status endpoint reports unreachable when local service is stopped', JSON.stringify(speakerStatusBefore.speaker))
+  const backupsBefore = await fetch(`${API}/voice/local/speaker/backups`).then(r => r.json())
+  assert(backupsBefore.ok === true && Array.isArray(backupsBefore.backups), 'local speaker backups endpoint lists backup metadata', JSON.stringify(backupsBefore))
   const restoreMissing = await fetch(`${API}/voice/local/speaker/restore`, { method: 'POST' }).then(r => r.json())
   assert(restoreMissing.ok === false && restoreMissing.code === 'voiceprint_backup_missing', 'local speaker restore reports missing backup before clear', JSON.stringify(restoreMissing))
   const clearSpeakerStopped = await fetch(`${API}/voice/local/speaker/clear`, { method: 'POST' }).then(r => r.json())

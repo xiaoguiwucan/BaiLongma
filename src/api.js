@@ -249,19 +249,32 @@ function backupLocalSpeakerVoiceprint(filePath = path.join(paths.dataDir, 'voice
   return { path: backupPath, name: path.basename(backupPath), at: Date.now() }
 }
 
-function latestLocalSpeakerVoiceprintBackup() {
+function listLocalSpeakerVoiceprintBackups() {
   const backupDir = path.join(paths.dataDir, 'voiceprint-backups')
   try {
-    const backups = fs.readdirSync(backupDir).filter(name => name.startsWith('voiceprint-') && name.endsWith('.json')).sort()
-    const name = backups[backups.length - 1]
-    return name ? { path: path.join(backupDir, name), name } : null
+    return fs.readdirSync(backupDir)
+      .filter(name => name.startsWith('voiceprint-') && name.endsWith('.json'))
+      .sort()
+      .map(name => {
+        const filePath = path.join(backupDir, name)
+        let stat = null
+        try { stat = fs.statSync(filePath) } catch (_) {}
+        return { name, path: filePath, size: stat?.size || 0, mtimeMs: stat?.mtimeMs || 0 }
+      })
   } catch (_) {
-    return null
+    return []
   }
 }
 
-function restoreLocalSpeakerVoiceprintBackup() {
-  const backup = latestLocalSpeakerVoiceprintBackup()
+function latestLocalSpeakerVoiceprintBackup() {
+  const backups = listLocalSpeakerVoiceprintBackups()
+  return backups[backups.length - 1] || null
+}
+
+function restoreLocalSpeakerVoiceprintBackup(name = '') {
+  const backups = listLocalSpeakerVoiceprintBackups()
+  const safeName = String(name || '').trim()
+  const backup = safeName ? backups.find(item => item.name === safeName) : backups[backups.length - 1]
   if (!backup || !fs.existsSync(backup.path)) {
     const err = new Error('No voiceprint backup available.')
     err.statusCode = 404
@@ -272,7 +285,7 @@ function restoreLocalSpeakerVoiceprintBackup() {
   fs.mkdirSync(path.dirname(filePath), { recursive: true })
   fs.copyFileSync(backup.path, filePath)
   setVoiceConfig({ speakerVerificationEnabled: true })
-  return { ok: true, restored: true, backup: { name: backup.name }, filePath, voice: getVoiceConfig() }
+  return { ok: true, restored: true, backup: { name: backup.name, size: backup.size, mtimeMs: backup.mtimeMs }, filePath, voice: getVoiceConfig() }
 }
 
 function clearLocalSpeakerVoiceprintOffline() {
@@ -1915,14 +1928,26 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
 
 
-    // POST /voice/local/speaker/restore — restore latest local voiceprint backup
+
+    // GET /voice/local/speaker/backups — list local voiceprint backups
+    if (req.method === 'GET' && url.pathname === '/voice/local/speaker/backups') {
+      jsonResponse(res, 200, { ok: true, backups: listLocalSpeakerVoiceprintBackups().map(item => ({ name: item.name, size: item.size, mtimeMs: item.mtimeMs })) })
+      return
+    }
+
+    // POST /voice/local/speaker/restore — restore latest or selected local voiceprint backup
     if (req.method === 'POST' && url.pathname === '/voice/local/speaker/restore') {
-      try {
-        const result = restoreLocalSpeakerVoiceprintBackup()
-        jsonResponse(res, 200, { ok: true, ...result })
-      } catch (err) {
-        jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message, code: err.code || 'speaker_restore_failed' })
-      }
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const result = restoreLocalSpeakerVoiceprintBackup(body.name || body.backup || '')
+          jsonResponse(res, 200, { ok: true, ...result })
+        } catch (err) {
+          jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message, code: err.code || 'speaker_restore_failed' })
+        }
+      })
       return
     }
 

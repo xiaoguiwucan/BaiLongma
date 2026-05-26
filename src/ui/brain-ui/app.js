@@ -3481,6 +3481,7 @@ function initTTSSettings() {
       if (speakerVerify) speakerVerify.checked = false;
       localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "false");
       showFeedback(fb, data.speaker?.backup ? "声纹已备份并清除，请重新录入" : "声纹已清除，请重新录入");
+      await refreshSpeakerBackups();
       await refreshSpeakerStatus();
       try { await refreshVoiceLocalDoctor(); } catch {}
     } catch (err) {
@@ -3491,19 +3492,39 @@ function initTTSSettings() {
   }
 
 
+
+  async function refreshSpeakerBackups() {
+    const select = document.getElementById("voice-speaker-backup-select");
+    if (!select) return;
+    try {
+      const resp = await fetch(`${API}/voice/local/speaker/backups`);
+      const data = await resp.json();
+      const backups = Array.isArray(data.backups) ? data.backups : [];
+      select.innerHTML = '<option value="">最近备份</option>' + backups.slice().reverse().map(item => `<option value="${escapeFocusText(item.name)}">${escapeFocusText(item.name.replace(/^voiceprint-/, "").replace(/\.json$/, ""))}</option>`).join("");
+    } catch {
+      select.innerHTML = '<option value="">最近备份</option>';
+    }
+  }
+
   async function restoreSpeakerVoice() {
     const btn = document.getElementById("voice-restore-speaker");
     const fb = document.getElementById("voice-speaker-feedback");
     if (btn) btn.disabled = true;
     showFeedback(fb, "正在恢复最近声纹备份…");
     try {
-      const resp = await fetch(`${API}/voice/local/speaker/restore`, { method: "POST" });
+      const selectedBackup = document.getElementById("voice-speaker-backup-select")?.value || "";
+      const resp = await fetch(`${API}/voice/local/speaker/restore`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name: selectedBackup }),
+      });
       const data = await resp.json().catch(() => ({}));
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "恢复失败");
       const speakerVerify = document.getElementById("voice-speaker-verify");
       if (speakerVerify) speakerVerify.checked = true;
       localStorage.setItem(VOICE_SPEAKER_VERIFY_KEY, "true");
-      showFeedback(fb, "已恢复最近声纹备份");
+      showFeedback(fb, `已恢复声纹备份${data.backup?.name ? `：${data.backup.name}` : ""}`);
+      await refreshSpeakerBackups();
       await refreshSpeakerStatus();
       try { await refreshVoiceLocalDoctor(); } catch {}
     } catch (err) {
@@ -3523,6 +3544,7 @@ function initTTSSettings() {
   document.getElementById("voice-clear-speaker")?.addEventListener("click", clearSpeakerVoice);
   document.getElementById("voice-restore-speaker")?.addEventListener("click", restoreSpeakerVoice);
   refreshSpeakerStatus();
+  refreshSpeakerBackups();
 
   const speakerThresholdSlider = document.getElementById("voice-speaker-threshold");
   const speakerThresholdVal = document.getElementById("voice-speaker-threshold-val");

@@ -549,6 +549,7 @@ const createSettingsModal = () => `
               <button class="settings-save-btn" id="voice-enroll-speaker" type="button">录入/重录声纹</button>
               <button class="settings-save-btn" id="voice-test-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">测试我的声纹</button>
               <button class="settings-save-btn" id="voice-clear-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">清除声纹</button>
+              <select class="settings-select" id="voice-speaker-backup-select" style="max-width:190px;margin-left:8px;"><option value="">最近备份</option></select>
               <button class="settings-save-btn" id="voice-restore-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">恢复备份</button>
               <span class="settings-feedback" id="voice-speaker-feedback"></span>
             </div>

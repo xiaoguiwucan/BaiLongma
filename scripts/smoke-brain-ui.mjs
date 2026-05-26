@@ -52,6 +52,7 @@ function createServer() {
   let localDoctorFixed = false
   let localDoctorFixHistory = []
   let localDoctorRollback = false
+  let speakerBackupAvailable = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -505,13 +506,20 @@ new WebSocket(url)`,
 
 
     if (url.pathname === '/voice/local/speaker/clear') {
-      localDoctorFixed = false
+      speakerBackupAvailable = true
       sendJson(res, { ok: true, cleared: true, speaker: { ok: true, mode: 'runtime', reachable: true, configured: false, sampleCount: 0, threshold: 0.55, backup: { name: 'voiceprint-smoke.json' } }, voice: { speakerVerificationEnabled: false } })
+      return
+    }
+
+
+    if (url.pathname === '/voice/local/speaker/backups') {
+      sendJson(res, { ok: true, backups: speakerBackupAvailable ? [{ name: 'voiceprint-smoke.json', size: 128, mtimeMs: Date.now() }] : [] })
       return
     }
 
     if (url.pathname === '/voice/local/speaker/restore') {
       localDoctorFixed = true
+      speakerBackupAvailable = true
       sendJson(res, { ok: true, restored: true, backup: { name: 'voiceprint-smoke.json' }, voice: { speakerVerificationEnabled: true } })
       return
     }
@@ -727,8 +735,10 @@ try {
   await page.click('#voice-clear-speaker')
   await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('声纹已备份并清除'))
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-verify') === 'false')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-backup-select')?.textContent.includes('smoke'))
+  await page.selectOption('#voice-speaker-backup-select', 'voiceprint-smoke.json')
   await page.click('#voice-restore-speaker')
-  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已恢复最近声纹备份'))
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已恢复声纹备份'))
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-verify') === 'true')
   await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰') && document.querySelector('#voice-preset-list')?.textContent.includes('建议：视频抗干扰'), null, { timeout: 5000 })
   await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
