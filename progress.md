@@ -375,3 +375,5 @@
 - Extended backend and Brain UI smoke coverage for speaker gate safety, enrollment guidance, and the skipped-speaker feedback path.
 - Verification passed: syntax checks for API/config/Brain UI scripts, `python3 -m py_compile src/voice/sensevoice_server.py`, `npm run smoke:voice-events` 85/85, and `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
+- Pushed development checkpoint `c2eb63c feat: prevent speaker gate lockout` to `origin/main`.
+- No tag/GitHub Release created; this remains part of the next large-version milestone bundle.

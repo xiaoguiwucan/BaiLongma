@@ -464,4 +464,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add Brain UI readiness contextual actions for enroll/test/disable-lockout.
 - [x] Extend smoke tests for safe speaker gate readiness behavior.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
-- [ ] Push as a development checkpoint only, without tag/Release.
+- [x] Push as a development checkpoint only, without tag/Release.
