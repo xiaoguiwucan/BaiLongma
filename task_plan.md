@@ -110,3 +110,11 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add Brain UI “一键自检” button and self-check result panel.
 - [x] Extend mapping, voice-events, and brain-ui smoke coverage.
 - [x] Verify all relevant smoke suites.
+
+## Checkpoint 11: Copyable voice device onboarding package
+- [x] Add `GET /voice/events/package` backend endpoint.
+- [x] Add `onboarding_package` protocol capability and `endpoints.package` metadata.
+- [x] Generate README, `.env.voice`, `client-hello.json`, `subscribe.json`, Node client example, ESP32 pseudo config, commands, and checklist.
+- [x] Add Brain UI “生成接入包” action and expandable package files panel.
+- [x] Extend mapping, voice-events, and brain-ui smoke coverage.
+- [x] Verify all relevant smoke suites.

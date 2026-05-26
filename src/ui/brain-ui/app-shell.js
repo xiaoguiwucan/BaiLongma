@@ -369,6 +369,7 @@ const createSettingsModal = () => `
               <div class="voice-client-stat"><span>二进制</span><strong id="voice-clients-binary-count">0</strong></div>
               <button class="settings-save-btn" id="voice-clients-refresh-btn" type="button">刷新客户端</button>
               <button class="settings-save-btn" id="voice-link-check-btn" type="button">一键自检</button>
+              <button class="settings-save-btn" id="voice-package-btn" type="button">生成接入包</button>
               <button class="settings-save-btn" id="voice-clients-protocol-btn" type="button">协议自检</button>
               <button class="settings-save-btn" id="voice-clients-copy-btn" type="button">复制接入命令</button>
               <label class="voice-clients-auto"><input id="voice-clients-auto-refresh" type="checkbox" checked> 自动刷新</label>
@@ -376,6 +377,7 @@ const createSettingsModal = () => `
             </div>
             <div id="voice-link-summary" class="voice-link-summary" hidden></div>
             <div id="voice-link-check" class="voice-link-check" hidden></div>
+            <div id="voice-package-panel" class="voice-package-panel" hidden></div>
             <div id="voice-clients-diagnostics" class="voice-clients-diagnostics" hidden></div>
             <div id="voice-clients-guide" class="voice-clients-guide" hidden></div>
             <div id="voice-clients-list" class="voice-clients-list">

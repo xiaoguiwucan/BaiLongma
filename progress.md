@@ -97,3 +97,15 @@
 - Verification passed: `npm run smoke:voice-mapping` 44/44, `npm run smoke:voice-events` 48/48, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.
+- Added backend `GET /voice/events/package` endpoint for a copyable LAN/ESP32 voice-client onboarding package.
+- Added `onboarding_package` protocol capability and `endpoints.package` metadata.
+- Added `getVoiceEventsOnboardingPackage()` to generate a profile-aware package with LAN/local WebSocket URLs, commands, `client:hello`, subscribe JSON, README, `.env.voice`, Node WebSocket example, ESP32 bridge pseudo config, and a checklist.
+- Added Brain UI “生成接入包” button and package panel showing WebSocket URL, local debug command, generated file list, expandable file contents, and checklist.
+- Brain UI protocol diagnostics now shows `/voice/events/package` together with summary/check/history endpoints.
+- Extended `smoke:voice-mapping` to 46/46 for onboarding package metadata/helper output.
+- Extended `smoke:voice-events` to 49/49 for `/voice/events/package` endpoint coverage.
+- Extended `smoke:brain-ui` to mock package generation, verify protocol diagnostics, click “生成接入包”, and assert README/node example/client:hello render.
+- Verification passed: syntax checks for voice bus, API, Brain UI app, and smoke scripts.
+- Verification passed: `npm run smoke:voice-mapping` 46/46, `npm run smoke:voice-events` 49/49, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.

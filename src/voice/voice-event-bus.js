@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding', 'event_history', 'link_summary', 'link_self_check'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding', 'event_history', 'link_summary', 'link_self_check', 'onboarding_package'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -50,6 +50,7 @@ export function getVoiceEventsOnboarding({ host = '127.0.0.1', port = 3721, prot
       history: '/voice/events/history',
       summary: '/voice/events/summary',
       check: '/voice/events/check',
+      package: '/voice/events/package',
     },
     commands: { local: localCommand, lan: lanCommand },
     messages: { clientHello, subscribe },
@@ -74,6 +75,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
       history: '/voice/events/history',
       summary: '/voice/events/summary',
       check: '/voice/events/check',
+      package: '/voice/events/package',
       onboarding: '/voice/events/onboarding',
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
@@ -538,6 +540,97 @@ export function getVoiceEventLinkSummary({ windowMs = 60000 } = {}) {
   }
 }
 
+
+
+export function getVoiceEventsOnboardingPackage({ host = '127.0.0.1', port = 3721, protocol = 'http:', tokenConfigured = false, clientId = 'esp32-test', device = 'xiaozhi-esp32', platform = 'esp32' } = {}) {
+  const onboarding = getVoiceEventsOnboarding({ host, port, protocol, tokenConfigured })
+  const clientHello = {
+    ...onboarding.messages.clientHello,
+    clientId: cleanIdentityValue(clientId || onboarding.messages.clientHello.clientId, 96),
+    device: cleanIdentityValue(device || onboarding.messages.clientHello.device, 96),
+    platform: cleanIdentityValue(platform || onboarding.messages.clientHello.platform, 48),
+  }
+  const wsUrl = onboarding.urls.lanWebSocket
+  const localWsUrl = onboarding.urls.localWebSocket
+  const env = [
+    `BAILONGMA_VOICE_WS=${wsUrl}`,
+    `BAILONGMA_VOICE_CLIENT_ID=${clientHello.clientId}`,
+    `BAILONGMA_VOICE_DEVICE=${clientHello.device}`,
+    `BAILONGMA_VOICE_PLATFORM=${clientHello.platform}`,
+    `BAILONGMA_VOICE_CAPABILITIES=${clientHello.capabilities.join(',')}`,
+    tokenConfigured ? 'BAILONGMA_API_TOKEN=<token>' : '# BAILONGMA_API_TOKEN=<token>  # 如服务端启用 token 再填写',
+  ].join('\n')
+  const nodeExample = `import WebSocket from 'ws'
+
+const url = process.env.BAILONGMA_VOICE_WS || '${wsUrl}'
+const ws = new WebSocket(url)
+
+ws.on('open', () => {
+  ws.send(JSON.stringify(${JSON.stringify(clientHello, null, 2)}))
+  ws.send(JSON.stringify(${JSON.stringify(onboarding.messages.subscribe)}))
+})
+
+ws.on('message', (data) => {
+  const text = Buffer.isBuffer(data) ? data.toString('utf8') : String(data)
+  try { console.log(JSON.parse(text)) } catch { console.log('[binary/audio]', data.length || text.length) }
+})
+`
+  const esp32Pseudo = `// ESP32/Xiaozhi-style bridge pseudo config
+voice_ws_url = "${wsUrl}";
+client_hello = ${JSON.stringify(clientHello)};
+subscribe = ${JSON.stringify(onboarding.messages.subscribe)};
+// 连接后先发送 client_hello，再发送 subscribe；收到 tts/audio_chunk 或二进制音频后播放。
+`
+  const readme = [
+    '# BaiLongma Voice Client Onboarding Package',
+    '',
+    '## 1. 选择连接地址',
+    `- 本机调试：${localWsUrl}`,
+    `- 局域网设备：${wsUrl}`,
+    '',
+    '## 2. 先发送 client:hello',
+    '```json',
+    JSON.stringify(clientHello, null, 2),
+    '```',
+    '',
+    '## 3. 再订阅音频',
+    '```json',
+    JSON.stringify(onboarding.messages.subscribe, null, 2),
+    '```',
+    '',
+    '## 4. 调试命令',
+    '```bash',
+    onboarding.commands.local,
+    onboarding.commands.lan,
+    '```',
+    '',
+    '## 5. 注意事项',
+    ...onboarding.notes.map(note => `- ${note}`),
+  ].join('\n')
+  return {
+    service: 'bailongma.voice.events',
+    version: VOICE_EVENTS_PROTOCOL_VERSION,
+    generatedAt: Date.now(),
+    profile: { clientId: clientHello.clientId, device: clientHello.device, platform: clientHello.platform, capabilities: clientHello.capabilities },
+    urls: { ...onboarding.urls, package: '/voice/events/package' },
+    commands: onboarding.commands,
+    messages: { clientHello, subscribe: onboarding.messages.subscribe },
+    files: {
+      'README.md': readme,
+      '.env.voice': env,
+      'client-hello.json': JSON.stringify(clientHello, null, 2),
+      'subscribe.json': JSON.stringify(onboarding.messages.subscribe, null, 2),
+      'node-client-example.mjs': nodeExample,
+      'esp32-bridge-pseudo.txt': esp32Pseudo,
+    },
+    checklist: [
+      'Mac 与设备在同一局域网，防火墙允许访问 BaiLongma API 端口。',
+      '设备连接 WebSocket 后先发送 client:hello。',
+      '设备根据 client:accepted.negotiated.audioMode 决定 binaryAudio/base64 订阅。',
+      'Brain UI 中点击“一键自检”，确认客户端、音频订阅、事件闭环通过。',
+    ],
+  }
+}
 
 export function getVoiceEventLinkSelfCheck({ windowMs = 60000, host = '127.0.0.1', port = 3721, protocol = 'http:', tokenConfigured = false } = {}) {
   const summary = getVoiceEventLinkSummary({ windowMs })

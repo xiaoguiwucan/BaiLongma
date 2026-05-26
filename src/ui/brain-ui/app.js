@@ -1851,6 +1851,36 @@ function renderVoiceLinkCheck(check = {}) {
     ${localCommand || lanCommand ? `<div class="voice-link-check-commands">${localCommand ? `<code>${escapeFocusText(localCommand)}</code>` : ""}${lanCommand ? `<code>${escapeFocusText(lanCommand)}</code>` : ""}</div>` : ""}`;
 }
 
+
+function renderVoiceOnboardingPackage(pkg = {}) {
+  const files = pkg.files || {};
+  const fileNames = Object.keys(files);
+  return `
+    <div class="voice-package-head">
+      <div>
+        <div class="voice-package-title">设备接入包</div>
+        <div class="voice-package-sub">${escapeFocusText(pkg.profile?.clientId || "esp32-test")} · ${escapeFocusText(pkg.profile?.device || "xiaozhi-esp32")}</div>
+      </div>
+      <button class="settings-save-btn" id="voice-package-copy-readme" type="button">复制 README</button>
+    </div>
+    <div class="voice-package-grid">
+      <div><span>WebSocket</span><code>${escapeFocusText(pkg.urls?.lanWebSocket || "—")}</code></div>
+      <div><span>本机调试</span><code>${escapeFocusText(pkg.commands?.local || "—")}</code></div>
+      <div><span>文件</span><strong>${escapeFocusText(fileNames.join(" · ") || "—")}</strong></div>
+      <div><span>能力</span><strong>${escapeFocusText((pkg.profile?.capabilities || []).join(" · ") || "—")}</strong></div>
+    </div>
+    <div class="voice-package-files">
+      ${fileNames.map(name => `
+        <details>
+          <summary>${escapeFocusText(name)}</summary>
+          <pre>${escapeFocusText(files[name])}</pre>
+        </details>`).join("")}
+    </div>
+    <div class="voice-package-checklist">
+      ${(pkg.checklist || []).map(item => `<span>${escapeFocusText(item)}</span>`).join("")}
+    </div>`;
+}
+
 function initVoiceClientsPanel() {
   const listEl = document.getElementById("voice-clients-list");
   if (!listEl) return;
@@ -1860,11 +1890,13 @@ function initVoiceClientsPanel() {
   const feedbackEl = document.getElementById("voice-clients-feedback");
   const refreshBtn = document.getElementById("voice-clients-refresh-btn");
   const checkBtn = document.getElementById("voice-link-check-btn");
+  const packageBtn = document.getElementById("voice-package-btn");
   const protocolBtn = document.getElementById("voice-clients-protocol-btn");
   const copyBtn = document.getElementById("voice-clients-copy-btn");
   const diagnosticsEl = document.getElementById("voice-clients-diagnostics");
   const summaryEl = document.getElementById("voice-link-summary");
   const checkEl = document.getElementById("voice-link-check");
+  const packageEl = document.getElementById("voice-package-panel");
   const guideEl = document.getElementById("voice-clients-guide");
   const autoEl = document.getElementById("voice-clients-auto-refresh");
   const historyListEl = document.getElementById("voice-events-history-list");
@@ -1920,6 +1952,7 @@ function initVoiceClientsPanel() {
       <div class="voice-diagnostic-line"><span>History</span><code>${escapeFocusText(endpoints.history || "/voice/events/history")}</code></div>
       <div class="voice-diagnostic-line"><span>Summary</span><code>${escapeFocusText(endpoints.summary || "/voice/events/summary")}</code></div>
       <div class="voice-diagnostic-line"><span>Check</span><code>${escapeFocusText(endpoints.check || "/voice/events/check")}</code></div>
+      <div class="voice-diagnostic-line"><span>Package</span><code>${escapeFocusText(endpoints.package || "/voice/events/package")}</code></div>
       <div class="voice-diagnostic-line"><span>Audio Modes</span><code>${escapeFocusText(modes.join(" / ") || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>Capabilities</span><code>${escapeFocusText(caps.filter(c => ["client_identity", "audio_negotiation", "client_diagnostics", "tts_speak"].includes(c)).join(" · ") || "—")}</code></div>
     `;
@@ -1970,6 +2003,32 @@ function initVoiceClientsPanel() {
       summaryEl.hidden = false;
       summaryEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/summary 失败：${escapeFocusText(err.message || err)}</div>`;
       if (!quiet && feedbackEl) feedbackEl.textContent = "总控读取失败";
+    }
+  }
+
+  async function loadVoiceOnboardingPackage() {
+    if (!packageEl) return;
+    if (feedbackEl) feedbackEl.textContent = "生成接入包中…";
+    packageEl.hidden = false;
+    packageEl.innerHTML = '<div class="voice-clients-empty">正在生成 README、环境变量、client:hello 和示例代码…</div>';
+    try {
+      const res = await fetch(`${API}/voice/events/package?clientId=esp32-test&device=xiaozhi-esp32&platform=esp32`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const pkg = await res.json();
+      packageEl.innerHTML = renderVoiceOnboardingPackage(pkg);
+      packageEl.querySelector('#voice-package-copy-readme')?.addEventListener('click', async () => {
+        const text = pkg.files?.['README.md'] || JSON.stringify(pkg, null, 2);
+        try {
+          await navigator.clipboard?.writeText(text);
+          if (feedbackEl) feedbackEl.textContent = "README 已复制";
+        } catch {
+          if (feedbackEl) feedbackEl.textContent = "复制失败，请展开 README 手动复制";
+        }
+      });
+      if (feedbackEl) feedbackEl.textContent = "接入包已生成";
+    } catch (err) {
+      packageEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/package 失败：${escapeFocusText(err.message || err)}</div>`;
+      if (feedbackEl) feedbackEl.textContent = "接入包失败";
     }
   }
 
@@ -2052,6 +2111,7 @@ function initVoiceClientsPanel() {
 
   refreshBtn?.addEventListener("click", () => { refreshVoiceClients(); refreshVoiceEventsHistory({ quiet: true }); refreshVoiceLinkSummary({ quiet: true }); });
   checkBtn?.addEventListener("click", () => runVoiceLinkCheck());
+  packageBtn?.addEventListener("click", () => loadVoiceOnboardingPackage());
   historyRefreshBtn?.addEventListener("click", () => refreshVoiceEventsHistory());
   historyFilterEl?.addEventListener("change", () => refreshVoiceEventsHistory());
   protocolBtn?.addEventListener("click", () => refreshProtocolDiagnostics());

@@ -141,13 +141,14 @@ function createServer() {
         ok: true,
         service: 'bailongma.voice.events',
         version: 3,
-        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'event_history', 'link_summary', 'link_self_check'],
+        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'event_history', 'link_summary', 'link_self_check', 'onboarding_package'],
         endpoints: {
           websocket: '/voice/events',
           clients: '/voice/events/clients',
           history: '/voice/events/history',
           summary: '/voice/events/summary',
           check: '/voice/events/check',
+          package: '/voice/events/package',
           protocol: '/voice/events/protocol',
           publish: '/voice/events/publish',
         },
@@ -161,6 +162,33 @@ function createServer() {
 
 
 
+
+
+    if (url.pathname === '/voice/events/package') {
+      const clientId = url.searchParams.get('clientId') || 'esp32-test'
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.events',
+        version: 3,
+        generatedAt: Date.now(),
+        profile: { clientId, device: 'xiaozhi-esp32', platform: 'esp32', capabilities: ['binary_audio', 'tts_speak', 'wake', 'display'] },
+        urls: { lanWebSocket: 'ws://<Mac局域网IP>:3721/voice/events', localWebSocket: 'ws://127.0.0.1:3721/voice/events', package: '/voice/events/package' },
+        commands: { local: 'npm run voice:events -- listen --url ws://127.0.0.1:3721/voice/events --audio --binary --client-id mac-debug', lan: 'npm run voice:events -- listen --url ws://<Mac局域网IP>:3721/voice/events --audio --binary --client-id esp32-test' },
+        messages: { clientHello: { type: 'client:hello', clientId }, subscribe: { type: 'subscribe', audio: true, binaryAudio: true } },
+        files: {
+          'README.md': `# BaiLongma Voice Client Onboarding Package
+
+client:hello
+`,
+          '.env.voice': 'BAILONGMA_VOICE_WS=ws://<Mac局域网IP>:3721/voice/events',
+          'client-hello.json': JSON.stringify({ type: 'client:hello', clientId }, null, 2),
+          'node-client-example.mjs': `import WebSocket from 'ws'
+new WebSocket(url)`,
+        },
+        checklist: ['Mac 与设备在同一局域网', '先发送 client:hello', '点击一键自检'],
+      })
+      return
+    }
 
     if (url.pathname === '/voice/events/check') {
       sendJson(res, {
@@ -465,12 +493,17 @@ try {
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/history')) throw new Error('voice clients protocol diagnostics did not render history endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/summary')) throw new Error('voice clients protocol diagnostics did not render summary endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/check')) throw new Error('voice clients protocol diagnostics did not render check endpoint')
+  if (!voiceClientSnapshot.diagnostics.includes('/voice/events/package')) throw new Error('voice clients protocol diagnostics did not render package endpoint')
   if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('链路正常')) throw new Error('voice link summary did not render healthy status')
   if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop')) throw new Error('voice events history timeline did not render recent events')
   await page.evaluate(() => document.querySelector('#voice-link-check-btn')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-link-check')?.textContent.includes('一键语音链路自检'))
   const selfCheckText = await page.textContent('#voice-link-check')
   if (!selfCheckText.includes('全部通过') || !selfCheckText.includes('客户端连接') || !selfCheckText.includes('可以实测')) throw new Error('voice link self-check panel did not render expected status and actions')
+  await page.evaluate(() => document.querySelector('#voice-package-btn')?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-package-panel')?.textContent.includes('设备接入包'))
+  const packageText = await page.textContent('#voice-package-panel')
+  if (!packageText.includes('README.md') || !packageText.includes('node-client-example.mjs') || !packageText.includes('client:hello')) throw new Error('voice onboarding package panel did not render files and client hello')
   if (!voiceClientSnapshot.guide.includes('npm run voice:events -- listen')) throw new Error('voice clients guide did not render debug connect command')
   if (!voiceClientSnapshot.guide.includes('esp32-test') || !voiceClientSnapshot.guide.includes('client:hello')) throw new Error('voice clients guide did not render LAN command and handshake example')
   await page.hover('.pc-card')
