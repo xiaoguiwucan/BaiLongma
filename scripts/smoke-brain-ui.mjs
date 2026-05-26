@@ -637,6 +637,33 @@ new WebSocket(url)`,
       return
     }
 
+    if (url.pathname === '/voice/local/speaker/calibration') {
+      sendJson(res, {
+        ok: true,
+        currentThreshold: 0.63,
+        recommendedThreshold: 0.49,
+        changed: true,
+        mode: 'lower_for_owner',
+        reason: '本次本人测试分数 0.520 低于当前阈值 0.63，建议降到 0.49，给本人声音留出余量。',
+        test: { score: 0.52, passed: false },
+        recent: { speakerAccepted: 0, speakerRejected: 1, rejectedScores: [0.52] },
+        actions: [{ id: 'apply_threshold', label: '应用 0.49' }],
+      })
+      return
+    }
+
+    if (url.pathname === '/voice/local/speaker/calibration/apply') {
+      localDoctorFixed = true
+      sendJson(res, {
+        ok: true,
+        applied: { speakerThreshold: 0.49, speakerVerificationEnabled: true },
+        voice: { speakerThreshold: 0.49, speakerVerificationEnabled: true },
+        recommendation: { ok: true, currentThreshold: 0.49, recommendedThreshold: 0.49, changed: false, reason: '已应用建议阈值。', recent: { speakerAccepted: 0, speakerRejected: 1 } },
+        record: { id: 'speaker_calibration_smoke', action: 'speaker_calibration' },
+      })
+      return
+    }
+
     if (url.pathname === '/voice/local/speaker/status') {
       sendJson(res, {
         ok: true,
@@ -929,6 +956,17 @@ try {
   await fetch(`${baseUrl}/voice/local/start`, { method: 'POST' })
   await page.click('#voice-speaker-refresh-status')
   await page.waitForFunction(() => document.querySelector('#voice-speaker-status')?.textContent.includes('已录入'))
+  await page.click('#voice-calibrate-speaker')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-calibration')?.textContent.includes('建议调整声纹严格度'))
+  await page.click('#voice-apply-speaker-calibration')
+  await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('已应用声纹阈值'))
+  const speakerCalibrationSnapshot = await page.evaluate(() => ({
+    threshold: document.querySelector('#voice-speaker-threshold')?.value,
+    label: document.querySelector('#voice-speaker-threshold-val')?.textContent,
+    panel: document.querySelector('#voice-speaker-calibration')?.textContent || '',
+    stored: localStorage.getItem('bailongma-voice-speaker-threshold'),
+  }))
+  if (speakerCalibrationSnapshot.threshold !== '0.49' || speakerCalibrationSnapshot.label !== '0.49' || speakerCalibrationSnapshot.stored !== '0.49') throw new Error(`speaker calibration did not sync threshold: ${JSON.stringify(speakerCalibrationSnapshot)}`)
   await page.click('#voice-clear-speaker')
   await page.waitForFunction(() => document.querySelector('#voice-speaker-feedback')?.textContent.includes('声纹已备份并清除'))
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-verify') === 'false')

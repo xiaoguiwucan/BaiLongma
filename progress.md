@@ -425,3 +425,11 @@
 - Brain UI now shows “导出诊断包” in the local voice overview card and copies the JSON package to clipboard with clear feedback.
 - Extended smoke coverage for backend diagnostics shape/privacy and Brain UI copy feedback.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+
+- Continued the larger local-voice stability milestone with a speaker threshold calibration loop focused on preventing owner lockout after voiceprint enrollment.
+- Added backend `GET /voice/local/speaker/calibration` to analyze a test score and recent `speaker:rejected` event scores, recommending a bounded safer `speakerThreshold` with human-readable reasoning.
+- Added backend `POST /voice/local/speaker/calibration/apply` to persist the recommendation, optionally re-enable speaker verification when a voiceprint exists, and record an auditable `speaker_calibration` doctor-history entry.
+- Brain UI now includes “校准阈值” beside speaker enrollment/testing, showing current vs recommended threshold, recent pass/reject counts, and “应用建议阈值 / 重新测试” actions.
+- Applying calibration synchronizes the slider, localStorage, speaker status, local doctor, and local voice overview so the settings UI no longer drifts from saved config.
+- Extended smoke coverage for backend recommendation/apply behavior and Brain UI calibration application.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

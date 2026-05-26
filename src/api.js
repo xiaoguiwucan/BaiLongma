@@ -271,6 +271,102 @@ function latestLocalSpeakerVoiceprintBackup() {
   return backups[backups.length - 1] || null
 }
 
+function clampSpeakerThreshold(value) {
+  const n = Number(value)
+  if (!Number.isFinite(n)) return 0.55
+  return Number(Math.max(0.45, Math.min(0.80, n)).toFixed(2))
+}
+
+function buildSpeakerCalibrationRecommendation({ speakerStatus = null, testScore = null, testPassed = null, windowMs = 10 * 60 * 1000 } = {}) {
+  const voice = getVoiceConfig()
+  const current = clampSpeakerThreshold(voice.speakerThreshold)
+  const summary = getVoiceEventLinkSummary({ windowMs })
+  const recent = summary?.recent || {}
+  const rejectedDetails = Array.isArray(recent.speakerRejectedDetails) ? recent.speakerRejectedDetails : []
+  const rejectedScores = rejectedDetails.map(item => Number(item.score)).filter(Number.isFinite)
+  const score = Number(testScore)
+  const hasTestScore = Number.isFinite(score)
+  // A fresh test score can only be produced after the local speaker verifier has a voiceprint to compare against,
+  // so treat it as stronger evidence than a later transient status/read timeout.
+  const configured = hasTestScore ? true : speakerStatus ? Boolean(speakerStatus.configured) : true
+  let recommended = current
+  let mode = 'keep'
+  let reason = '当前声纹阈值暂不需要调整。'
+  const actions = []
+
+  if (!configured) {
+    mode = 'enroll_first'
+    reason = '还没有可用声纹，先录入 6–8 秒本人声音，再做阈值校准。'
+    actions.push({ id: 'enroll_speaker', label: '先录入声纹', action: reason })
+  } else if (hasTestScore) {
+    const margin = score < current || testPassed === false ? 0.04 : 0.03
+    const safeFromScore = clampSpeakerThreshold(score - margin)
+    if (score < current || testPassed === false) {
+      recommended = safeFromScore
+      mode = 'lower_for_owner'
+      reason = `本次本人测试分数 ${score.toFixed(3)} 低于/贴近当前阈值 ${current.toFixed(2)}，建议降到 ${recommended.toFixed(2)}，给本人声音留出余量。`
+    } else if (current > safeFromScore) {
+      recommended = safeFromScore
+      mode = 'add_margin'
+      reason = `本次通过但余量偏小，建议降到 ${recommended.toFixed(2)}，避免视频声/噪声下误拒绝本人。`
+    } else {
+      recommended = current
+      mode = 'keep'
+      reason = `本次本人测试分数 ${score.toFixed(3)} 高于当前阈值 ${current.toFixed(2)}，暂不需要降低。`
+    }
+  } else if (rejectedScores.length) {
+    const avg = rejectedScores.reduce((a, b) => a + b, 0) / rejectedScores.length
+    recommended = clampSpeakerThreshold(Math.min(current, avg - 0.03))
+    mode = recommended < current ? 'lower_from_rejections' : 'keep'
+    reason = recommended < current
+      ? `最近有 ${rejectedScores.length} 次声纹拒绝，平均分 ${avg.toFixed(3)}，建议先降到 ${recommended.toFixed(2)} 排除本人误拒绝。`
+      : '最近有声纹拒绝，但分数没有给出明确降阈值依据；建议先点“测试我的声纹”。'
+  } else if (current > 0.62) {
+    recommended = 0.58
+    mode = 'stability_baseline'
+    reason = `当前阈值 ${current.toFixed(2)} 偏严格；为了优先稳定识别本人，建议先降到 0.58，再根据别人能否唤醒逐步提高。`
+  }
+
+  if (recommended !== current) {
+    actions.push({ id: 'apply_threshold', label: `应用 ${recommended.toFixed(2)}`, action: reason })
+  }
+  actions.push({ id: 'test_speaker', label: '重新测试', action: '靠近 Mac 说 3–4 秒本人声音，确认新阈值是否通过。' })
+  if (recommended <= 0.50) actions.push({ id: 'low_threshold_warning', label: '安全提醒', action: '阈值较低会更不容易误拒绝你，但也更可能接受相似声音。' })
+
+  return {
+    ok: true,
+    checkedAt: Date.now(),
+    currentThreshold: current,
+    recommendedThreshold: recommended,
+    changed: recommended !== current,
+    mode,
+    reason,
+    speaker: speakerStatus,
+    test: hasTestScore ? { score: Number(score.toFixed(3)), passed: Boolean(testPassed) } : null,
+    recent: { speakerAccepted: recent.speakerAccepted || 0, speakerRejected: recent.speakerRejected || 0, rejectedScores: rejectedScores.slice(-8) },
+    actions,
+  }
+}
+
+function applySpeakerCalibrationRecommendation({ speakerStatus = null, testScore = null, testPassed = null, windowMs = 10 * 60 * 1000 } = {}) {
+  const before = getVoiceConfig()
+  const recommendation = buildSpeakerCalibrationRecommendation({ speakerStatus, testScore, testPassed, windowMs })
+  const patch = { speakerThreshold: recommendation.recommendedThreshold }
+  if (speakerStatus?.configured || Number.isFinite(Number(testScore))) patch.speakerVerificationEnabled = true
+  setVoiceConfig(patch)
+  const after = getVoiceConfig()
+  const record = appendVoiceLocalDoctorHistory({
+    action: 'speaker_calibration',
+    label: '声纹阈值校准',
+    before,
+    after,
+    applied: patch,
+    status: recommendation.mode,
+    reason: recommendation.reason,
+  })
+  return { ok: true, applied: patch, before: { speakerThreshold: before.speakerThreshold, speakerVerificationEnabled: before.speakerVerificationEnabled }, voice: after, recommendation: { ...recommendation, currentThreshold: after.speakerThreshold }, record }
+}
+
 function restoreLocalSpeakerVoiceprintBackup(name = '') {
   const backups = listLocalSpeakerVoiceprintBackups()
   const safeName = String(name || '').trim()
@@ -2173,6 +2269,38 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     }
 
 
+
+    // GET /voice/local/speaker/calibration — recommend a safer speaker threshold from test score/recent rejects
+    if (req.method === 'GET' && url.pathname === '/voice/local/speaker/calibration') {
+      const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 10 * 60 * 1000) || 10 * 60 * 1000))
+      const scoreParam = url.searchParams.get('score')
+      const passedParam = url.searchParams.get('passed')
+      queryLocalSpeakerStatus().catch(err => ({ ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' })).then(speakerStatus => {
+        jsonResponse(res, 200, buildSpeakerCalibrationRecommendation({
+          speakerStatus,
+          testScore: scoreParam === null ? null : Number(scoreParam),
+          testPassed: passedParam === null ? null : passedParam === 'true',
+          windowMs,
+        }))
+      }).catch(err => jsonResponse(res, 500, { ok: false, error: err.message || 'Failed to build speaker calibration.' }))
+      return
+    }
+
+    // POST /voice/local/speaker/calibration/apply — apply recommended speaker threshold safely
+    if (req.method === 'POST' && url.pathname === '/voice/local/speaker/calibration/apply') {
+      readJsonBody(req).then(async body => {
+        const speakerStatus = await queryLocalSpeakerStatus().catch(err => ({ ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' }))
+        return applySpeakerCalibrationRecommendation({
+          speakerStatus,
+          testScore: body.score ?? body.testScore ?? null,
+          testPassed: typeof body.passed === 'boolean' ? body.passed : typeof body.testPassed === 'boolean' ? body.testPassed : null,
+          windowMs: Math.max(10000, Math.min(10 * 60 * 1000, Number(body.windowMs || 10 * 60 * 1000) || 10 * 60 * 1000)),
+        })
+      }).then(result => jsonResponse(res, 200, result)).catch(err => {
+        jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message || 'Failed to apply speaker calibration.' })
+      })
+      return
+    }
 
     // GET /voice/local/speaker/status — runtime speaker enrollment status from local ASR service
     if (req.method === 'GET' && url.pathname === '/voice/local/speaker/status') {

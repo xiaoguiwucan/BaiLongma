@@ -2897,6 +2897,7 @@ function initTTSSettings() {
   document.getElementById("voice-local-stop")?.addEventListener("click", stopLocalVoiceService);
   document.getElementById("voice-local-restart")?.addEventListener("click", restartLocalVoiceService);
   document.getElementById("voice-diagnostics-export")?.addEventListener("click", exportLocalVoiceDiagnostics);
+  document.getElementById("voice-calibrate-speaker")?.addEventListener("click", () => refreshSpeakerCalibration({ apply: false }));
   let voiceSelfTestSince = 0;
 
 
@@ -3681,6 +3682,73 @@ function initTTSSettings() {
     }
   }
 
+
+  let lastSpeakerTestResult = null;
+
+  function renderSpeakerCalibration(calibration = {}) {
+    const el = document.getElementById("voice-speaker-calibration");
+    if (!el) return;
+    el.hidden = false;
+    const current = Number(calibration.currentThreshold ?? 0.55).toFixed(2);
+    const recommended = Number(calibration.recommendedThreshold ?? calibration.currentThreshold ?? 0.55).toFixed(2);
+    const changed = Boolean(calibration.changed);
+    const recent = calibration.recent || {};
+    const test = calibration.test;
+    el.className = `voice-speaker-calibration voice-speaker-calibration-${changed ? "warn" : "ok"}`;
+    el.innerHTML = `
+      <div class="voice-speaker-calibration-head">
+        <strong>${changed ? "建议调整声纹严格度" : "声纹阈值看起来稳定"}</strong>
+        <span>当前 ${escapeFocusText(current)} → 建议 ${escapeFocusText(recommended)}</span>
+      </div>
+      <p>${escapeFocusText(calibration.reason || "暂无校准建议。")}</p>
+      <div class="voice-speaker-calibration-meta">
+        ${test ? `<span>本次分数 ${escapeFocusText(test.score)}</span>` : ""}
+        <span>最近通过 ${escapeFocusText(recent.speakerAccepted || 0)}</span>
+        <span>最近拒绝 ${escapeFocusText(recent.speakerRejected || 0)}</span>
+      </div>
+      <div class="voice-speaker-calibration-actions">
+        ${changed ? '<button class="voice-readiness-action" id="voice-apply-speaker-calibration" type="button">应用建议阈值</button>' : ''}
+        <button class="voice-readiness-action" id="voice-retest-speaker-calibration" type="button">重新测试</button>
+      </div>`;
+    document.getElementById("voice-apply-speaker-calibration")?.addEventListener("click", () => refreshSpeakerCalibration({ apply: true }));
+    document.getElementById("voice-retest-speaker-calibration")?.addEventListener("click", testSpeakerVoice);
+  }
+
+  async function refreshSpeakerCalibration({ apply = false, testResult = lastSpeakerTestResult } = {}) {
+    const fb = document.getElementById("voice-speaker-feedback");
+    const score = Number(testResult?.score);
+    const hasScore = Number.isFinite(score);
+    const qs = hasScore ? `?score=${encodeURIComponent(String(score))}&passed=${testResult?.passed ? "true" : "false"}&windowMs=600000` : "?windowMs=600000";
+    showFeedback(fb, apply ? "正在应用声纹校准…" : "正在分析声纹阈值…");
+    try {
+      const resp = await fetch(`${API}${apply ? "/voice/local/speaker/calibration/apply" : `/voice/local/speaker/calibration${qs}`}`, apply ? {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ score: hasScore ? score : null, passed: Boolean(testResult?.passed), windowMs: 600000 }),
+      } : undefined);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "声纹校准失败");
+      const calibration = data.recommendation || data;
+      renderSpeakerCalibration(calibration);
+      if (data.voice?.speakerThreshold || data.applied?.speakerThreshold) {
+        const next = data.voice?.speakerThreshold || data.applied?.speakerThreshold;
+        const slider = document.getElementById("voice-speaker-threshold");
+        const val = document.getElementById("voice-speaker-threshold-val");
+        if (slider) slider.value = String(next);
+        if (val) val.textContent = Number(next).toFixed(2);
+        localStorage.setItem(VOICE_SPEAKER_THRESHOLD_KEY, String(next));
+        const verify = document.getElementById("voice-speaker-verify");
+        if (verify && data.voice?.speakerVerificationEnabled) verify.checked = true;
+      }
+      showFeedback(fb, apply ? `已应用声纹阈值：${Number(calibration.recommendedThreshold || data.voice?.speakerThreshold || 0).toFixed(2)}` : (calibration.changed ? `建议阈值：${Number(calibration.recommendedThreshold).toFixed(2)}` : "声纹阈值无需调整"));
+      await refreshSpeakerStatus();
+      await refreshVoiceLocalDoctor();
+      await refreshVoiceOverview();
+    } catch (err) {
+      showFeedback(fb, err?.message || "声纹校准失败", true);
+    }
+  }
+
   async function startSpeakerVoiceService() {
     const btn = document.getElementById("voice-speaker-start-service");
     const fb = document.getElementById("voice-speaker-feedback");
@@ -3750,6 +3818,8 @@ function initTTSSettings() {
     showFeedback(fb, "请说 3–4 秒，我会测试当前声纹分数…");
     try {
       const result = await captureSpeakerAudio({ mode: "test", seconds: 4200 });
+      lastSpeakerTestResult = result;
+      refreshSpeakerCalibration({ apply: false, testResult: result });
       if (!result.configured) {
         showFeedback(fb, "还没有录入声纹，请先录入", true);
       } else if (result.passed) {

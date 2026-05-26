@@ -589,6 +589,7 @@ const createSettingsModal = () => `
               <label class="settings-label">声纹录入</label>
               <button class="settings-save-btn" id="voice-enroll-speaker" type="button">录入/重录声纹</button>
               <button class="settings-save-btn" id="voice-test-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">测试我的声纹</button>
+              <button class="settings-save-btn" id="voice-calibrate-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">校准阈值</button>
               <button class="settings-save-btn" id="voice-clear-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">清除声纹</button>
               <select class="settings-select" id="voice-speaker-backup-select" style="max-width:190px;margin-left:8px;"><option value="">最近备份</option></select>
               <button class="settings-save-btn" id="voice-restore-speaker" type="button" style="width:auto;padding:0 12px;margin-left:8px;">恢复备份</button>
@@ -602,6 +603,7 @@ const createSettingsModal = () => `
               <button class="settings-save-btn voice-speaker-status-action" id="voice-speaker-refresh-status" type="button">刷新</button>
             </div>
             <p class="settings-hint">声纹只保存在本机。v2.1.213 起录入时会拆成多段样本求中心声纹，测试按钮会显示当前分数和建议阈值。录入时请在安静环境下连续说 6–8 秒。</p>
+            <div class="voice-speaker-calibration" id="voice-speaker-calibration" hidden></div>
             <div class="settings-row">
               <label class="settings-label" for="voice-speaker-threshold">声纹严格度</label>
               <input type="range" id="voice-speaker-threshold" min="0.45" max="0.80" step="0.01" value="0.55" style="flex:1;cursor:pointer;">

@@ -518,3 +518,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and Brain UI smoke coverage for the diagnostics package and copy flow.
 - [x] Verify syntax plus smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 53: Speaker threshold calibration loop
+- [x] Add backend `GET /voice/local/speaker/calibration` to recommend a safer threshold from a speaker test score and recent rejection scores.
+- [x] Add backend `POST /voice/local/speaker/calibration/apply` to apply the recommended threshold and record local doctor history.
+- [x] Bias calibration toward avoiding owner lockout when a real owner test fails, while keeping thresholds bounded.
+- [x] Add Brain UI “校准阈值” panel with current/recommended threshold, reason, recent pass/reject counts, and apply/retest actions.
+- [x] Sync speaker slider/localStorage/status/doctor/overview after applying calibration.
+- [x] Extend voice-events and Brain UI smoke coverage for recommendation and apply flows.
+- [x] Verify syntax plus smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.
