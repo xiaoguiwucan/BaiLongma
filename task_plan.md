@@ -611,4 +611,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add doctor/readiness steps that honestly report text wake vs incomplete/pending KWS.
 - [x] Extend smoke tests for KWS hydration and diagnostics visibility.
 - [x] Run validation checks and smoke suites.
-- [ ] Commit and push as a development checkpoint only, without tag/Release.
+- [x] Commit and push as a development checkpoint only, without tag/Release.
