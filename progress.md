@@ -454,3 +454,18 @@
 - Live `bailongma:mic-level` events refresh the overview mic chip with throttling, so users can see mic readiness without scrolling down to the sensitivity section.
 - Added ok/warn styling for overview mic status and Brain UI smoke coverage for “麦克风：已听见你”.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+
+## Checkpoint 58 - v2.3.1 Mac Electron packaging release response
+
+- User reported the major-version cadence had become too slow: several hours had passed without a version update.
+- Decided to immediately收束 a meaningful patch release instead of continuing to pile up unpublished work.
+- Scope selected: Mac Electron packaging/deployment correctness, because the project target is Mac desktop but package.json was still Windows-first.
+- Planned version: v2.3.1.
+- Changes included in this checkpoint:
+  - Default build path changes to macOS (`npm run build` -> `npm run build:mac`).
+  - Added explicit `build:mac`, `publish:mac`, `build:win`, and `publish:win` commands.
+  - Added cross-platform `scripts/prebuild-clean.mjs`.
+  - Generated `build/icon.icns` from the existing Mac cartoon icon.
+  - Fixed electron-builder GitHub publish owner/repo to `xiaoguiwucan/BaiLongma`.
+  - Updated README, CHANGELOG, BACKUP-2026-05-26, and Brain UI update notes with v2.3.1 details.
+- Next: run syntax/smoke checks, attempt `npm run build:mac`, then commit, tag, push, and create GitHub Release with source/bundle and mac artifacts if generated.

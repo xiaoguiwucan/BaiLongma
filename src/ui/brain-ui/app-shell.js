@@ -891,6 +891,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.3.1</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">Mac Electron 打包部署补丁版：默认构建切到 macOS，补齐 dmg/zip 打包、发布仓库和部署说明。</p>
+                <ul class="release-note-points">
+                  <li>npm run build 现在默认执行 Mac arm64 打包；新增 build:mac / build:mac:x64 / publish:mac，保留 build:win / publish:win。</li>
+                  <li>新增跨平台 prebuild-clean.mjs 和 macOS icon.icns，Mac 构建不再依赖 PowerShell。</li>
+                  <li>Electron Builder 发布目标修正到当前维护仓库 xiaoguiwucan/BaiLongma。</li>
+                  <li>README、CHANGELOG、备份文档和 Release 规则同步更新，避免长时间堆改动不发版本。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.3.0</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

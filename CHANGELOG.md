@@ -4,6 +4,74 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+
+## v2.3.1 - 2026-05-26
+
+### 更新内容
+
+这是 Mac Electron 打包部署补丁版，用来及时收束 v2.3.0 后发现的部署缺口：之前项目仍是 Windows-first 打包配置，Mac 用户虽然可以源码运行，但不能清晰地执行桌面安装包构建与发布。
+
+- `package.json` / `package-lock.json` 版本升级到 `2.3.1`。
+- 默认 `npm run build` 改为执行 `npm run build:mac`，符合当前 Mac 桌面部署目标。
+- 新增 `build:mac` / `publish:mac`，默认生成 Apple Silicon arm64 macOS `.dmg` 和 `.zip`；Intel Mac 可单独使用 `build:mac:x64`。
+- 保留 Windows 打包能力为 `build:win` / `publish:win`，避免破坏原 NSIS 流程。
+- 新增跨平台 `scripts/prebuild-clean.mjs`，Mac 构建前清理 `dist/` 不再依赖 PowerShell。
+- 新增 `build/icon.icns`，由现有 Mac 卡通图标生成，供 macOS 应用包使用。
+- Electron Builder 的 GitHub publish 仓库从旧上游 `xiaoyuanda666-ship-it/BaiLongma` 修正为当前维护仓库 `xiaoguiwucan/BaiLongma`。
+- README、备份文档和 Brain UI 设置页更新 v2.3.1 说明，明确 Mac 打包/发布命令和版本备份内容。
+
+### 改变原因
+
+- 用户当前目标是把 BaiLongma 作为自己的 Mac Electron 桌面项目维护和部署，而不是继续沿用旧上游的 Windows-first 发布配置。
+- v2.3.0 已经完成本地语音稳定性收束，但还缺一个能直接指导 Mac 打包和 GitHub Release 上传的版本点。
+- 用户明确反馈“跨度太大，几个小时一个版本都没更新”，因此本次把已确认的 Mac 部署修正先形成补丁版本，避免继续堆积未发布改动。
+
+### 影响范围
+
+- Mac 上执行 `npm run build` 会走 macOS 打包；Windows 打包需要改用 `npm run build:win`。
+- GitHub 发布目标改为当前维护仓库；如果以后要发布到其他仓库，需要同步修改 `build.publish`。
+- 本版本不改变语音识别、声纹、唤醒词或小智式协议运行逻辑，只修正桌面打包、发布和文档。
+
+### 验证结果
+
+- `node --check scripts/prebuild-clean.mjs` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `node -e "JSON.parse(require('fs').readFileSync('package.json','utf8')); JSON.parse(require('fs').readFileSync('package-lock.json','utf8'))"` 通过。
+- `npm run smoke:voice-manager` 通过。
+- `npm run smoke:voice-events` 通过。
+- `npm run smoke:brain-ui` 通过。
+- `npm run build:mac` 用于验证 macOS Electron 打包产物。
+
+### 部署注意事项
+
+Mac 源码运行：
+
+```bash
+npm install
+npm start
+```
+
+Mac 打包：
+
+```bash
+npm install
+npm run build:mac
+```
+
+构建完成后查看 `dist/` 目录中的 `.dmg` / `.zip`。默认产物是 Apple Silicon arm64；Intel Mac 需要执行 `npm run build:mac:x64`。未 notarize 的包在其他 Mac 首次打开时可能需要到“系统设置 -> 隐私与安全性”允许。
+
+### 备份附件说明
+
+- Release 应上传 `BaiLongma-source-v2.3.1.zip`：Git 追踪源码快照。
+- Release 应上传 `BaiLongma-v2.3.1.bundle`：离线 Git bundle。
+- 如果 `npm run build:mac` 成功生成 `.dmg` / `.zip`，也应把对应安装包上传到 GitHub Release。
+- 不上传 `.env`、`config.json`、`data/`、`node_modules/`、本地模型目录、虚拟环境和运行时日志。
+
+### 已知限制
+
+- 当前 macOS 包默认不做 Apple Developer ID 签名和 notarization，因此跨机器分发可能出现 Gatekeeper 提示。
+- Apple Silicon 与 Intel 双架构构建依赖本机 Electron Builder/原生依赖重建环境；如果某个架构失败，先发布当前机器可用架构并在 Release 中注明。
+
 ## v2.3.0 - 2026-05-26
 
 ### 更新内容

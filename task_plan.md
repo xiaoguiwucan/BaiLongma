@@ -558,3 +558,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend Brain UI smoke coverage for mic status appearing in the overview.
 - [x] Verify syntax plus smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 58 plan - v2.3.1 Mac Electron packaging release
+
+- [x] Respond to cadence issue by choosing a real but bounded patch release.
+- [x] Change packaging scripts from Windows-first to Mac-first while preserving Windows commands.
+- [x] Add Mac icon and cross-platform clean script.
+- [x] Update README / CHANGELOG / BACKUP / in-app update notes.
+- [ ] Run validation checks and smoke tests.
+- [ ] Build macOS Electron package.
+- [ ] Commit and push v2.3.1 changes.
+- [ ] Tag and create GitHub Release v2.3.1 with detailed notes and artifacts.
