@@ -656,6 +656,44 @@ function isVoiceChannel(channel) {
   return channel === 'voice' || channel === '语音识别' || channel === 'FocusBanner'
 }
 
+function createVoiceSentenceEmitter(msg) {
+  if (!isVoiceChannel(msg?.channel)) return null
+  let buffer = ''
+  let spoken = ''
+  const boundary = /[。！？!?；;]|[，,]/
+  const flush = (force = false) => {
+    const clean = trimAssistantFluff(buffer).replace(/\s+/g, ' ').trim()
+    if (!clean) { buffer = ''; return }
+    const shouldSpeak = force || clean.length >= 18 || /[。！？!?；;]$/.test(clean)
+    if (!shouldSpeak) return
+    buffer = ''
+    spoken += clean
+    autoSpeakForVoiceReply(clean)
+  }
+  return {
+    push(text = '') {
+      const chunk = String(text || '')
+      if (!chunk) return
+      buffer += chunk
+      let guard = 0
+      while (buffer && guard++ < 20) {
+        const idx = buffer.search(boundary)
+        if (idx < 0) break
+        const part = buffer.slice(0, idx + 1)
+        buffer = buffer.slice(idx + 1)
+        const clean = trimAssistantFluff(part).replace(/\s+/g, ' ').trim()
+        if (clean && (clean.length >= 6 || /[。！？!?；;]$/.test(clean))) {
+          spoken += clean
+          autoSpeakForVoiceReply(clean)
+        }
+      }
+      flush(false)
+    },
+    end() { flush(true); return spoken.trim() },
+    spoke() { return spoken.trim().length > 0 },
+  }
+}
+
 function isFastUserMessage(msg) {
   return !!msg && getProcessPriority(msg) >= PRIORITY.user
 }
@@ -789,6 +827,7 @@ async function runTurn(input, label, msg = null) {
   const controller = new AbortController()
   let llmResult = null
   let toolCallLog = []
+  let voiceSentenceEmitter = null
 
   console.log(`\n── ${label} ──`)
   emitEvent(isTick ? 'tick' : 'message_received', { label, input: input.slice(0, 300) })
@@ -1131,6 +1170,8 @@ async function runTurn(input, label, msg = null) {
 
     // 3. Call Jarvis LLM (can be interrupted by a new message)
     const toolContext = buildToolContextForProcess(msg, injection)
+    voiceSentenceEmitter = createVoiceSentenceEmitter(msg)
+    let currentStreamMode = ''
     llmResult = await callLLM({
       systemPrompt,
       message: input,
@@ -1160,7 +1201,7 @@ async function runTurn(input, label, msg = null) {
         // 这里仅处理语音输入的 TTS 自动回放
         if (name === 'send_message' && args?.content && isVoiceChannel(msg?.channel)) {
           const cleanedContent = trimAssistantFluff(args.content)
-          if (cleanedContent) autoSpeakForVoiceReply(cleanedContent)
+          if (cleanedContent && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(cleanedContent)
         }
       },
       onRetry: ({ attempt, nextAttempt, maxAttempts, delayMs, error }) => {
@@ -1170,10 +1211,17 @@ async function runTurn(input, label, msg = null) {
         emitEvent('tool_executing', { name })
       },
       onStream: ({ event, mode, text, name }) => {
-        if (event === 'start') emitEvent('stream_start', { mode })
-        else if (event === 'chunk') emitEvent('stream_chunk', { text })
-        else if (event === 'end') emitEvent('stream_end', {})
-        else if (event === 'tool_preparing') emitEvent('tool_preparing', { name })
+        if (event === 'start') {
+          currentStreamMode = mode || ''
+          emitEvent('stream_start', { mode })
+        } else if (event === 'chunk') {
+          emitEvent('stream_chunk', { text })
+          if (currentStreamMode === 'text') voiceSentenceEmitter?.push(text)
+        } else if (event === 'end') {
+          if (currentStreamMode === 'text') voiceSentenceEmitter?.end()
+          currentStreamMode = ''
+          emitEvent('stream_end', {})
+        } else if (event === 'tool_preparing') emitEvent('tool_preparing', { name })
       },
     })
     throwIfAborted(controller.signal)
@@ -1227,7 +1275,7 @@ async function runTurn(input, label, msg = null) {
       const timestamp = nowTimestamp()
       const blockedContent = 'I did not actually call the required tool, so I cannot claim the operation completed. Please send again — I will execute the tool first, then reply based on the result.'
       console.warn(`[protocol fallback] Blocked a text reply that required a tool call but made none. from=${msg.fromId}`)
-      if (isVoiceChannel(msg.channel)) autoSpeakForVoiceReply(blockedContent)
+      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(blockedContent)
       deliverFallbackReply(msg, blockedContent, timestamp)
       toolCallLog.push({
         name: 'send_message',
@@ -1243,7 +1291,7 @@ async function runTurn(input, label, msg = null) {
     } else if (fallbackContent) {
       const timestamp = nowTimestamp()
       console.warn(`[protocol fallback] Model did not call send_message — delivering response body to ${msg.fromId}`)
-      if (isVoiceChannel(msg.channel)) autoSpeakForVoiceReply(fallbackContent)
+      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(fallbackContent)
       deliverFallbackReply(msg, fallbackContent, timestamp)
       toolCallLog.push({
         name: 'send_message',

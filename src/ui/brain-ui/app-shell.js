@@ -416,6 +416,10 @@ const createSettingsModal = () => `
               <input id="voice-auto-mic" type="checkbox" style="width:auto;flex:none;">
             </div>
             <div class="settings-row">
+              <label class="settings-label" for="voice-fast-mode">极速语音模式（可打断 / 快速播报）</label>
+              <input id="voice-fast-mode" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <div class="settings-row">
               <label class="settings-label" for="voice-wake-enabled">启用唤醒词</label>
               <input id="voice-wake-enabled" type="checkbox" checked style="width:auto;flex:none;">
             </div>
@@ -642,6 +646,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.1.0</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">小智式极速语音交互内核：更快开口、分句播报、可打断。</p>
+                <ul class="release-note-points">
+                  <li>语音通道下，LLM 正式回答会边生成边按句触发 TTS，不再等整段回答结束。</li>
+                  <li>TTS 改为队列式分句播放，用户打断时会取消后续队列和正在请求的语音。</li>
+                  <li>设置页新增“极速语音模式”开关，默认开启，可随时回退整段播报。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v2.1.209</span>

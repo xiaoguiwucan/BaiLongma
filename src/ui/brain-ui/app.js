@@ -1387,7 +1387,7 @@ function playJarvisStartupSound() {
   }
 }
 
-// ── TTS reply playback ────────────────────────────────────────────────────────
+// ── TTS reply playback / fast voice interaction ──────────────────────────────
 let ttsAudioEl = null;
 let ttsCurrentText = '';
 let ttsInterruptedRemaining = '';
@@ -1395,6 +1395,63 @@ let lastJarvisContent = '';
 let ttsInterruptedOriginalContent = '';
 let ttsInterruptionApplied = false;
 let ttsInterruptionDbTimer = null;
+let ttsQueue = [];
+let ttsPlaying = false;
+let ttsQueueGeneration = 0;
+let ttsAbortController = null;
+let ttsActiveUrl = '';
+const VOICE_FAST_MODE_STORAGE_KEY = 'bailongma-voice-fast-mode';
+const TTS_SENTENCE_BOUNDARY_RE = /[^。！？!?；;\n]{6,}[。！？!?；;]|[^\n]{18,}[，,]/g;
+const ttsFastState = { state: 'idle', updatedAt: 0 };
+
+function isFastVoiceModeEnabled() {
+  return localStorage.getItem(VOICE_FAST_MODE_STORAGE_KEY) !== 'false';
+}
+
+function setFastVoiceState(state, detail = {}) {
+  ttsFastState.state = state;
+  ttsFastState.updatedAt = Date.now();
+  window.dispatchEvent(new CustomEvent('bailongma:voice-fast-state', { detail: { state, ...detail } }));
+}
+
+function normalizeTTSPlainText(text) {
+  return String(text || '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/\*(.+?)\*/g, '$1')
+    .replace(/`(.+?)`/g, '$1')
+    .replace(/#{1,6}\s+/g, '')
+    .replace(/\[([^\]]+)\]\([^\)]+\)/g, '$1')
+    .replace(/!\[[^\]]*\]\([^\)]+\)/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function splitTtsSentences(text) {
+  const plain = normalizeTTSPlainText(text);
+  if (!plain) return [];
+  const parts = [];
+  let last = 0;
+  let match;
+  TTS_SENTENCE_BOUNDARY_RE.lastIndex = 0;
+  while ((match = TTS_SENTENCE_BOUNDARY_RE.exec(plain)) !== null) {
+    const end = match.index + match[0].length;
+    const part = plain.slice(last, end).trim();
+    if (part) parts.push(part);
+    last = end;
+  }
+  const tail = plain.slice(last).trim();
+  if (tail) parts.push(tail);
+  return parts.length ? parts : [plain];
+}
+
+function clearTtsQueue() {
+  ttsQueue = [];
+  ttsQueueGeneration += 1;
+  if (ttsAbortController) {
+    try { ttsAbortController.abort(); } catch {}
+    ttsAbortController = null;
+  }
+}
 
 // Estimate spoken char count from audio progress, snapping to a sentence boundary
 function calcRemainingText(text, currentTime, duration) {
@@ -1456,7 +1513,12 @@ function applyTTSInterruption(spokenUpTo) {
 
 // Called by voice-panel interruption detection: stop current TTS and record cut point
 window.stopTTS = () => {
-  if (!ttsAudioEl) return;
+  clearTtsQueue();
+  if (!ttsAudioEl) {
+    ttsPlaying = false;
+    setFastVoiceState('interrupted');
+    return;
+  }
   const { remaining, spokenUpTo } = calcRemainingText(
     ttsCurrentText,
     ttsAudioEl.currentTime,
@@ -1466,18 +1528,23 @@ window.stopTTS = () => {
   ttsInterruptedRemaining = remaining || ttsCurrentText;
   applyTTSInterruption(spokenUpTo);
   ttsAudioEl.pause();
-  try { URL.revokeObjectURL(ttsAudioEl.src); } catch {}
+  try { URL.revokeObjectURL(ttsActiveUrl || ttsAudioEl.src); } catch {}
   ttsAudioEl = null;
+  ttsActiveUrl = '';
+  ttsPlaying = false;
+  setFastVoiceState('interrupted');
 };
 
 // Called by voice-panel on impact noise: duck TTS volume without stopping
 window.duckTTS = () => {
   if (ttsAudioEl) ttsAudioEl.volume = 0.15;
+  setFastVoiceState('ducking');
 };
 
 // Called by voice-panel after confirming noise: restore original volume
 window.unduckTTS = () => {
   if (ttsAudioEl) ttsAudioEl.volume = 1.0;
+  if (ttsAudioEl) setFastVoiceState('speaking');
 };
 
 // Called by voice-panel on false-positive noise: resume TTS from interruption point and restore chat
@@ -1495,47 +1562,89 @@ window.resumeTTSIfNoSpeech = () => {
   playTTSReply(text);
 };
 
-async function playTTSReply(text) {
+async function playNextTtsSegment(generation) {
+  if (ttsPlaying || generation !== ttsQueueGeneration) return;
+  const text = ttsQueue.shift();
+  if (!text) {
+    ttsCurrentText = '';
+    setFastVoiceState('listening');
+    window.bailongmaVoice?.resumeAfterMedia?.();
+    return;
+  }
+  ttsPlaying = true;
   ttsCurrentText = text;
-  ttsInterruptedRemaining = '';
-  ttsInterruptionApplied = false;
-  ttsInterruptedOriginalContent = '';
+  ttsAbortController = new AbortController();
+  setFastVoiceState('tts_fetch', { text });
   try {
     const resp = await fetch(`${API}/tts/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ text }),
+      signal: ttsAbortController.signal,
     });
+    if (generation !== ttsQueueGeneration) return;
     if (!resp.ok) {
       let errMsg = `HTTP ${resp.status}`;
       try { const j = await resp.json(); errMsg = j.error || errMsg; } catch {}
       throw new Error(errMsg);
     }
     const blob = await resp.blob();
+    if (generation !== ttsQueueGeneration) return;
     const url = URL.createObjectURL(blob);
-    if (ttsAudioEl) { ttsAudioEl.pause(); URL.revokeObjectURL(ttsAudioEl.src); }
+    ttsActiveUrl = url;
+    if (ttsAudioEl) { ttsAudioEl.pause(); try { URL.revokeObjectURL(ttsAudioEl.src); } catch {} }
     ttsAudioEl = new Audio(url);
-    ttsAudioEl.volume = 1.0; // ensure full volume (avoid residual duck state from previous play)
-    // Suspend cloud ASR but keep the mic hardware open for interruption detection
+    ttsAudioEl.volume = 1.0;
     window.bailongmaVoice?.suspendForTTS?.();
+    setFastVoiceState('speaking', { text });
     ttsAudioEl.onended = () => {
-      URL.revokeObjectURL(url);
+      try { URL.revokeObjectURL(url); } catch {}
+      if (ttsActiveUrl === url) ttsActiveUrl = '';
       ttsAudioEl = null;
-      ttsCurrentText = '';
-      window.bailongmaVoice?.resumeAfterMedia();
+      ttsPlaying = false;
+      if (generation === ttsQueueGeneration) playNextTtsSegment(generation);
     };
     ttsAudioEl.onerror = () => {
+      try { URL.revokeObjectURL(url); } catch {}
+      if (ttsActiveUrl === url) ttsActiveUrl = '';
       ttsAudioEl = null;
-      ttsCurrentText = '';
-      window.bailongmaVoice?.resumeAfterMedia();
+      ttsPlaying = false;
+      if (generation === ttsQueueGeneration) playNextTtsSegment(generation);
     };
-    ttsAudioEl.play().catch(() => {
-      window.bailongmaVoice?.resumeAfterMedia();
-    });
-  } catch {
-    ttsCurrentText = '';
-    window.bailongmaVoice?.resumeAfterMedia();
+    await ttsAudioEl.play();
+  } catch (err) {
+    if (err?.name !== 'AbortError') console.warn('[TTS fast]', err?.message || err);
+    ttsPlaying = false;
+    ttsAudioEl = null;
+    ttsActiveUrl = '';
+    if (generation === ttsQueueGeneration) playNextTtsSegment(generation);
+  } finally {
+    ttsAbortController = null;
   }
+}
+
+async function playTTSReply(text) {
+  const fastMode = isFastVoiceModeEnabled();
+  const segments = fastMode ? splitTtsSentences(text) : [normalizeTTSPlainText(text)].filter(Boolean);
+  if (!segments.length) return;
+
+  // 极速模式下，后端会边生成边分句推送 tts_reply。这里必须追加队列，
+  // 不能每收到一句就 clear，否则会把正在播的上一句打断，听感会变成卡顿/丢字。
+  if (fastMode && (ttsPlaying || ttsQueue.length)) {
+    ttsQueue.push(...segments);
+    setFastVoiceState('queued', { count: ttsQueue.length });
+    playNextTtsSegment(ttsQueueGeneration);
+    return;
+  }
+
+  clearTtsQueue();
+  ttsInterruptedRemaining = '';
+  ttsInterruptionApplied = false;
+  ttsInterruptedOriginalContent = '';
+  ttsQueue = segments;
+  const generation = ttsQueueGeneration;
+  setFastVoiceState('queued', { count: segments.length });
+  playNextTtsSegment(generation);
 }
 
 resetViewBtn.addEventListener("click", resetZoom);
@@ -2114,6 +2223,7 @@ function initTTSSettings() {
   const VOICE_LANG_KEY       = "bailongma-voice-lang";
   const VOICE_AUTO_SEND_KEY  = "bailongma-voice-auto-send";
   const VOICE_AUTO_MIC_KEY   = "bailongma-voice-auto-mic";
+  const VOICE_FAST_MODE_KEY  = "bailongma-voice-fast-mode";
   const VOICE_THRESHOLD_KEY  = "bailongma-voice-threshold";
   const VOICE_PROVIDER_KEY   = "bailongma-voice-provider";
   const VOICE_WHISPER_MODEL_KEY = "bailongma-voice-whisper-model"; // 兼容旧版本
@@ -2152,6 +2262,8 @@ function initTTSSettings() {
     if (autoSend) autoSend.checked = localStorage.getItem(VOICE_AUTO_SEND_KEY) !== "false";
     const autoMic = document.getElementById("voice-auto-mic");
     if (autoMic) autoMic.checked = localStorage.getItem(VOICE_AUTO_MIC_KEY) === "true";
+    const fastMode = document.getElementById("voice-fast-mode");
+    if (fastMode) fastMode.checked = localStorage.getItem(VOICE_FAST_MODE_KEY) !== "false";
     const savedThresh = parseFloat(localStorage.getItem(VOICE_THRESHOLD_KEY) || "0.008");
     if (voiceThreshSlider) voiceThreshSlider.value = String(savedThresh);
     if (voiceThreshVal)    voiceThreshVal.textContent = savedThresh.toFixed(3);
@@ -2198,6 +2310,7 @@ function initTTSSettings() {
       const lang      = document.getElementById("voice-lang-select")?.value || "zh-CN";
       const autoSend  = document.getElementById("voice-auto-send")?.checked ?? true;
       const autoMic   = document.getElementById("voice-auto-mic")?.checked ?? false;
+      const fastMode  = document.getElementById("voice-fast-mode")?.checked ?? true;
       const threshold = parseFloat(voiceThreshSlider?.value ?? "0.008");
       const provider  = voiceProviderSelect?.value || "local";
       const localAsrModel = document.getElementById("voice-local-asr-model")?.value || "sensevoice-small";
@@ -2211,6 +2324,7 @@ function initTTSSettings() {
       localStorage.setItem(VOICE_LANG_KEY,      lang);
       localStorage.setItem(VOICE_AUTO_SEND_KEY,  String(autoSend));
       localStorage.setItem(VOICE_AUTO_MIC_KEY,   String(autoMic));
+      localStorage.setItem(VOICE_FAST_MODE_KEY,  String(fastMode));
       localStorage.setItem(VOICE_THRESHOLD_KEY,  String(threshold));
       localStorage.setItem(VOICE_PROVIDER_KEY,   provider);
       localStorage.setItem(VOICE_LOCAL_ASR_MODEL_KEY, localAsrModel);
