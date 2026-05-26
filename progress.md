@@ -469,3 +469,18 @@
   - Fixed electron-builder GitHub publish owner/repo to `xiaoguiwucan/BaiLongma`.
   - Updated README, CHANGELOG, BACKUP-2026-05-26, and Brain UI update notes with v2.3.1 details.
 - Next: run syntax/smoke checks, attempt `npm run build:mac`, then commit, tag, push, and create GitHub Release with source/bundle and mac artifacts if generated.
+
+
+## Checkpoint 59 - Video/media voice pre-roll gate
+
+- Started the next meaningful feature chunk after v2.3.1 instead of immediately releasing another tiny version.
+- Added video/music pre-roll audio buffering in the Brain UI voice panel:
+  - Keeps a configurable 0.8–4.0s ring buffer while video/music mode is active.
+  - Keeps ASR gated during media playback until near-field voice activity is confirmed.
+  - On confirmed voice activity, opens a temporary ASR gate and flushes the pre-roll chunks first, reducing lost wake-word/command prefixes when video audio masks the beginning.
+  - Emits media:duck diagnostics with phase=asr_gate_open, preRollMs, preRollChunks, flushedChunks, holdMs.
+- Added settings controls for video/music pre-roll enable and duration.
+- Persisted `videoVoicePreRollEnabled` and `videoVoicePreRollMs` in backend voice config and included them in video guard presets/readiness checks.
+- Extended Brain UI smoke coverage for server hydration and preset application of pre-roll controls.
+- Verified `node --check` for app/voice-panel/config/api/smoke and `npm run smoke:brain-ui`.
+- This is a post-v2.3.1 development checkpoint only; no tag/Release yet per meaningful-version cadence.

@@ -565,7 +565,19 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Change packaging scripts from Windows-first to Mac-first while preserving Windows commands.
 - [x] Add Mac icon and cross-platform clean script.
 - [x] Update README / CHANGELOG / BACKUP / in-app update notes.
-- [ ] Run validation checks and smoke tests.
-- [ ] Build macOS Electron package.
-- [ ] Commit and push v2.3.1 changes.
-- [ ] Tag and create GitHub Release v2.3.1 with detailed notes and artifacts.
+- [x] Run validation checks and smoke tests.
+- [x] Build macOS Electron package.
+- [x] Commit and push v2.3.1 changes.
+- [x] Tag and create GitHub Release v2.3.1 with detailed notes and artifacts.
+
+
+## Checkpoint 59 plan - Video/media pre-roll ASR gate
+
+- [x] Add configurable video/music pre-roll ring buffer.
+- [x] Gate ASR during media playback until near-field voice activity is confirmed.
+- [x] Flush pre-roll chunks when opening the ASR gate so command prefixes are less likely to be lost.
+- [x] Add settings controls and backend persistence for pre-roll enable/duration.
+- [x] Include pre-roll in video guard preset and readiness/doctor checks.
+- [x] Extend Brain UI smoke coverage.
+- [x] Run broader voice smoke suites.
+- [x] Commit and push as a development checkpoint.

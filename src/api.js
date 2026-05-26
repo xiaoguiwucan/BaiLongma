@@ -63,6 +63,8 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
       videoVoiceDuckLevel: 0.12,
       videoVoiceDuckHoldMs: 2200,
       videoVoiceDuckSensitivity: 1.0,
+      videoVoicePreRollEnabled: true,
+      videoVoicePreRollMs: 2200,
     },
   },
   {
@@ -83,6 +85,8 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
       videoVoiceDuckLevel: 0.08,
       videoVoiceDuckHoldMs: 3200,
       videoVoiceDuckSensitivity: 0.85,
+      videoVoicePreRollEnabled: true,
+      videoVoicePreRollMs: 3000,
     },
   },
   {
@@ -103,6 +107,8 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
       videoVoiceDuckLevel: 0.10,
       videoVoiceDuckHoldMs: 2600,
       videoVoiceDuckSensitivity: 1.0,
+      videoVoicePreRollEnabled: true,
+      videoVoicePreRollMs: 2600,
     },
   },
   {
@@ -123,6 +129,8 @@ const VOICE_STABILITY_PRESETS = Object.freeze([
       videoVoiceDuckLevel: 0.10,
       videoVoiceDuckHoldMs: 2200,
       videoVoiceDuckSensitivity: 1.0,
+      videoVoicePreRollEnabled: true,
+      videoVoicePreRollMs: 2600,
     },
   },
 ])
@@ -171,7 +179,7 @@ function recommendVoiceStabilityPreset({ summary = null, voice = getVoiceConfig(
   const speakerRejected = Number(recent.speakerRejected || 0)
   const asrFinal = Number(recent.asrFinal || 0)
   const ttsStop = Number(recent.ttsStop || 0)
-  const videoProtectionOff = voice.videoVoiceDuckEnabled === false || voice.videoVoicePttEnabled === false || voice.videoVoiceAecEnabled === false
+  const videoProtectionOff = voice.videoVoiceDuckEnabled === false || voice.videoVoicePttEnabled === false || voice.videoVoiceAecEnabled === false || voice.videoVoicePreRollEnabled === false
   if (speakerRejected >= 2 || issues.includes('speaker_rejected_high')) {
     return { id: 'balanced', label: '均衡推荐', reason: '最近出现多次声纹误拒，先回到较稳的声纹阈值，再重新测试。' }
   }
@@ -465,13 +473,13 @@ function buildVoiceLocalDoctor({ windowMs = 60000, speakerStatus = null } = {}) 
     voice.wakeWordEnabled === false ? '开启唤醒词，并使用严格模式。' : '说“龙马，具体指令”进行测试。',
     voice.wakeWordEnabled === false ? 'enable_wake_guard' : null,
   )
-  const videoOk = voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled
+  const videoOk = voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled && voice.videoVoicePreRollEnabled
   add(
     'video_guard',
     '视频抗干扰',
     videoOk ? 'ok' : 'warn',
-    videoOk ? '视频降音、按住说话、AEC 都已开启。' : '视频播放场景下仍有保护项未开启。',
-    videoOk ? '播放视频时优先使用唤醒词，也可按住空格说话。' : '应用“视频抗干扰”预设，或手动开启视频降音/PTT/AEC。',
+    videoOk ? `视频降音、按住说话、AEC、${Math.round((voice.videoVoicePreRollMs || 2600) / 100) / 10}s 预录音都已开启。` : '视频播放场景下仍有保护项未开启。',
+    videoOk ? '播放视频时优先使用唤醒词；检测到近场人声会连同预录音一起送入 ASR。' : '应用“视频抗干扰”预设，或手动开启视频降音/PTT/AEC/预录音。',
     videoOk ? null : 'apply_video_guard',
   )
   const speakerConfiguredHint = voice.speakerVerificationEnabled ? '已启用，只响应我的声音。' : '未启用，任何清晰唤醒词都可能触发。'
@@ -582,9 +590,9 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
     {
       id: 'video_guard',
       label: '视频抗干扰',
-      status: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled ? 'ok' : 'warn',
-      detail: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled ? '视频降音、按住说话、AEC 都已开启。' : '播放视频时建议同时开启视频降音、按住说话和 AEC。',
-      fixAction: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled ? null : 'apply_video_guard',
+      status: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled && voice.videoVoicePreRollEnabled ? 'ok' : 'warn',
+      detail: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled && voice.videoVoicePreRollEnabled ? '视频降音、按住说话、AEC 和预录音缓存都已开启。' : '播放视频时建议同时开启视频降音、按住说话、AEC 和预录音缓存。',
+      fixAction: voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled && voice.videoVoicePreRollEnabled ? null : 'apply_video_guard',
     },
     {
       id: 'speaker_voiceprint',
@@ -690,7 +698,7 @@ async function buildLocalVoiceOverview({ windowMs = 60000 } = {}) {
   if (voice.asrProvider !== 'local') issues.push('当前没有使用本地 ASR。')
   if (local.status !== 'running') issues.push('本地语音服务未运行。')
   if (voice.speakerVerificationEnabled && speaker?.reachable && !speaker?.configured) issues.push('声纹门控已开启但没有可用声纹，可能导致唤不醒。')
-  if (!(voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled)) issues.push('视频抗干扰未完全开启。')
+  if (!(voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled && voice.videoVoicePreRollEnabled)) issues.push('视频抗干扰未完全开启。')
   if (selfTest.metrics.wakeAccepted === 0 && selfTest.metrics.asrFinal === 0) issues.push('最近还没有完成真实唤醒/识别实测。')
   const ready = issues.length === 0 || (issues.length === 1 && issues[0].includes('真实唤醒/识别实测'))
   const level = local.status !== 'running' || issues.some(item => item.includes('声纹门控')) ? 'warn' : ready ? 'ok' : 'pending'

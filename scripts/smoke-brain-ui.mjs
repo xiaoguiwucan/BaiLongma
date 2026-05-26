@@ -145,6 +145,8 @@ function createServer() {
           videoVoiceDuckLevel: 0.25,
           videoVoiceDuckHoldMs: 3600,
           videoVoiceDuckSensitivity: 1.35,
+          videoVoicePreRollEnabled: true,
+          videoVoicePreRollMs: 2800,
         },
       })
       return
@@ -155,7 +157,7 @@ function createServer() {
         ok: true,
         presets: [
           { id: 'quiet-room', label: '安静房间', description: '普通近场聊天，保留较自然的唤醒体验。', patch: { wakeMode: 'strict', wakeConfidenceThreshold: 0.70, speakerThreshold: 0.55, videoVoiceDuckEnabled: false, videoVoicePttEnabled: false, videoVoiceAecEnabled: true } },
-          { id: 'video-guard', label: '视频抗干扰', description: '播放视频或别人说话时，优先避免误唤醒并打开降音/PTT/AEC。', patch: { wakeMode: 'strict', wakeConfidenceThreshold: 0.78, wakeMinCommandChars: 2, wakeCooldownMs: 1600, wakeRepeatSuppression: true, wakeRequireSpeakerWhenEnabled: true, speakerThreshold: 0.58, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.08, videoVoiceDuckHoldMs: 3200, videoVoiceDuckSensitivity: 0.85 } },
+          { id: 'video-guard', label: '视频抗干扰', description: '播放视频或别人说话时，优先避免误唤醒并打开降音/PTT/AEC。', patch: { wakeMode: 'strict', wakeConfidenceThreshold: 0.78, wakeMinCommandChars: 2, wakeCooldownMs: 1600, wakeRepeatSuppression: true, wakeRequireSpeakerWhenEnabled: true, speakerThreshold: 0.58, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.08, videoVoiceDuckHoldMs: 3200, videoVoiceDuckSensitivity: 0.85, videoVoicePreRollEnabled: true, videoVoicePreRollMs: 3000 } },
         ],
         currentPreset: { id: 'balanced', label: '均衡推荐', exact: false, reason: '当前接近均衡推荐。' },
         recommended: { id: 'video-guard', label: '视频抗干扰', reason: '最近有唤醒拒绝/视频保护未全开，建议启用抗干扰预设。' },
@@ -184,6 +186,8 @@ function createServer() {
           videoVoiceDuckLevel: 0.08,
           videoVoiceDuckHoldMs: 3200,
           videoVoiceDuckSensitivity: 0.85,
+          videoVoicePreRollEnabled: true,
+          videoVoicePreRollMs: 3000,
         },
       })
       return
@@ -881,9 +885,12 @@ try {
     duckChecked: document.querySelector('#voice-video-duck')?.checked,
     pttChecked: document.querySelector('#voice-video-ptt')?.checked,
     aecChecked: document.querySelector('#voice-video-aec')?.checked,
+    preRollChecked: document.querySelector('#voice-video-preroll')?.checked,
     duckLevel: document.querySelector('#voice-video-duck-level')?.value,
     duckHold: document.querySelector('#voice-video-duck-hold')?.value,
     sensitivity: document.querySelector('#voice-video-duck-sensitivity')?.value,
+    preRollMs: document.querySelector('#voice-video-preroll-ms')?.value,
+    preRollLabel: document.querySelector('#voice-video-preroll-ms-val')?.textContent,
     speakerThreshold: document.querySelector('#voice-speaker-threshold')?.value,
     storedDuck: localStorage.getItem('bailongma-voice-video-duck'),
     storedPtt: localStorage.getItem('bailongma-voice-video-ptt'),
@@ -891,13 +898,16 @@ try {
     storedLevel: localStorage.getItem('bailongma-voice-video-duck-level'),
     storedHold: localStorage.getItem('bailongma-voice-video-duck-hold'),
     storedSensitivity: localStorage.getItem('bailongma-voice-video-duck-sensitivity'),
+    storedPreRoll: localStorage.getItem('bailongma-voice-video-preroll-enabled'),
+    storedPreRollMs: localStorage.getItem('bailongma-voice-video-preroll-ms'),
     storedSpeakerThreshold: localStorage.getItem('bailongma-voice-speaker-threshold'),
   }))
   if (videoVoiceSnapshot.speakerThreshold !== '0.63' || videoVoiceSnapshot.storedSpeakerThreshold !== '0.63') throw new Error('server speaker threshold did not hydrate settings UI and localStorage')
   if (videoVoiceSnapshot.duckChecked !== false || videoVoiceSnapshot.pttChecked !== true || videoVoiceSnapshot.aecChecked !== false) throw new Error('server video voice booleans did not hydrate settings UI')
-  if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35') throw new Error('server video voice numeric settings did not hydrate settings UI')
+  if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35' || videoVoiceSnapshot.preRollMs !== '2800' || !videoVoiceSnapshot.preRollLabel.includes('2.8s')) throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
-  if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
+  if (videoVoiceSnapshot.preRollChecked !== true || videoVoiceSnapshot.storedPreRoll !== 'true') throw new Error('server video pre-roll toggle did not hydrate settings UI/localStorage')
+  if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35' || videoVoiceSnapshot.storedPreRollMs !== '2800') throw new Error('server video voice numeric settings were not mirrored to localStorage')
   const speakerStatusText = await page.textContent('#voice-speaker-status')
   if (!speakerStatusText.includes('服务不可达') || !speakerStatusText.includes('本地语音服务未运行')) throw new Error(`speaker status did not use backend runtime endpoint: ${speakerStatusText}`)
   const speakerActionVisible = await page.evaluate(() => ({
@@ -989,18 +999,24 @@ try {
     duckChecked: document.querySelector('#voice-video-duck')?.checked,
     pttChecked: document.querySelector('#voice-video-ptt')?.checked,
     aecChecked: document.querySelector('#voice-video-aec')?.checked,
+    preRollChecked: document.querySelector('#voice-video-preroll')?.checked,
     duckLevel: document.querySelector('#voice-video-duck-level')?.value,
     duckLabel: document.querySelector('#voice-video-duck-level-val')?.textContent,
+    preRollMs: document.querySelector('#voice-video-preroll-ms')?.value,
+    preRollLabel: document.querySelector('#voice-video-preroll-ms-val')?.textContent,
     storedConfidence: localStorage.getItem('bailongma-voice-wake-confidence-threshold'),
     storedSpeakerThreshold: localStorage.getItem('bailongma-voice-speaker-threshold'),
     storedDuck: localStorage.getItem('bailongma-voice-video-duck'),
     storedDuckLevel: localStorage.getItem('bailongma-voice-video-duck-level'),
+    storedPreRoll: localStorage.getItem('bailongma-voice-video-preroll-enabled'),
+    storedPreRollMs: localStorage.getItem('bailongma-voice-video-preroll-ms'),
   }))
   if (presetSnapshot.wakeConfidence !== '0.78' || presetSnapshot.wakeConfidenceLabel !== '0.78' || presetSnapshot.storedConfidence !== '0.78') throw new Error(`voice preset did not sync wake confidence: ${JSON.stringify(presetSnapshot)}`)
   if (presetSnapshot.cooldown !== '1600' || presetSnapshot.cooldownLabel !== '1.6s') throw new Error(`voice preset did not sync wake cooldown: ${JSON.stringify(presetSnapshot)}`)
   if (presetSnapshot.speakerThreshold !== '0.58' || presetSnapshot.speakerLabel !== '0.58' || presetSnapshot.storedSpeakerThreshold !== '0.58') throw new Error(`voice preset did not sync speaker threshold: ${JSON.stringify(presetSnapshot)}`)
-  if (presetSnapshot.duckChecked !== true || presetSnapshot.pttChecked !== true || presetSnapshot.aecChecked !== true || presetSnapshot.storedDuck !== 'true') throw new Error(`voice preset did not sync video toggles: ${JSON.stringify(presetSnapshot)}`)
+  if (presetSnapshot.duckChecked !== true || presetSnapshot.pttChecked !== true || presetSnapshot.aecChecked !== true || presetSnapshot.preRollChecked !== true || presetSnapshot.storedDuck !== 'true' || presetSnapshot.storedPreRoll !== 'true') throw new Error(`voice preset did not sync video toggles: ${JSON.stringify(presetSnapshot)}`)
   if (presetSnapshot.duckLevel !== '0.08' || presetSnapshot.duckLabel !== '8%' || presetSnapshot.storedDuckLevel !== '0.08') throw new Error(`voice preset did not sync video duck level: ${JSON.stringify(presetSnapshot)}`)
+  if (presetSnapshot.preRollMs !== '3000' || presetSnapshot.preRollLabel !== '3.0s' || presetSnapshot.storedPreRollMs !== '3000') throw new Error(`voice preset did not sync video pre-roll: ${JSON.stringify(presetSnapshot)}`)
 
   await page.click('#settings-close')
   await page.waitForFunction(() => document.querySelector('#settings-overlay')?.hidden === true)

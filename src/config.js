@@ -629,7 +629,7 @@ export function setSocialConfig(updates) {
 }
 
 const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
-const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeTuningHistory', 'voiceLocalDoctorHistory', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', 'speakerThreshold', 'wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeAutoTuningEnabled', 'wakeAutoTuningMinRejects', 'wakeAutoTuningCooldownMs', 'wakeAutoTuningMaxActionsPerHour', 'wakeAutoTuningLastAppliedAt', 'videoVoiceDuckEnabled', 'videoVoicePttEnabled', 'videoVoiceAecEnabled', 'videoVoiceDuckLevel', 'videoVoiceDuckHoldMs', 'videoVoiceDuckSensitivity', ...VOICE_SECRET_KEYS]
+const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'asrProfile', 'wakeTuningHistory', 'voiceLocalDoctorHistory', 'wakeWordEnabled', 'wakeWords', 'wakeMode', 'wakeWindowSeconds', 'wakeRepeatSuppression', 'speakerVerificationEnabled', 'speakerThreshold', 'wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeAutoTuningEnabled', 'wakeAutoTuningMinRejects', 'wakeAutoTuningCooldownMs', 'wakeAutoTuningMaxActionsPerHour', 'wakeAutoTuningLastAppliedAt', 'videoVoiceDuckEnabled', 'videoVoicePttEnabled', 'videoVoiceAecEnabled', 'videoVoiceDuckLevel', 'videoVoiceDuckHoldMs', 'videoVoiceDuckSensitivity', 'videoVoicePreRollEnabled', 'videoVoicePreRollMs', ...VOICE_SECRET_KEYS]
 const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
 const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
 const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
@@ -718,6 +718,8 @@ export function getVoiceConfig() {
     videoVoiceDuckLevel: Number.isFinite(Number(stored.videoVoiceDuckLevel)) ? Math.max(0.02, Math.min(0.50, Number(stored.videoVoiceDuckLevel))) : 0.10,
     videoVoiceDuckHoldMs: Number.isFinite(Number(stored.videoVoiceDuckHoldMs)) ? Math.max(800, Math.min(8000, Math.round(Number(stored.videoVoiceDuckHoldMs)))) : 2200,
     videoVoiceDuckSensitivity: Number.isFinite(Number(stored.videoVoiceDuckSensitivity)) ? Math.max(0.55, Math.min(1.60, Number(stored.videoVoiceDuckSensitivity))) : 1.0,
+    videoVoicePreRollEnabled: typeof stored.videoVoicePreRollEnabled === 'boolean' ? stored.videoVoicePreRollEnabled : true,
+    videoVoicePreRollMs: Number.isFinite(Number(stored.videoVoicePreRollMs)) ? Math.max(800, Math.min(4000, Math.round(Number(stored.videoVoicePreRollMs)))) : 2600,
     wakeTuningHistory: sanitizeWakeTuningHistory(stored.wakeTuningHistory),
     voiceLocalDoctorHistory: sanitizeVoiceLocalDoctorHistory(stored.voiceLocalDoctorHistory),
   }
@@ -864,6 +866,15 @@ export function setVoiceConfig(updates) {
     if (key === 'videoVoiceDuckSensitivity') {
       const sensitivity = Number(val)
       if (Number.isFinite(sensitivity)) next.videoVoiceDuckSensitivity = Math.max(0.55, Math.min(1.60, sensitivity))
+      continue
+    }
+    if (key === 'videoVoicePreRollEnabled') {
+      next.videoVoicePreRollEnabled = val === true || trimmed === 'true'
+      continue
+    }
+    if (key === 'videoVoicePreRollMs') {
+      const ms = Number(val)
+      if (Number.isFinite(ms)) next.videoVoicePreRollMs = Math.max(800, Math.min(4000, Math.round(ms)))
       continue
     }
     if (key === 'aliyunApiKey' && trimmed && !isValidAliyunAsrKey(trimmed)) {

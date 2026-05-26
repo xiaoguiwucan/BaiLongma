@@ -58,6 +58,9 @@ const BARGEIN_THRESHOLD  = 0.09 // 振幅阈值（高于环境噪声和 AEC 残�
 // 4096 samples @ 16kHz = 256ms/块；保留 1500ms ≈ 6 块
 const BARGEIN_PRE_BUFFER_MS   = 1500
 const BARGEIN_MAX_CHUNKS      = Math.ceil(BARGEIN_PRE_BUFFER_MS * 16000 / 1000 / 4096)
+const MEDIA_PREROLL_DEFAULT_MS = 2600
+const MEDIA_PREROLL_MAX_MS     = 4000
+const MEDIA_PREROLL_CHUNK_MS   = 4096 * 1000 / 16000
 
 // ─── Duck 模式参数（两阶段检测：先压制音量再判断是否打断） ───
 // 检测到高振幅先 duck（降音量），持续高振幅才真正打断；冲击噪音消退后直接恢复音量
@@ -107,6 +110,8 @@ const VOICE_SPEAKER_THRESHOLD_KEY = 'bailongma-voice-speaker-threshold';
 const VOICE_VIDEO_DUCK_KEY = 'bailongma-voice-video-duck';
 const VOICE_VIDEO_AEC_KEY = 'bailongma-voice-video-aec';
 const VOICE_VIDEO_DUCK_SENSITIVITY_KEY = 'bailongma-voice-video-duck-sensitivity';
+const VOICE_VIDEO_PREROLL_ENABLED_KEY = 'bailongma-voice-video-preroll-enabled';
+const VOICE_VIDEO_PREROLL_MS_KEY = 'bailongma-voice-video-preroll-ms';
 
 // 从 localStorage 读取灵敏度阈值，支持运行时动态修改
 function getVoiceThreshold() {
@@ -206,8 +211,9 @@ export function initVoicePanel({
         if (mediaVoiceFrames >= 3 && now - lastMediaVoiceActivityAt > 900) {
           lastMediaVoiceActivityAt = now;
           mediaVoiceFrames = 0;
-          emitVoiceEvent(VOICE_EVENT_TYPES.MEDIA_DUCK, { phase: 'voice_activity', volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3 });
-          window.dispatchEvent(new CustomEvent('bailongma:voice-activity', { detail: { volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3 } }));
+          openMediaAsrGate({ volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3 });
+          emitVoiceEvent(VOICE_EVENT_TYPES.MEDIA_DUCK, { phase: 'voice_activity', volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3, preRollMs: getMediaPreRollMs(), preRollChunks: mediaPreRollBuffer.length });
+          window.dispatchEvent(new CustomEvent('bailongma:voice-activity', { detail: { volume: mediaVoiceLastVol, threshold: mediaDuckThreshold, confirmedFrames: 3, preRollMs: getMediaPreRollMs(), preRollChunks: mediaPreRollBuffer.length } }));
         }
       }
 
@@ -350,6 +356,9 @@ export function initVoicePanel({
   let lastMediaVoiceActivityAt = 0;
   let mediaVoiceFrames = 0;
   let mediaVoiceLastVol = 0;
+  let mediaAsrGateOpenUntil = 0;
+  let mediaPreRollBuffer = [];
+  let mediaPreRollLastFlushAt = 0;
   let ttsStartTime = 0;
   let bargeinFrames = 0;
   let nearFieldGate = {
@@ -376,6 +385,58 @@ export function initVoicePanel({
     };
     window.bailongmaVoiceMicMonitor = { ...micMonitor };
     window.dispatchEvent(new CustomEvent('bailongma:mic-level', { detail: { ...micMonitor } }));
+  }
+
+
+  function mediaPreRollEnabled() {
+    return localStorage.getItem(VOICE_VIDEO_PREROLL_ENABLED_KEY) !== 'false';
+  }
+
+  function getMediaPreRollMs() {
+    return Math.max(800, Math.min(MEDIA_PREROLL_MAX_MS, Number(localStorage.getItem(VOICE_VIDEO_PREROLL_MS_KEY) || MEDIA_PREROLL_DEFAULT_MS) || MEDIA_PREROLL_DEFAULT_MS));
+  }
+
+  function getMediaPreRollMaxChunks() {
+    return Math.max(1, Math.ceil(getMediaPreRollMs() / MEDIA_PREROLL_CHUNK_MS));
+  }
+
+  function appendMediaPreRollChunk(chunk) {
+    if (!mediaModeActive || !mediaPreRollEnabled()) return;
+    mediaPreRollBuffer.push(chunk.slice ? chunk.slice() : new Int16Array(chunk));
+    const maxChunks = getMediaPreRollMaxChunks();
+    while (mediaPreRollBuffer.length > maxChunks) mediaPreRollBuffer.shift();
+  }
+
+  function shouldGateMediaAsr() {
+    return mediaModeActive && mediaPreRollEnabled() && localStorage.getItem(VOICE_VIDEO_DUCK_KEY) !== 'false';
+  }
+
+  function openMediaAsrGate({ volume = 0, threshold = 0, confirmedFrames = 0 } = {}) {
+    if (!shouldGateMediaAsr()) return;
+    const holdMs = Math.max(1200, Math.min(10000, Number(localStorage.getItem('bailongma-voice-video-duck-hold') || 2600) || 2600));
+    const now = Date.now();
+    mediaAsrGateOpenUntil = Math.max(mediaAsrGateOpenUntil, now + holdMs);
+    const canFlush = cloudWs && cloudWs.readyState === WebSocket.OPEN && now - mediaPreRollLastFlushAt > 650;
+    let flushedChunks = 0;
+    if (canFlush && mediaPreRollBuffer.length) {
+      const chunks = mediaPreRollBuffer.slice();
+      mediaPreRollLastFlushAt = now;
+      for (const chunk of chunks) {
+        if (cloudWs?.readyState === WebSocket.OPEN) {
+          try { cloudWs.send(chunk.buffer.slice(0)); flushedChunks += 1; } catch {}
+        }
+      }
+    }
+    emitVoiceEvent(VOICE_EVENT_TYPES.MEDIA_DUCK, {
+      phase: 'asr_gate_open',
+      volume,
+      threshold,
+      confirmedFrames,
+      preRollMs: getMediaPreRollMs(),
+      preRollChunks: mediaPreRollBuffer.length,
+      flushedChunks,
+      holdMs,
+    });
   }
   // Cloud 专用
   let cloudAudioCtx = null;
@@ -755,12 +816,14 @@ export function initVoicePanel({
       for (let i = 0; i < f32.length; i++) {
         i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
       }
+      appendMediaPreRollChunk(i16);
       if (bargeinBuffering) {
         // TTS 播放中：写入环形缓冲而非发送，供打断时回放
         bargeinBuffer.push(i16);
         if (bargeinBuffer.length > BARGEIN_MAX_CHUNKS) bargeinBuffer.shift();
         return;
       }
+      if (shouldGateMediaAsr() && Date.now() > mediaAsrGateOpenUntil) return;
       if (!cloudWs || cloudWs.readyState !== WebSocket.OPEN) return;
       cloudWs.send(i16.buffer);
     };
@@ -817,6 +880,8 @@ export function initVoicePanel({
     btn?.classList.toggle('active', Boolean(keepIntent && userWantedMic));
     bargeinBuffer = [];
     bargeinBuffering = false;
+    mediaAsrGateOpenUntil = 0;
+    mediaPreRollBuffer = [];
     stopCloudStream();
     stopMic();
     setStatus(VOICE_STATES.IDLE, { reason: reason || 'voice input stopped' });
@@ -849,6 +914,8 @@ export function initVoicePanel({
     const bufferedChunks = bargeinBuffer.slice();
     bargeinBuffer = [];
     bargeinBuffering = false;
+    mediaAsrGateOpenUntil = 0;
+    mediaPreRollBuffer = [];
 
     if (micActive && micData && cloudProcessor) {
       // TTS 模式：ScriptProcessor 仍存活，只需重连 WebSocket
@@ -996,6 +1063,8 @@ export function initVoicePanel({
 
   function handleMediaModeInactive() {
     mediaModeActive = false;
+    mediaAsrGateOpenUntil = 0;
+    mediaPreRollBuffer = [];
     if (mediaStartedMic) {
       mediaStartedMic = false;
       stopVoiceInput({ keepIntent: false, reason: '视频结束，关闭自动监听' });
@@ -1037,6 +1106,7 @@ export function initVoicePanel({
     pttStart,
     pttEnd,
     getMicMonitor: () => ({ ...micMonitor }),
+    getMediaPreRollState: () => ({ enabled: mediaPreRollEnabled(), preRollMs: getMediaPreRollMs(), chunks: mediaPreRollBuffer.length, gateOpen: Date.now() <= mediaAsrGateOpenUntil, gateRemainingMs: Math.max(0, mediaAsrGateOpenUntil - Date.now()) }),
     resetMicMonitor: () => { micMonitor = { current: 0, peak: 0, noiseFloor: getAmbientThreshold(), threshold: getVoiceThreshold(), active: micActive, updatedAt: Date.now() }; window.bailongmaVoiceMicMonitor = { ...micMonitor }; window.dispatchEvent(new CustomEvent('bailongma:mic-level', { detail: { ...micMonitor } })); },
   };
 

@@ -657,10 +657,19 @@ const createSettingsModal = () => `
               <span id="voice-video-duck-sensitivity-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">1.00</span>
             </div>
             <div class="settings-row">
+              <label class="settings-label" for="voice-video-preroll">视频/音乐预录音缓存</label>
+              <input id="voice-video-preroll" type="checkbox" checked style="width:auto;flex:none;">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-video-preroll-ms">预录音时长</label>
+              <input type="range" id="voice-video-preroll-ms" min="800" max="4000" step="100" value="2600" style="flex:1;cursor:pointer;">
+              <span id="voice-video-preroll-ms-val" style="min-width:3.5em;text-align:right;color:var(--ink2);font-size:13px;">2.6s</span>
+            </div>
+            <div class="settings-row">
               <label class="settings-label">当前降音状态</label>
               <span class="settings-config-info" id="voice-media-duck-status">空闲</span>
             </div>
-            <p class="settings-hint">本地 mp4 可直接降音量；YouTube 会尝试通过播放器 API 降音量；Bilibili 等跨域播放器无法稳定调音量时会短暂停/恢复。v2.1.214 起会连续确认近场声音后再降音，避免爆炸声/鼓点单帧误触发。</p>
+            <p class="settings-hint">本地 mp4 可直接降音量；YouTube 会尝试通过播放器 API 降音量；Bilibili 等跨域播放器无法稳定调音量时会短暂停/恢复。开启预录音缓存后，视频/音乐播放时会保留最近 0.8–4 秒麦克风音频，检测到近场人声后连同开头一起送入 ASR，减少被视频声盖住时丢掉唤醒词前几个字。</p>
           </div>
           <div class="settings-section">
             <div class="settings-section-label">语音灵敏度</div>
