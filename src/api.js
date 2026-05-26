@@ -134,6 +134,12 @@ function pushWakeTuningRecord(record) {
   persistWakeTuningHistory()
   return wakeTuningHistory[wakeTuningHistory.length - 1]
 }
+function clearWakeTuningHistory() {
+  const cleared = wakeTuningHistory.length
+  wakeTuningHistory.splice(0, wakeTuningHistory.length)
+  persistWakeTuningHistory()
+  return cleared
+}
 
 
 // card.action signals that are lifecycle/system-internal — stored in DB for passive injector use only, not pushed to the agent queue
@@ -1316,6 +1322,13 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       const id = url.searchParams.get('id') || ''
       const items = id ? wakeTuningHistory.filter(item => item.id === id) : wakeTuningHistory.filter(item => item.reason !== 'rollback').slice(-6)
       jsonResponse(res, 200, { ok: true, evaluations: items.map(item => ({ id: item.id, label: item.label, reason: item.reason, at: item.at, evaluation: enrichWakeTuningEvaluation(item) })) })
+      return
+    }
+
+    // POST /voice/wake/tuning/clear — clear persisted tuning history without changing voice settings
+    if (req.method === 'POST' && url.pathname === '/voice/wake/tuning/clear') {
+      const cleared = clearWakeTuningHistory()
+      jsonResponse(res, 200, { ok: true, cleared, history: publicWakeTuningHistory(), voice: getVoiceConfig() })
       return
     }
 

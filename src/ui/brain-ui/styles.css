@@ -4516,6 +4516,20 @@ body.person-card-mode .person-card-panel,
   border-color: rgba(211,152,114,0.65);
   background: rgba(211,152,114,0.14);
 }
+.voice-wake-tuning-clear {
+  flex: none;
+  border: 1px solid rgba(148,163,184,0.30);
+  border-radius: 999px;
+  padding: 3px 8px;
+  color: var(--dim);
+  background: rgba(148,163,184,0.06);
+  cursor: pointer;
+  font-size: 10px;
+}
+.voice-wake-tuning-clear:hover {
+  border-color: rgba(148,163,184,0.55);
+  color: var(--ink2);
+}
 
 .voice-wake-tuning-verdict {
   border: 1px solid rgba(130,210,255,0.28);

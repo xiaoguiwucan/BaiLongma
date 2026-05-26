@@ -2071,11 +2071,12 @@ function initVoiceClientsPanel() {
       <div class="voice-wake-auto-panel" id="voice-wake-auto-panel"></div>
       ${safeActions.length ? `<div class="voice-wake-tuning-title">可一键应用的调参建议</div>
       ${safeActions.map((item, index) => `<button class="voice-wake-tuning-action" data-index="${index}" type="button"><strong>${escapeFocusText(item.label || item.reason)}</strong><span>${escapeFocusText(item.reason || "")}</span></button>`).join("")}` : ""}
-      ${latest ? `<div class="voice-wake-tuning-history"><span>最近调参：${escapeFocusText(latest.label || latest.reason || latest.id)}</span><span class="voice-wake-tuning-verdict voice-wake-tuning-verdict-${escapeFocusText(latest.evaluation?.advice?.level || latest.evaluation?.verdict || "pending")}">${escapeFocusText(latest.evaluation?.verdict || "pending")}</span><button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">回滚</button></div>${renderVoiceTuningDiffChips(latest)}${latest.evaluation ? `<div class="voice-wake-tuning-eval"><span>应用前拒绝 ${escapeFocusText(latest.evaluation.before?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.before?.wakeAccepted ?? 0)}</span><span>应用后拒绝 ${escapeFocusText(latest.evaluation.after?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.after?.wakeAccepted ?? 0)}</span><span>声纹拒绝 ${escapeFocusText(latest.evaluation.before?.speakerRejected ?? 0)} → ${escapeFocusText(latest.evaluation.after?.speakerRejected ?? 0)}</span></div><div class="voice-wake-tuning-advice voice-wake-tuning-advice-${escapeFocusText(latest.evaluation.advice?.level || "pending")}"><span>${escapeFocusText(latest.evaluation.advice?.text || "继续观察调参效果。")}</span>${latest.evaluation.advice?.action === "rollback" ? `<button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">建议回滚</button>` : ""}</div>` : ""}` : ""}`;
+      ${latest ? `<div class="voice-wake-tuning-history"><span>最近调参：${escapeFocusText(latest.label || latest.reason || latest.id)}</span><span class="voice-wake-tuning-verdict voice-wake-tuning-verdict-${escapeFocusText(latest.evaluation?.advice?.level || latest.evaluation?.verdict || "pending")}">${escapeFocusText(latest.evaluation?.verdict || "pending")}</span><button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">回滚</button><button class="voice-wake-tuning-clear" type="button">清空历史</button></div>${renderVoiceTuningDiffChips(latest)}${latest.evaluation ? `<div class="voice-wake-tuning-eval"><span>应用前拒绝 ${escapeFocusText(latest.evaluation.before?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.before?.wakeAccepted ?? 0)}</span><span>应用后拒绝 ${escapeFocusText(latest.evaluation.after?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.after?.wakeAccepted ?? 0)}</span><span>声纹拒绝 ${escapeFocusText(latest.evaluation.before?.speakerRejected ?? 0)} → ${escapeFocusText(latest.evaluation.after?.speakerRejected ?? 0)}</span></div><div class="voice-wake-tuning-advice voice-wake-tuning-advice-${escapeFocusText(latest.evaluation.advice?.level || "pending")}"><span>${escapeFocusText(latest.evaluation.advice?.text || "继续观察调参效果。")}</span>${latest.evaluation.advice?.action === "rollback" ? `<button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">建议回滚</button>` : ""}</div>` : ""}` : ""}`;
     host.querySelectorAll(".voice-wake-tuning-action").forEach(btn => {
       btn.addEventListener("click", () => applyWakeTuningAction(Number(btn.dataset.index || -1)));
     });
     host.querySelector(".voice-wake-tuning-rollback")?.addEventListener("click", (event) => rollbackWakeTuning(event.currentTarget?.dataset?.id || ""));
+    host.querySelector(".voice-wake-tuning-clear")?.addEventListener("click", () => clearWakeTuningHistory());
     refreshWakeAutoTuning();
   }
 
@@ -2199,6 +2200,19 @@ function initVoiceClientsPanel() {
       refreshVoiceLinkSummary({ quiet: true });
     } catch (err) {
       if (feedbackEl) feedbackEl.textContent = `回滚失败：${err.message || err}`;
+    }
+  }
+
+  async function clearWakeTuningHistory() {
+    if (feedbackEl) feedbackEl.textContent = "清空调参历史中…";
+    try {
+      const res = await fetch(`${API}/voice/wake/tuning/clear`, { method: "POST" });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      if (feedbackEl) feedbackEl.textContent = `已清空 ${data.cleared || 0} 条调参历史`;
+      refreshVoiceLinkSummary({ quiet: true });
+    } catch (err) {
+      if (feedbackEl) feedbackEl.textContent = `清空失败：${err.message || err}`;
     }
   }
 

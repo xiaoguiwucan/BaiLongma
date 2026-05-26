@@ -286,3 +286,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-config smoke coverage for trimming and metadata persistence.
 - [x] Verify syntax plus voice-config smoke suite.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 29: Clear persisted tuning history
+- [x] Add backend `POST /voice/wake/tuning/clear` endpoint.
+- [x] Clear both in-memory and persisted `wakeTuningHistory`.
+- [x] Return cleared record count and empty public history.
+- [x] Add Brain UI “清空历史” action when tuning history exists.
+- [x] Refresh the tuning panel after clearing history without changing current voice settings.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

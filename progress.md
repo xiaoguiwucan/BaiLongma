@@ -256,3 +256,12 @@
 - Verification passed: syntax checks for config/API/voice-config smoke script; `npm run smoke:voice-config` 25/25.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Added a safe way to clear persisted voice tuning history without changing current voice settings.
+- Added backend `POST /voice/wake/tuning/clear`, which clears in-memory and persisted `wakeTuningHistory` and returns the cleared count.
+- Brain UI tuning history now shows a “清空历史” action next to rollback when tuning history exists.
+- Clearing history refreshes the voice link summary and removes rollback/history controls from the tuning panel while keeping current voice settings intact.
+- Extended `smoke:voice-events` to 65/65 checks for the clear-history endpoint.
+- Extended `smoke:brain-ui` to verify the clear-history button, feedback, and post-clear UI state.
+- Verification passed: syntax checks for API, Brain UI app, and smoke scripts; `npm run smoke:voice-events` 65/65; `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

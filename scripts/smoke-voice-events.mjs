@@ -312,6 +312,8 @@ try {
     body: JSON.stringify({ id: applyTuning.record.id }),
   }).then(r => r.json())
   assert(rollbackTuning.ok === true && rollbackTuning.rolledBack === applyTuning.record.id && rollbackTuning.record?.rollbackOf === applyTuning.record.id, 'wake tuning rollback endpoint restores previous settings', JSON.stringify(rollbackTuning))
+  const clearTuning = await fetch(`${API}/voice/wake/tuning/clear`, { method: 'POST' }).then(r => r.json())
+  assert(clearTuning.ok === true && clearTuning.cleared >= 2 && Array.isArray(clearTuning.history) && clearTuning.history.length === 0, 'wake tuning clear endpoint removes persisted history', JSON.stringify(clearTuning))
   assert(publishMessages.some(msg => msg.type === 'voice_event' && msg.event?.type === 'asr:final'), 'publish broadcasts raw voice_event', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'stt' && msg.state === 'final' && msg.text === '烟雾测试'), 'publish maps asr:final to Xiaozhi-style stt final', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'wake' && msg.state === 'accepted' && msg.word === '小白龙'), 'publish maps wake:accepted to Xiaozhi-style wake accepted', JSON.stringify(publishMessages))
