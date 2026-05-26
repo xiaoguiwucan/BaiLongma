@@ -326,3 +326,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage for preset metadata and UI badges.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 33: Local voice readiness doctor
+- [x] Add backend `GET /voice/local/doctor` for local ASR readiness, wake guard, video guard, speaker gate, and recent loop checks.
+- [x] Include local voice server status, persisted voice config, compact recent summary, checks, and next actions.
+- [x] Add Brain UI “本地语音体检” panel below local ASR model/profile settings.
+- [x] Render provider/model/process/wake/video/speaker/recent-loop checks with human next actions.
+- [x] Add manual refresh for the local voice doctor.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

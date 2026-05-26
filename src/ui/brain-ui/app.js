@@ -2885,7 +2885,37 @@ function initTTSSettings() {
 
   const voiceProviderSelect = document.getElementById("voice-provider-select");
   if (voiceProviderSelect) {
-    voiceProviderSelect.addEventListener("change", () => applyVoiceProviderUI(voiceProviderSelect.value));
+    voiceProviderSelect.addEventListener("change", () => {
+      applyVoiceProviderUI(voiceProviderSelect.value);
+      refreshVoiceLocalDoctor();
+    });
+  }
+  document.getElementById("voice-local-doctor-refresh")?.addEventListener("click", refreshVoiceLocalDoctor);
+
+
+  function renderVoiceLocalDoctor(doctor = {}) {
+    const checks = Array.isArray(doctor.checks) ? doctor.checks : [];
+    if (!checks.length) return '<div class="voice-clients-empty">暂无本地语音体检数据。</div>';
+    return checks.map(item => `<div class="voice-local-doctor-item voice-local-doctor-item-${escapeFocusText(item.status || "pending")}">
+      <span>${escapeFocusText(item.status || "pending")}</span>
+      <div><strong>${escapeFocusText(item.label || item.id || "检查项")}</strong><em>${escapeFocusText(item.detail || "")}${item.action ? ` · ${escapeFocusText(item.action)}` : ""}</em></div>
+    </div>`).join("");
+  }
+
+  async function refreshVoiceLocalDoctor() {
+    const panel = document.getElementById("voice-local-doctor");
+    const list = document.getElementById("voice-local-doctor-list");
+    if (!panel || !list) return;
+    panel.hidden = false;
+    list.innerHTML = '<div class="voice-clients-empty">正在检查本地语音服务…</div>';
+    try {
+      const resp = await fetch(`${API}/voice/local/doctor?windowMs=60000`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "本地语音体检失败");
+      list.innerHTML = renderVoiceLocalDoctor(data);
+    } catch (err) {
+      list.innerHTML = `<div class="voice-clients-error">${escapeFocusText(err?.message || "本地语音体检失败")}</div>`;
+    }
   }
 
   async function loadVoiceSettings() {
@@ -3013,6 +3043,7 @@ function initTTSSettings() {
     if (voiceDebugPanel) voiceDebugPanel.style.display = debugEnabled ? "grid" : "none";
 
     applyVoiceProviderUI(savedProvider);
+    refreshVoiceLocalDoctor();
   }
 
   function hydrateVoiceControlsFromConfig(voice = {}) {

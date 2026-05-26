@@ -288,3 +288,9 @@
 - Extended `smoke:voice-events` to verify preset metadata and apply metadata.
 - Extended `smoke:brain-ui` to verify the recommendation hint and current-card badge after applying a preset.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added a local voice readiness doctor so users can see why local voice is not ready before testing wake/speaker/video scenarios.
+- New backend `GET /voice/local/doctor` reports local ASR provider/model/process status, wake protection, video anti-interference, speaker gate, recent wake/ASR/TTS loop metrics, and human next actions.
+- Brain UI voice settings now show “本地语音体检” under local ASR settings, including provider, process, video guard, speaker gate, and recent loop checks.
+- Added a manual “刷新体检” button and automatic refresh when voice settings load or provider changes.
+- Extended `smoke:voice-events` for the doctor endpoint and `smoke:brain-ui` for rendering readiness checks.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

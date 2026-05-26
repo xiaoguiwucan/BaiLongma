@@ -487,6 +487,19 @@ new WebSocket(url)`,
       return
     }
 
+    if (url.pathname === '/voice/local/doctor') {
+      sendJson(res, {
+        ok: true,
+        level: 'warn',
+        checks: [
+          { id: 'provider', label: '识别服务商', status: 'ok', detail: '当前使用本地 ASR，音频不会上传云端。', action: '保持本地模式。' },
+          { id: 'process', label: '本地 ASR 进程', status: 'warn', detail: 'stopped：本地语音服务未运行', action: '点击启动本地语音服务。' },
+          { id: 'video_guard', label: '视频抗干扰', status: 'warn', detail: '视频播放场景下仍有保护项未开启。', action: '应用“视频抗干扰”预设。' },
+        ],
+      })
+      return
+    }
+
     if (url.pathname === '/voice/local/start' || url.pathname === '/voice/local/status') {
       sendJson(res, { ok: true, running: false, provider: 'local', model: 'sensevoice-small' })
       return
@@ -625,6 +638,8 @@ try {
   if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35') throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
   if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
+  const localDoctorText = await page.textContent('#voice-local-doctor-list')
+  if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行')) throw new Error('local voice doctor did not render readiness checks')
   await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰') && document.querySelector('#voice-preset-list')?.textContent.includes('建议：视频抗干扰'), null, { timeout: 5000 })
   await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
   await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))

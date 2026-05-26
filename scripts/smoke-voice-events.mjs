@@ -91,6 +91,8 @@ try {
   assert(onboarding.messages?.clientHello?.type === 'client:hello' && onboarding.messages?.subscribe?.binaryAudio === true, 'onboarding endpoint exposes client hello and binary subscribe examples', JSON.stringify(onboarding.messages))
   const summaryBefore = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
   assert(summaryBefore.ok === true && summaryBefore.summary?.level === 'offline' && summaryBefore.summary?.issues?.includes('no_clients'), 'summary endpoint reports offline before clients connect', JSON.stringify(summaryBefore))
+  const localDoctorBefore = await fetch(`${API}/voice/local/doctor?windowMs=60000`).then(r => r.json())
+  assert(localDoctorBefore.ok === true && localDoctorBefore.checks?.some(item => item.id === 'provider') && localDoctorBefore.checks?.some(item => item.id === 'process') && Array.isArray(localDoctorBefore.nextActions), 'local voice doctor endpoint exposes readiness checks and next actions', JSON.stringify(localDoctorBefore))
   const checkBefore = await fetch(`${API}/voice/events/check?windowMs=60000`).then(r => r.json())
   assert(checkBefore.service === 'bailongma.voice.events' && checkBefore.steps?.some(step => step.id === 'clients') && checkBefore.nextActions?.length >= 1 && checkBefore.commands?.local?.includes('npm run voice:events'), 'check endpoint exposes one-click self-check steps and onboarding command', JSON.stringify(checkBefore))
   const packageBefore = await fetch(`${API}/voice/events/package?clientId=esp32-smoke&device=xiaozhi-esp32&platform=esp32`).then(r => r.json())

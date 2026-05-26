@@ -438,6 +438,13 @@ const createSettingsModal = () => `
                   <option value="accuracy">高精度：优先准确率</option>
                 </select>
               </div>
+              <div class="voice-local-doctor" id="voice-local-doctor" hidden>
+                <div class="voice-local-doctor-head">
+                  <strong>本地语音体检</strong>
+                  <button class="settings-save-btn" id="voice-local-doctor-refresh" type="button">刷新体检</button>
+                </div>
+                <div id="voice-local-doctor-list" class="voice-local-doctor-list"></div>
+              </div>
               <p class="settings-hint">v2.1.215 起 ASR 被抽象为 Provider + Profile。当前默认仍是本地 SenseVoiceSmall；识别模式会随本地服务状态一起记录，后续可接 Sherpa/FunASR/更多中文模型。</p>
             </div>
             <div id="voice-cred-aliyun">

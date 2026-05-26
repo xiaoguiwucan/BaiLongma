@@ -4721,3 +4721,54 @@ body.person-card-mode .person-card-panel,
   font-size: 11px;
   background: rgba(0,0,0,0.12);
 }
+
+
+.voice-local-doctor {
+  display: grid;
+  gap: 10px;
+  margin: 12px 0;
+  padding: 12px;
+  border: 1px solid rgba(130,210,255,0.18);
+  border-radius: 14px;
+  background: rgba(130,210,255,0.045);
+}
+.voice-local-doctor-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.voice-local-doctor-head strong { color: var(--ink); font-size: 13px; }
+.voice-local-doctor-list { display: grid; gap: 7px; }
+.voice-local-doctor-item {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.12);
+}
+.voice-local-doctor-item span {
+  align-self: start;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: var(--dim);
+  text-align: center;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  background: rgba(255,255,255,0.06);
+}
+.voice-local-doctor-item strong { color: var(--ink); font-size: 12px; }
+.voice-local-doctor-item em {
+  display: block;
+  margin-top: 3px;
+  color: var(--ink2);
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.5;
+}
+.voice-local-doctor-item-ok span { color: #8ff0b3; background: rgba(143,240,179,0.08); }
+.voice-local-doctor-item-warn span,
+.voice-local-doctor-item-error span { color: var(--warm); background: rgba(211,152,114,0.10); }
+.voice-local-doctor-item-pending span { color: var(--cool); background: rgba(130,210,255,0.08); }

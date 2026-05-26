@@ -201,6 +201,81 @@ function buildVoiceStabilityPresetResponse({ windowMs = 60000 } = {}) {
   }
 }
 
+
+function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
+  const voice = getVoiceConfig()
+  const local = getVoiceStatus()
+  let summary = null
+  try { summary = getVoiceEventLinkSummary({ windowMs }) } catch (_) {}
+  const checks = []
+  const add = (id, label, status, detail, action = '') => checks.push({ id, label, status, detail, action })
+  add(
+    'provider',
+    '识别服务商',
+    voice.asrProvider === 'local' ? 'ok' : 'warn',
+    voice.asrProvider === 'local' ? '当前使用本地 ASR，音频不会上传云端。' : `当前服务商是 ${voice.asrProvider || 'unknown'}，本地声纹/离线识别不会作为主路径。`,
+    voice.asrProvider === 'local' ? '保持本地模式。' : '在设置中把“服务商”切换为“本地模型”。',
+  )
+  add(
+    'engine',
+    '本地模型',
+    voice.localAsrModel === 'sensevoice-small' ? 'ok' : 'warn',
+    voice.localAsrModel === 'sensevoice-small' ? 'SenseVoiceSmall 已作为中文优先模型。' : `当前本地模型是 ${voice.localAsrModel || voice.whisperModel || 'unknown'}。`,
+    voice.localAsrModel === 'sensevoice-small' ? '保持 SenseVoiceSmall。' : '建议切到 SenseVoiceSmall，Whisper 仅作为备用。',
+  )
+  add(
+    'process',
+    '本地 ASR 进程',
+    local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn',
+    local.status === 'running' ? `运行中：${local.engine || 'engine'} / ${local.model || 'model'} / port ${local.port}` : `${local.status || 'stopped'}：${local.message || '本地语音服务未运行'}`,
+    local.status === 'running' ? '可以开始麦克风测试。' : '点击“启动本地语音服务”或重新保存语音设置后再试。',
+  )
+  add(
+    'wake',
+    '唤醒保护',
+    voice.wakeWordEnabled === false ? 'warn' : 'ok',
+    voice.wakeWordEnabled === false ? '唤醒词已关闭，视频/他人说话更容易误触发输入。' : `唤醒词开启，模式 ${voice.wakeMode || 'strict'}，阈值 ${voice.wakeConfidenceThreshold ?? '—'}。`,
+    voice.wakeWordEnabled === false ? '开启唤醒词，并使用严格模式。' : '说“龙马，具体指令”进行测试。',
+  )
+  const videoOk = voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled
+  add(
+    'video_guard',
+    '视频抗干扰',
+    videoOk ? 'ok' : 'warn',
+    videoOk ? '视频降音、按住说话、AEC 都已开启。' : '视频播放场景下仍有保护项未开启。',
+    videoOk ? '播放视频时优先使用唤醒词，也可按住空格说话。' : '应用“视频抗干扰”预设，或手动开启视频降音/PTT/AEC。',
+  )
+  const speakerConfiguredHint = voice.speakerVerificationEnabled ? '已启用，只响应我的声音。' : '未启用，任何清晰唤醒词都可能触发。'
+  add(
+    'speaker_gate',
+    '声纹门控',
+    voice.speakerVerificationEnabled ? 'ok' : 'info',
+    `${speakerConfiguredHint} 当前严格度 ${voice.speakerThreshold ?? '—'}。`,
+    voice.speakerVerificationEnabled ? '如果本人被拒绝，降低严格度或重新录入。' : '如需只响应你本人，请录入声纹并开启“只响应我的声音”。',
+  )
+  if (summary) {
+    const recent = summary.recent || {}
+    add(
+      'recent_loop',
+      '最近闭环',
+      recent.wakeAccepted > 0 && recent.asrFinal > 0 ? 'ok' : recent.wakeRejected > 0 || recent.speakerRejected > 0 ? 'warn' : 'pending',
+      `wake ${recent.wakeAccepted || 0}/${recent.wakeRejected || 0} · speaker拒绝 ${recent.speakerRejected || 0} · asrFinal ${recent.asrFinal || 0} · tts ${recent.ttsStart || 0}/${recent.ttsStop || 0}`,
+      '按一次唤醒词并说完整指令，然后观察这里是否出现 wake/asr/tts。',
+    )
+  }
+  const severity = checks.some(item => item.status === 'warn' || item.status === 'error') ? 'warn' : checks.some(item => item.status === 'pending') ? 'pending' : 'ok'
+  return {
+    ok: true,
+    level: severity,
+    checkedAt: Date.now(),
+    voice,
+    local,
+    summary: summary ? { level: summary.level, recent: summary.recent, issues: summary.issues, suggestions: summary.suggestions } : null,
+    checks,
+    nextActions: checks.filter(item => item.status !== 'ok').map(item => ({ id: item.id, label: item.label, action: item.action })).slice(0, 5),
+  }
+}
+
 const wakeTuningHistory = getVoiceConfig().wakeTuningHistory || []
 
 
@@ -1617,6 +1692,14 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           jsonResponse(res, 400, { ok: false, error: err.message })
         }
       })
+      return
+    }
+
+
+    // GET /voice/local/doctor — local voice readiness and human troubleshooting checklist
+    if (req.method === 'GET' && url.pathname === '/voice/local/doctor') {
+      const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))
+      jsonResponse(res, 200, buildVoiceLocalDoctor({ windowMs }))
       return
     }
 
