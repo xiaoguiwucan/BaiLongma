@@ -1772,6 +1772,31 @@ function initVoiceClientsPanel() {
     return `npm run voice:events -- listen --url ws://127.0.0.1:3721${wsPath} --audio --binary --client-id mac-debug --device mac --platform ${navigator.platform || "mac"} --capability binary_audio --capability wake --capability display`;
   }
 
+
+  function likelyLanHost() {
+    const host = window.location?.hostname || "127.0.0.1";
+    if (!host || host === "localhost") return "<Mac局域网IP>";
+    if (host === "127.0.0.1" || host === "::1") return "<Mac局域网IP>";
+    return host;
+  }
+
+  function voiceClientLanCommand(protocol = latestProtocol || {}) {
+    const wsPath = protocol.endpoints?.websocket || "/voice/events";
+    return `npm run voice:events -- listen --url ws://${likelyLanHost()}:3721${wsPath} --audio --binary --client-id esp32-test --device xiaozhi-esp32 --platform esp32 --capability binary_audio --capability wake --capability display`;
+  }
+
+  function renderDeviceHandshakeExample() {
+    return JSON.stringify({
+      type: "client:hello",
+      clientId: "esp32-living-room",
+      device: "xiaozhi-esp32",
+      app: "bailongma-bridge",
+      version: "0.1.0",
+      platform: "esp32",
+      capabilities: ["binary_audio", "tts_speak", "wake", "display"],
+    }, null, 2);
+  }
+
   function renderProtocolDiagnostics(protocol = {}) {
     if (!diagnosticsEl) return;
     latestProtocol = protocol;
@@ -1779,6 +1804,8 @@ function initVoiceClientsPanel() {
     const caps = Array.isArray(protocol.capabilities) ? protocol.capabilities : [];
     const modes = protocol.negotiation?.audioModes || [];
     const command = voiceClientConnectCommand(protocol);
+    const lanCommand = voiceClientLanCommand(protocol);
+    const handshake = renderDeviceHandshakeExample();
     diagnosticsEl.hidden = false;
     diagnosticsEl.innerHTML = `
       <div class="voice-diagnostic-line"><span>WebSocket</span><code>${escapeFocusText(endpoints.websocket || "—")}</code></div>
@@ -1791,7 +1818,11 @@ function initVoiceClientsPanel() {
       guideEl.innerHTML = `
         <div class="voice-guide-title">本机调试接入命令</div>
         <code>${escapeFocusText(command)}</code>
-        <p>先复制运行该命令，再回到这里查看客户端是否出现、是否订阅音频、是否协商为 binary。</p>
+        <div class="voice-guide-title voice-guide-title-spaced">局域网/设备接入命令</div>
+        <code>${escapeFocusText(lanCommand)}</code>
+        <div class="voice-guide-title voice-guide-title-spaced">设备握手 JSON</div>
+        <code>${escapeFocusText(handshake)}</code>
+        <p>局域网设备需用 Mac 的局域网 IP 替换占位符；如启用 token，连接 URL 追加 <code>?token=...</code>。设备连上后先发送 client:hello，再根据 negotiated.audioMode 决定 subscribe 参数。</p>
       `;
     }
   }

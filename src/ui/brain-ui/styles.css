@@ -4058,3 +4058,10 @@ body.person-card-mode .person-card-panel,
   font-size: 10px;
   line-height: 1.5;
 }
+.voice-guide-title-spaced { margin-top: 10px; }
+.voice-clients-guide p code {
+  display: inline;
+  padding: 1px 4px;
+  border-radius: 4px;
+  font-size: 9px;
+}

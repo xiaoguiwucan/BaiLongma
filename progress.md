@@ -38,3 +38,11 @@
 - Verification passed: `npm run smoke:brain-ui`.
 - Verification passed: `node --check src/ui/brain-ui/app.js`, `node --check src/ui/brain-ui/app-shell.js`, `node --check scripts/smoke-brain-ui.mjs`.
 - Verification passed: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.
+- Expanded the Brain UI onboarding guide from local-only CLI debugging to LAN/device onboarding.
+- Added generated LAN command with `<Mac局域网IP>` placeholder for ESP32/Xiaozhi-style devices.
+- Added device `client:hello` JSON example showing clientId, device, app, version, platform, and capabilities.
+- Added guidance that LAN devices may need `?token=...`, should send `client:hello` first, and then use `negotiated.audioMode` to choose subscribe parameters.
+- Extended `smoke-brain-ui` assertions to verify LAN command and handshake example render.
+- Verification passed: `npm run smoke:brain-ui`.
+- Verification passed: `node --check src/ui/brain-ui/app-shell.js`, `node --check src/ui/brain-ui/app.js`, `node --check scripts/smoke-brain-ui.mjs`.
+- Verification passed: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.

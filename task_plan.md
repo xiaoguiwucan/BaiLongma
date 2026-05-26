@@ -61,3 +61,10 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add human guide block explaining the debug flow.
 - [x] Extend brain-ui smoke to assert the guide command is rendered.
 - [x] Verify brain-ui and voice event smoke suites.
+
+## Checkpoint 5: LAN/device onboarding guide
+- [x] Generate a LAN/ESP32 debug command with Mac LAN IP placeholder.
+- [x] Render a device `client:hello` JSON handshake example.
+- [x] Add guidance for token query string and negotiated audio mode.
+- [x] Extend brain-ui smoke to assert LAN command and handshake example.
+- [x] Verify brain-ui and voice event smoke suites.
