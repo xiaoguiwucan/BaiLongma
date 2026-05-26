@@ -289,6 +289,24 @@ new WebSocket(url)`,
       return
     }
 
+
+    if (url.pathname === '/voice/wake/tuning') {
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.wake.tuning',
+        current: { wakeMinCommandChars: 2, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true },
+        actions: [
+          { reason: 'command too short', label: '降低最短指令字数到 1 字', patch: { wakeMinCommandChars: 1 }, safe: true, advice: '降低最短指令字数' },
+        ],
+      })
+      return
+    }
+
+    if (url.pathname === '/voice/wake/tuning/apply') {
+      sendJson(res, { ok: true, applied: { wakeMinCommandChars: 1 }, voice: { wakeMinCommandChars: 1, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true } })
+      return
+    }
+
     if (url.pathname === '/settings/tts') {
       sendJson(res, {
         ok: true,
@@ -496,6 +514,9 @@ try {
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/check')) throw new Error('voice clients protocol diagnostics did not render check endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/package')) throw new Error('voice clients protocol diagnostics did not render package endpoint')
   if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('最短指令字数')) throw new Error('voice link summary did not render wake reject tuning advice')
+  await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数'))
+  await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))
   if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop') || !voiceClientSnapshot.history.includes('confidence:0.81')) throw new Error('voice events history timeline did not render recent events and wake guard meta')
   await page.evaluate(() => document.querySelector('#voice-link-check-btn')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-link-check')?.textContent.includes('一键语音链路自检'))

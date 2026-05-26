@@ -1,4 +1,4 @@
-import { estimateWakeConfidence, evaluateWakeGuard, normalizeWakeGuardConfig } from '../src/voice/wake-guard.js'
+import { buildWakeGuardTuningActions, estimateWakeConfidence, evaluateWakeGuard, normalizeWakeGuardConfig, wakeGuardPatchForReason } from '../src/voice/wake-guard.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -19,6 +19,10 @@ assert(evaluateWakeGuard({ accepted: true, text: '随便龙马', word: '龙马',
 assert(evaluateWakeGuard({ accepted: true, text: '龙马打开灯', word: '龙马', mode: 'strict', remainder: '打开灯', now: 2000, lastAcceptedAt: 1500, config: { confidenceThreshold: 0.50, cooldownMs: 1200 } }).reason === 'wake cooldown', 'rejects wake during cooldown')
 assert(evaluateWakeGuard({ accepted: true, text: '龙马打开灯', word: '龙马', mode: 'strict', remainder: '打开灯', speakerVerificationEnabled: true, speakerAccepted: false, config: { confidenceThreshold: 0.50, requireSpeakerWhenEnabled: true } }).reason === 'speaker verification required for wake', 'requires speaker acceptance when configured')
 assert(evaluateWakeGuard({ accepted: true, text: '龙马打开灯', word: '龙马', mode: 'strict', remainder: '打开灯', speakerVerificationEnabled: true, speakerAccepted: true, config: { confidenceThreshold: 0.50, requireSpeakerWhenEnabled: true } }).accepted === true, 'accepts wake after speaker acceptance')
+const lowConfidencePatch = wakeGuardPatchForReason('wake confidence too low', { wakeConfidenceThreshold: 0.72 })
+assert(lowConfidencePatch.patch.wakeConfidenceThreshold === 0.68, 'builds safe patch for low confidence wake')
+const tuningActions = buildWakeGuardTuningActions({ summary: { recent: { wakeRejectedDetails: [{ reason: 'command too short', advice: '降低最短指令字数' }] } }, current: { wakeMinCommandChars: 2 } })
+assert(tuningActions.length === 1 && tuningActions[0].patch.wakeMinCommandChars === 1, 'builds tuning actions from summary wake reject details')
 
 const failed = checks.filter(item => !item.ok)
 console.log(`\nWake guard smoke checks: ${checks.length - failed.length}/${checks.length} passed`)

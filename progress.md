@@ -134,3 +134,14 @@
 - Extended `smoke:brain-ui` to verify wake rejection metadata and tuning advice are rendered.
 - Verification passed: `npm run smoke:voice-events` 51/51, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 7/7, and `npm run smoke:voice-config` 8/8.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
+- Added safe one-click wake tuning actions based on recent wake rejection diagnostics.
+- Added `wakeGuardPatchForReason()` and `buildWakeGuardTuningActions()` to map reasons like command-too-short, low confidence, cooldown, speaker requirement, strict-prefix mismatch, and repeat suppression into bounded config patches.
+- Added backend `GET /voice/wake/tuning` to return current voice settings, recent summary, and safe tuning actions.
+- Added backend `POST /voice/wake/tuning/apply` to persist only whitelisted wake tuning fields through `setVoiceConfig()`.
+- Brain UI voice link summary now fetches tuning actions and renders one-click buttons such as “降低最短指令字数到 1 字”.
+- Applying a suggestion updates backend config, mirrors the saved values into localStorage, refreshes summary, and reports “唤醒调参已应用”.
+- Extended `smoke:wake-guard` to 9/9 for patch/action generation.
+- Extended `smoke:voice-events` to 53/53 for tuning suggestion and safe apply endpoints.
+- Extended `smoke:brain-ui` to verify tuning actions render and can be clicked/applied.
+- Verification passed: `npm run smoke:wake-guard` 9/9, `npm run smoke:voice-events` 53/53, `npm run smoke:brain-ui`, and `npm run smoke:voice-config` 8/8.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.

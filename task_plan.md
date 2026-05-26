@@ -145,3 +145,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 15: One-click wake tuning actions
+- [x] Convert wake rejection reasons into bounded config patches.
+- [x] Add `GET /voice/wake/tuning` for suggested safe actions.
+- [x] Add `POST /voice/wake/tuning/apply` with field whitelist and `setVoiceConfig()` persistence.
+- [x] Render one-click tuning actions in Brain UI voice link summary.
+- [x] Sync applied backend settings into localStorage and refresh diagnostics.
+- [x] Extend wake-guard, voice-events, and brain-ui smoke coverage.
+- [x] Verify relevant smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

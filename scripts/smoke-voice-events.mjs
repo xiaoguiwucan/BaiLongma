@@ -270,6 +270,14 @@ try {
   const summaryAfterRejects = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
   assert(summaryAfterRejects.summary?.recent?.wakeRejectedDetails?.some(item => item.reason === 'command too short' && item.advice?.includes('最短指令字数')), 'summary endpoint exposes wake reject details and tuning advice', JSON.stringify(summaryAfterRejects.summary?.recent))
   assert(summaryAfterRejects.summary?.issues?.some(item => item.includes('wake_guard_command_too_short')) && summaryAfterRejects.summary?.suggestions?.some(item => item.includes('最短指令字数')), 'summary endpoint promotes wake guard issues into suggestions', JSON.stringify(summaryAfterRejects.summary))
+  const tuning = await fetch(`${API}/voice/wake/tuning?windowMs=60000`).then(r => r.json())
+  assert(tuning.ok === true && tuning.actions?.some(item => item.reason === 'command too short' && item.patch?.wakeMinCommandChars != null), 'wake tuning endpoint suggests safe patch from rejection summary', JSON.stringify(tuning.actions))
+  const applyTuning = await fetch(`${API}/voice/wake/tuning/apply`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ patch: { wakeMinCommandChars: 1, unknownUnsafeField: true } }),
+  }).then(r => r.json())
+  assert(applyTuning.ok === true && applyTuning.applied?.wakeMinCommandChars === 1 && !('unknownUnsafeField' in applyTuning.applied), 'wake tuning apply endpoint persists only safe fields', JSON.stringify(applyTuning))
   assert(publishMessages.some(msg => msg.type === 'voice_event' && msg.event?.type === 'asr:final'), 'publish broadcasts raw voice_event', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'stt' && msg.state === 'final' && msg.text === '烟雾测试'), 'publish maps asr:final to Xiaozhi-style stt final', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'wake' && msg.state === 'accepted' && msg.word === '小白龙'), 'publish maps wake:accepted to Xiaozhi-style wake accepted', JSON.stringify(publishMessages))

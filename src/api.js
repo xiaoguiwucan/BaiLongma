@@ -24,6 +24,7 @@ import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
+import { buildWakeGuardTuningActions } from './voice/wake-guard.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
 import { setDocPanelState, getDocPanelState, DOC_TOPICS } from './docs.js'
 
@@ -1129,6 +1130,44 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return
     }
 
+
+
+    // GET /voice/wake/tuning — suggested safe setting patches from recent wake rejection diagnostics
+    if (req.method === 'GET' && url.pathname === '/voice/wake/tuning') {
+      const windowMs = Number(url.searchParams.get('windowMs') || 60000)
+      const summary = getVoiceEventLinkSummary({ windowMs })
+      jsonResponse(res, 200, {
+        ok: true,
+        service: 'bailongma.voice.wake.tuning',
+        current: getVoiceConfig(),
+        summary,
+        actions: buildWakeGuardTuningActions({ summary, current: getVoiceConfig() }),
+      })
+      return
+    }
+
+    // POST /voice/wake/tuning/apply — apply one safe wake tuning patch
+    if (req.method === 'POST' && url.pathname === '/voice/wake/tuning/apply') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const patch = body.patch && typeof body.patch === 'object' ? body.patch : {}
+          const allowed = new Set(['wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeMode', 'wakeRepeatSuppression'])
+          const safePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => allowed.has(key)))
+          if (!Object.keys(safePatch).length) {
+            jsonResponse(res, 400, { ok: false, error: 'No safe wake tuning fields provided.' })
+            return
+          }
+          setVoiceConfig(safePatch)
+          jsonResponse(res, 200, { ok: true, applied: safePatch, voice: getVoiceConfig() })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
 
     // GET /voice/events/summary — consolidated voice link health and troubleshooting summary
     if (req.method === 'GET' && url.pathname === '/voice/events/summary') {

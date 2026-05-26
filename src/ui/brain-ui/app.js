@@ -1844,7 +1844,8 @@ function renderVoiceLinkSummary(summary = {}) {
     <div class="voice-link-suggestions">
       ${suggestions.map(item => `<span>${escapeFocusText(item)}</span>`).join("")}
       ${issues.length ? `<code>${escapeFocusText(issues.join(" · "))}</code>` : ""}
-    </div>`;
+    </div>
+    <div id="voice-wake-tuning-actions" class="voice-wake-tuning-actions"></div>`;
 }
 
 
@@ -1920,6 +1921,7 @@ function initVoiceClientsPanel() {
   const copyBtn = document.getElementById("voice-clients-copy-btn");
   const diagnosticsEl = document.getElementById("voice-clients-diagnostics");
   const summaryEl = document.getElementById("voice-link-summary");
+  let latestWakeTuningActions = [];
   const checkEl = document.getElementById("voice-link-check");
   const packageEl = document.getElementById("voice-package-panel");
   const guideEl = document.getElementById("voice-clients-guide");
@@ -2016,6 +2018,62 @@ function initVoiceClientsPanel() {
     }
   }
 
+  function renderWakeTuningActions(actions = []) {
+    const host = document.getElementById("voice-wake-tuning-actions");
+    if (!host) return;
+    const safeActions = Array.isArray(actions) ? actions.filter(item => item.safe !== false && item.patch && Object.keys(item.patch).length) : [];
+    latestWakeTuningActions = safeActions;
+    if (!safeActions.length) {
+      host.innerHTML = "";
+      return;
+    }
+    host.innerHTML = `
+      <div class="voice-wake-tuning-title">可一键应用的调参建议</div>
+      ${safeActions.map((item, index) => `<button class="voice-wake-tuning-action" data-index="${index}" type="button"><strong>${escapeFocusText(item.label || item.reason)}</strong><span>${escapeFocusText(item.reason || "")}</span></button>`).join("")}`;
+    host.querySelectorAll(".voice-wake-tuning-action").forEach(btn => {
+      btn.addEventListener("click", () => applyWakeTuningAction(Number(btn.dataset.index || -1)));
+    });
+  }
+
+  async function refreshWakeTuningActions() {
+    const host = document.getElementById("voice-wake-tuning-actions");
+    if (!host) return;
+    try {
+      const res = await fetch(`${API}/voice/wake/tuning?windowMs=60000`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      renderWakeTuningActions(data.actions || []);
+    } catch (err) {
+      host.innerHTML = `<div class="voice-clients-error">读取 /voice/wake/tuning 失败：${escapeFocusText(err.message || err)}</div>`;
+    }
+  }
+
+  async function applyWakeTuningAction(index) {
+    const action = latestWakeTuningActions[index];
+    if (!action?.patch) return;
+    if (feedbackEl) feedbackEl.textContent = "应用唤醒调参中…";
+    try {
+      const res = await fetch(`${API}/voice/wake/tuning/apply`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ patch: action.patch }),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const voice = data.voice || {};
+      if (voice.wakeConfidenceThreshold != null) localStorage.setItem("bailongma-voice-wake-confidence-threshold", String(voice.wakeConfidenceThreshold));
+      if (voice.wakeMinCommandChars != null) localStorage.setItem("bailongma-voice-wake-min-command-chars", String(voice.wakeMinCommandChars));
+      if (voice.wakeCooldownMs != null) localStorage.setItem("bailongma-voice-wake-cooldown-ms", String(voice.wakeCooldownMs));
+      if (voice.wakeRequireSpeakerWhenEnabled != null) localStorage.setItem("bailongma-voice-wake-require-speaker", String(voice.wakeRequireSpeakerWhenEnabled));
+      if (voice.wakeMode) localStorage.setItem("bailongma-voice-wake-mode", voice.wakeMode);
+      if (voice.wakeRepeatSuppression != null) localStorage.setItem("bailongma-voice-wake-repeat-suppression", String(voice.wakeRepeatSuppression));
+      if (feedbackEl) feedbackEl.textContent = "唤醒调参已应用";
+      refreshVoiceLinkSummary({ quiet: true });
+    } catch (err) {
+      if (feedbackEl) feedbackEl.textContent = `应用失败：${err.message || err}`;
+    }
+  }
+
   async function refreshVoiceLinkSummary({ quiet = false } = {}) {
     if (!summaryEl) return;
     try {
@@ -2024,6 +2082,7 @@ function initVoiceClientsPanel() {
       const data = await res.json();
       summaryEl.hidden = false;
       summaryEl.innerHTML = renderVoiceLinkSummary(data.summary || data);
+      refreshWakeTuningActions();
     } catch (err) {
       summaryEl.hidden = false;
       summaryEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/summary 失败：${escapeFocusText(err.message || err)}</div>`;
@@ -2071,6 +2130,7 @@ function initVoiceClientsPanel() {
       if (data.summary && summaryEl) {
         summaryEl.hidden = false;
         summaryEl.innerHTML = renderVoiceLinkSummary(data.summary);
+        refreshWakeTuningActions();
       }
     } catch (err) {
       checkEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/check 失败：${escapeFocusText(err.message || err)}</div>`;

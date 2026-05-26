@@ -68,3 +68,70 @@ export function evaluateWakeGuard({
   }
   return { accepted: true, reason: 'wake guard passed', confidence, threshold: cfg.confidenceThreshold }
 }
+
+export function wakeGuardPatchForReason(reason = '', current = {}) {
+  const cfg = normalizeWakeGuardConfig(current)
+  const key = String(reason || '')
+  if (key === 'command too short') {
+    return {
+      patch: { wakeMinCommandChars: Math.max(0, cfg.minCommandChars - 1) },
+      label: `降低最短指令字数到 ${Math.max(0, cfg.minCommandChars - 1)} 字`,
+    }
+  }
+  if (key === 'wake confidence too low') {
+    return {
+      patch: { wakeConfidenceThreshold: Math.max(0.50, Number((cfg.confidenceThreshold - 0.04).toFixed(2))) },
+      label: `降低唤醒置信度阈值到 ${Math.max(0.50, Number((cfg.confidenceThreshold - 0.04).toFixed(2))).toFixed(2)}`,
+    }
+  }
+  if (key === 'wake cooldown') {
+    return {
+      patch: { wakeCooldownMs: Math.max(0, Math.round(cfg.cooldownMs - 500)) },
+      label: `缩短唤醒冷却到 ${(Math.max(0, Math.round(cfg.cooldownMs - 500)) / 1000).toFixed(1)} 秒`,
+    }
+  }
+  if (key === 'speaker verification required for wake') {
+    return {
+      patch: { wakeRequireSpeakerWhenEnabled: false },
+      label: '关闭“唤醒也必须通过声纹”',
+    }
+  }
+  if (key === 'wake not at prefix') {
+    return {
+      patch: { wakeMode: 'loose' },
+      label: '切换为宽松唤醒模式',
+    }
+  }
+  if (key === 'wake missing') {
+    return {
+      patch: {},
+      label: '检查唤醒词列表，暂不自动修改',
+    }
+  }
+  if (key === 'repeat suppressed') {
+    return {
+      patch: { wakeRepeatSuppression: false },
+      label: '关闭重复误识别抑制',
+    }
+  }
+  return { patch: {}, label: '暂无自动调参建议' }
+}
+
+export function buildWakeGuardTuningActions({ summary = {}, current = {} } = {}) {
+  const details = Array.isArray(summary?.recent?.wakeRejectedDetails) ? summary.recent.wakeRejectedDetails : []
+  const reasons = []
+  for (const item of details) {
+    const reason = String(item.reason || '')
+    if (reason && !reasons.includes(reason)) reasons.push(reason)
+  }
+  return reasons.map(reason => {
+    const action = wakeGuardPatchForReason(reason, current)
+    return {
+      reason,
+      label: action.label,
+      patch: action.patch,
+      safe: Object.keys(action.patch || {}).length > 0,
+      advice: details.find(item => item.reason === reason)?.advice || '',
+    }
+  }).filter(item => item.safe)
+}
