@@ -1706,6 +1706,25 @@ function renderVoiceClientTags(capabilities = []) {
   return safeCaps.map(cap => `<span class="voice-client-tag">${escapeFocusText(cap)}</span>`).join("");
 }
 
+
+function voiceClientAdvice(client = {}) {
+  const identity = client.identity || {};
+  const negotiated = client.negotiated || {};
+  const capabilities = Array.isArray(identity.capabilities) ? identity.capabilities : [];
+  const tips = [];
+  if (!identity.clientId || String(identity.clientId).startsWith("ws_")) tips.push("建议发送 client:hello 标识设备");
+  if (!capabilities.length) tips.push("未声明 capabilities");
+  if (negotiated.audioMode === "none") tips.push("未声明 binary_audio/base64_audio");
+  if (negotiated.audioMode !== "none" && !client.audio) tips.push("可发送 subscribe 开启音频");
+  if (client.audio && negotiated.audioMode === "binary" && !client.binaryAudio) tips.push("建议 binaryAudio=true");
+  if (!tips.length) tips.push("链路正常");
+  return tips;
+}
+
+function renderVoiceClientAdvice(client = {}) {
+  return voiceClientAdvice(client).map(item => `<span class="voice-client-advice">${escapeFocusText(item)}</span>`).join("");
+}
+
 function renderVoiceClientCard(client = {}) {
   const identity = client.identity || {};
   const negotiated = client.negotiated || {};
@@ -1728,6 +1747,7 @@ function renderVoiceClientCard(client = {}) {
         <div class="voice-client-kv"><span>Negotiated</span><strong>${escapeFocusText(negotiated.reason || "—")}</strong></div>
       </div>
       <div class="voice-client-tags">${renderVoiceClientTags(identity.capabilities)}</div>
+      <div class="voice-client-advice-row">${renderVoiceClientAdvice(client)}</div>
     </article>`;
 }
 
@@ -1739,8 +1759,41 @@ function initVoiceClientsPanel() {
   const binaryCountEl = document.getElementById("voice-clients-binary-count");
   const feedbackEl = document.getElementById("voice-clients-feedback");
   const refreshBtn = document.getElementById("voice-clients-refresh-btn");
+  const protocolBtn = document.getElementById("voice-clients-protocol-btn");
+  const diagnosticsEl = document.getElementById("voice-clients-diagnostics");
   const autoEl = document.getElementById("voice-clients-auto-refresh");
   let timer = null;
+
+  function renderProtocolDiagnostics(protocol = {}) {
+    if (!diagnosticsEl) return;
+    const endpoints = protocol.endpoints || {};
+    const caps = Array.isArray(protocol.capabilities) ? protocol.capabilities : [];
+    const modes = protocol.negotiation?.audioModes || [];
+    diagnosticsEl.hidden = false;
+    diagnosticsEl.innerHTML = `
+      <div class="voice-diagnostic-line"><span>WebSocket</span><code>${escapeFocusText(endpoints.websocket || "—")}</code></div>
+      <div class="voice-diagnostic-line"><span>Clients</span><code>${escapeFocusText(endpoints.clients || "—")}</code></div>
+      <div class="voice-diagnostic-line"><span>Audio Modes</span><code>${escapeFocusText(modes.join(" / ") || "—")}</code></div>
+      <div class="voice-diagnostic-line"><span>Capabilities</span><code>${escapeFocusText(caps.filter(c => ["client_identity", "audio_negotiation", "client_diagnostics", "tts_speak"].includes(c)).join(" · ") || "—")}</code></div>
+    `;
+  }
+
+  async function refreshProtocolDiagnostics() {
+    if (feedbackEl) feedbackEl.textContent = "协议自检中…";
+    try {
+      const res = await fetch(`${API}/voice/events/protocol`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const protocol = await res.json();
+      renderProtocolDiagnostics(protocol);
+      if (feedbackEl) feedbackEl.textContent = "协议正常";
+    } catch (err) {
+      if (diagnosticsEl) {
+        diagnosticsEl.hidden = false;
+        diagnosticsEl.innerHTML = `<div class="voice-clients-error">协议自检失败：${escapeFocusText(err.message || err)}</div>`;
+      }
+      if (feedbackEl) feedbackEl.textContent = "协议失败";
+    }
+  }
 
   async function refreshVoiceClients({ quiet = false } = {}) {
     if (!quiet && feedbackEl) feedbackEl.textContent = "刷新中…";
@@ -1771,7 +1824,9 @@ function initVoiceClientsPanel() {
   }
 
   refreshBtn?.addEventListener("click", () => refreshVoiceClients());
+  protocolBtn?.addEventListener("click", () => refreshProtocolDiagnostics());
   autoEl?.addEventListener("change", restartTimer);
+  refreshProtocolDiagnostics();
   refreshVoiceClients({ quiet: true });
   restartTimer();
 }

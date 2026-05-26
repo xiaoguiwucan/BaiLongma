@@ -25,3 +25,9 @@
 - Verification passed: `npm run smoke:brain-ui` now completes and asserts voice clients panel renders `smoke-esp32` with binary negotiated mode.
 - Verification passed again: `node --check src/ui/brain-ui/app.js`, `node --check src/ui/brain-ui/app-shell.js`, `node --check scripts/smoke-brain-ui.mjs`.
 - Verification passed again: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.
+- Enhanced the Brain UI external voice clients panel with a protocol self-check button and diagnostics block for WebSocket/clients endpoints, negotiated audio modes, and key protocol capabilities.
+- Added per-client human troubleshooting advice: missing client:hello, missing capabilities, missing audio capabilities, subscribe suggestions, binaryAudio suggestions, or “链路正常”.
+- Extended `smoke-brain-ui` protocol mock and assertions to cover `/voice/events/protocol`, `/voice/events/clients`, negotiated binary mode, and human advice rendering.
+- Verification passed: `npm run smoke:brain-ui`.
+- Verification passed: `node --check src/ui/brain-ui/app.js`, `node --check src/ui/brain-ui/app-shell.js`, `node --check scripts/smoke-brain-ui.mjs`.
+- Verification passed: `npm run smoke:voice-events` 41/41 and `npm run smoke:voice-events-client` 8/8.

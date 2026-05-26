@@ -113,6 +113,27 @@ function createServer() {
     }
 
 
+
+    if (url.pathname === '/voice/events/protocol') {
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.events',
+        version: 3,
+        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics'],
+        endpoints: {
+          websocket: '/voice/events',
+          clients: '/voice/events/clients',
+          protocol: '/voice/events/protocol',
+          publish: '/voice/events/publish',
+        },
+        negotiation: {
+          audioModes: ['none', 'binary', 'base64'],
+          autoSubscribe: false,
+        },
+      })
+      return
+    }
+
     if (url.pathname === '/voice/events/clients') {
       sendJson(res, {
         ok: true,
@@ -336,9 +357,12 @@ try {
     audio: document.querySelector('#voice-clients-audio-count')?.textContent || '',
     binary: document.querySelector('#voice-clients-binary-count')?.textContent || '',
     card: document.querySelector('.voice-client-card')?.textContent || '',
+    diagnostics: document.querySelector('#voice-clients-diagnostics')?.textContent || '',
   }))
   if (voiceClientSnapshot.count !== '1') throw new Error('voice clients panel did not show connected client count')
   if (!voiceClientSnapshot.card.includes('binary')) throw new Error('voice clients panel did not render negotiated binary mode')
+  if (!voiceClientSnapshot.card.includes('链路正常')) throw new Error('voice clients panel did not render human advice')
+  if (!voiceClientSnapshot.diagnostics.includes('/voice/events/clients')) throw new Error('voice clients protocol diagnostics did not render clients endpoint')
   await page.hover('.pc-card')
   await page.waitForFunction(() => Number(getComputedStyle(document.querySelector('#pc-exit-btn')).opacity) > 0.5)
   await page.click('#pc-exit-btn')

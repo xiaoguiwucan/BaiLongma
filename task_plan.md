@@ -47,3 +47,10 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add missing static route for `/src/voice/*` modules in `smoke-brain-ui`.
 - [x] Mock voice local endpoints used by the voice panel.
 - [x] Verify `npm run smoke:brain-ui` passes and covers the new external clients panel.
+
+## Checkpoint 3: Protocol diagnostics and human troubleshooting advice
+- [x] Add protocol self-check button and diagnostics block to the Brain UI external clients panel.
+- [x] Render WebSocket endpoint, clients endpoint, audio modes, and key capabilities from `/voice/events/protocol`.
+- [x] Add per-client human advice for identity, capability, subscription, and binary mismatch issues.
+- [x] Extend `smoke-brain-ui` mocks/assertions for protocol diagnostics and “链路正常” advice.
+- [x] Verify brain-ui and voice event smoke suites.

@@ -3983,3 +3983,45 @@ body.person-card-mode .person-card-panel,
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
 }
+.voice-clients-diagnostics {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px 10px;
+  margin: 0 0 12px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(130,210,255,0.045);
+}
+.voice-diagnostic-line span {
+  display: block;
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+}
+.voice-diagnostic-line code {
+  display: block;
+  margin-top: 2px;
+  color: var(--ink2);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+  overflow-wrap: anywhere;
+}
+.voice-client-advice-row {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 9px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+.voice-client-advice {
+  border: 1px solid rgba(211,152,114,0.35);
+  border-radius: 999px;
+  padding: 3px 7px;
+  color: var(--warm);
+  background: rgba(211,152,114,0.08);
+  font-size: 9px;
+}

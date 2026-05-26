@@ -368,9 +368,11 @@ const createSettingsModal = () => `
               <div class="voice-client-stat"><span>音频订阅</span><strong id="voice-clients-audio-count">0</strong></div>
               <div class="voice-client-stat"><span>二进制</span><strong id="voice-clients-binary-count">0</strong></div>
               <button class="settings-save-btn" id="voice-clients-refresh-btn" type="button">刷新客户端</button>
+              <button class="settings-save-btn" id="voice-clients-protocol-btn" type="button">协议自检</button>
               <label class="voice-clients-auto"><input id="voice-clients-auto-refresh" type="checkbox" checked> 自动刷新</label>
               <span class="settings-feedback" id="voice-clients-feedback"></span>
             </div>
+            <div id="voice-clients-diagnostics" class="voice-clients-diagnostics" hidden></div>
             <div id="voice-clients-list" class="voice-clients-list">
               <div class="voice-clients-empty">暂无外部客户端连接。可运行 <code>npm run voice:events -- listen --audio --client-id mac-debug</code> 测试。</div>
             </div>
