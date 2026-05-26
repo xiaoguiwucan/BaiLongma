@@ -499,4 +499,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Show clear user feedback for external service tracking vs app-owned process stop.
 - [x] Extend voice manager and Brain UI smoke coverage.
 - [x] Verify syntax plus voice-manager, voice-events, and brain-ui smoke suites.
-- [ ] Push as a development checkpoint only, without tag/Release.
+- [x] Push as a development checkpoint only, without tag/Release.

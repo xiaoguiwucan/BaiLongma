@@ -409,3 +409,5 @@
 - Brain UI restart/stop feedback explains whether the app stopped its own service or only cancelled tracking for a reused external service.
 - Extended voice manager and Brain UI smoke coverage for restart-with-external-service safety and UI feedback.
 - Verification passed: syntax checks for API/manager/Brain UI scripts, `npm run smoke:voice-manager` 7/7, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
+- Pushed development checkpoint `ec12e2f feat: control reused voice service` to `origin/main`.
+- No tag/GitHub Release created; this remains part of the next large-version milestone bundle.
