@@ -208,13 +208,14 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
   let summary = null
   try { summary = getVoiceEventLinkSummary({ windowMs }) } catch (_) {}
   const checks = []
-  const add = (id, label, status, detail, action = '') => checks.push({ id, label, status, detail, action })
+  const add = (id, label, status, detail, action = '', fixAction = null) => checks.push({ id, label, status, detail, action, ...(fixAction ? { fixAction } : {}) })
   add(
     'provider',
     '识别服务商',
     voice.asrProvider === 'local' ? 'ok' : 'warn',
     voice.asrProvider === 'local' ? '当前使用本地 ASR，音频不会上传云端。' : `当前服务商是 ${voice.asrProvider || 'unknown'}，本地声纹/离线识别不会作为主路径。`,
     voice.asrProvider === 'local' ? '保持本地模式。' : '在设置中把“服务商”切换为“本地模型”。',
+    voice.asrProvider === 'local' ? null : 'use_local_sensevoice',
   )
   add(
     'engine',
@@ -222,6 +223,7 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     voice.localAsrModel === 'sensevoice-small' ? 'ok' : 'warn',
     voice.localAsrModel === 'sensevoice-small' ? 'SenseVoiceSmall 已作为中文优先模型。' : `当前本地模型是 ${voice.localAsrModel || voice.whisperModel || 'unknown'}。`,
     voice.localAsrModel === 'sensevoice-small' ? '保持 SenseVoiceSmall。' : '建议切到 SenseVoiceSmall，Whisper 仅作为备用。',
+    voice.localAsrModel === 'sensevoice-small' ? null : 'use_local_sensevoice',
   )
   add(
     'process',
@@ -229,6 +231,7 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     local.status === 'running' ? 'ok' : local.status === 'starting' ? 'pending' : 'warn',
     local.status === 'running' ? `运行中：${local.engine || 'engine'} / ${local.model || 'model'} / port ${local.port}` : `${local.status || 'stopped'}：${local.message || '本地语音服务未运行'}`,
     local.status === 'running' ? '可以开始麦克风测试。' : '点击“启动本地语音服务”或重新保存语音设置后再试。',
+    local.status === 'running' ? null : 'start_local_voice',
   )
   add(
     'wake',
@@ -236,6 +239,7 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     voice.wakeWordEnabled === false ? 'warn' : 'ok',
     voice.wakeWordEnabled === false ? '唤醒词已关闭，视频/他人说话更容易误触发输入。' : `唤醒词开启，模式 ${voice.wakeMode || 'strict'}，阈值 ${voice.wakeConfidenceThreshold ?? '—'}。`,
     voice.wakeWordEnabled === false ? '开启唤醒词，并使用严格模式。' : '说“龙马，具体指令”进行测试。',
+    voice.wakeWordEnabled === false ? 'enable_wake_guard' : null,
   )
   const videoOk = voice.videoVoiceDuckEnabled && voice.videoVoicePttEnabled && voice.videoVoiceAecEnabled
   add(
@@ -244,6 +248,7 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     videoOk ? 'ok' : 'warn',
     videoOk ? '视频降音、按住说话、AEC 都已开启。' : '视频播放场景下仍有保护项未开启。',
     videoOk ? '播放视频时优先使用唤醒词，也可按住空格说话。' : '应用“视频抗干扰”预设，或手动开启视频降音/PTT/AEC。',
+    videoOk ? null : 'apply_video_guard',
   )
   const speakerConfiguredHint = voice.speakerVerificationEnabled ? '已启用，只响应我的声音。' : '未启用，任何清晰唤醒词都可能触发。'
   add(
@@ -272,8 +277,39 @@ function buildVoiceLocalDoctor({ windowMs = 60000 } = {}) {
     local,
     summary: summary ? { level: summary.level, recent: summary.recent, issues: summary.issues, suggestions: summary.suggestions } : null,
     checks,
-    nextActions: checks.filter(item => item.status !== 'ok').map(item => ({ id: item.id, label: item.label, action: item.action })).slice(0, 5),
+    nextActions: checks.filter(item => item.status !== 'ok').map(item => ({ id: item.id, label: item.label, action: item.action, fixAction: item.fixAction || null })).slice(0, 5),
   }
+}
+
+
+function applyVoiceLocalDoctorFix(action = '') {
+  const id = String(action || '').trim()
+  let applied = {}
+  let started = null
+  if (id === 'use_local_sensevoice') {
+    applied = { asrProvider: 'local', localAsrModel: 'sensevoice-small', whisperModel: 'small', asrProfile: 'balanced' }
+    setVoiceConfig(applied)
+  } else if (id === 'enable_wake_guard') {
+    applied = { wakeWordEnabled: true, wakeMode: 'strict', wakeRepeatSuppression: true, wakeConfidenceThreshold: 0.72, wakeMinCommandChars: 2, wakeCooldownMs: 1200 }
+    setVoiceConfig(applied)
+  } else if (id === 'apply_video_guard') {
+    const preset = getVoiceStabilityPreset('video-guard')
+    applied = preset ? { ...preset.patch } : {}
+    setVoiceConfig(applied)
+  } else if (id === 'start_local_voice') {
+    const current = getVoiceConfig()
+    if (current.asrProvider !== 'local' || current.localAsrModel !== 'sensevoice-small') {
+      applied = { asrProvider: 'local', localAsrModel: 'sensevoice-small', whisperModel: 'small', asrProfile: current.asrProfile || 'balanced' }
+      setVoiceConfig(applied)
+    }
+    const voice = getVoiceConfig()
+    started = startVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', localAsrModel: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
+  } else {
+    const err = new Error('Unknown local voice doctor fix action.')
+    err.statusCode = 404
+    throw err
+  }
+  return { action: id, applied, started, voice: getVoiceConfig(), doctor: buildVoiceLocalDoctor() }
 }
 
 const wakeTuningHistory = getVoiceConfig().wakeTuningHistory || []
@@ -1700,6 +1736,23 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     if (req.method === 'GET' && url.pathname === '/voice/local/doctor') {
       const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))
       jsonResponse(res, 200, buildVoiceLocalDoctor({ windowMs }))
+      return
+    }
+
+
+    // POST /voice/local/doctor/fix — apply one safe local voice readiness fix
+    if (req.method === 'POST' && url.pathname === '/voice/local/doctor/fix') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        try {
+          const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const result = applyVoiceLocalDoctorFix(body.action || body.id || '')
+          jsonResponse(res, 200, { ok: true, ...result })
+        } catch (err) {
+          jsonResponse(res, err.statusCode || 400, { ok: false, error: err.message })
+        }
+      })
       return
     }
 

@@ -4742,7 +4742,7 @@ body.person-card-mode .person-card-panel,
 .voice-local-doctor-list { display: grid; gap: 7px; }
 .voice-local-doctor-item {
   display: grid;
-  grid-template-columns: 72px 1fr;
+  grid-template-columns: 72px 1fr auto;
   gap: 8px 10px;
   padding: 8px 10px;
   border: 1px solid rgba(255,255,255,0.10);
@@ -4772,3 +4772,20 @@ body.person-card-mode .person-card-panel,
 .voice-local-doctor-item-warn span,
 .voice-local-doctor-item-error span { color: var(--warm); background: rgba(211,152,114,0.10); }
 .voice-local-doctor-item-pending span { color: var(--cool); background: rgba(130,210,255,0.08); }
+
+
+.voice-local-doctor-fix {
+  align-self: center;
+  border: 1px solid rgba(143,240,179,0.28);
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #8ff0b3;
+  background: rgba(143,240,179,0.07);
+  cursor: pointer;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.voice-local-doctor-fix:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}

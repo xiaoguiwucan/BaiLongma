@@ -294,3 +294,9 @@
 - Added a manual “刷新体检” button and automatic refresh when voice settings load or provider changes.
 - Extended `smoke:voice-events` for the doctor endpoint and `smoke:brain-ui` for rendering readiness checks.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Upgraded the local voice doctor from passive diagnostics to safe one-click repairs.
+- Local doctor checks now include whitelisted `fixAction` ids when a problem can be safely repaired.
+- Added backend `POST /voice/local/doctor/fix` supporting safe repairs: switch to local SenseVoice, enable wake guard, apply video-guard preset, and start local voice service.
+- Brain UI local voice doctor rows now show “一键修复” buttons, apply the fix, sync returned voice config to controls/localStorage, and refresh the doctor result.
+- Extended smoke coverage for unknown action rejection, video-guard repair persistence, and UI one-click repair rendering/refresh.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

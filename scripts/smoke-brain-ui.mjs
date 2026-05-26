@@ -49,6 +49,7 @@ function sendFile(res, filePath) {
 function createServer() {
   const sseClients = new Set()
   let wakeTuningApplied = false
+  let localDoctorFixed = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -490,12 +491,26 @@ new WebSocket(url)`,
     if (url.pathname === '/voice/local/doctor') {
       sendJson(res, {
         ok: true,
-        level: 'warn',
-        checks: [
+        level: localDoctorFixed ? 'ok' : 'warn',
+        checks: localDoctorFixed ? [
           { id: 'provider', label: '识别服务商', status: 'ok', detail: '当前使用本地 ASR，音频不会上传云端。', action: '保持本地模式。' },
-          { id: 'process', label: '本地 ASR 进程', status: 'warn', detail: 'stopped：本地语音服务未运行', action: '点击启动本地语音服务。' },
-          { id: 'video_guard', label: '视频抗干扰', status: 'warn', detail: '视频播放场景下仍有保护项未开启。', action: '应用“视频抗干扰”预设。' },
+          { id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723', action: '可以开始麦克风测试。' },
+        ] : [
+          { id: 'provider', label: '识别服务商', status: 'ok', detail: '当前使用本地 ASR，音频不会上传云端。', action: '保持本地模式。' },
+          { id: 'process', label: '本地 ASR 进程', status: 'warn', detail: 'stopped：本地语音服务未运行', action: '点击启动本地语音服务。', fixAction: 'start_local_voice' },
+          { id: 'video_guard', label: '视频抗干扰', status: 'warn', detail: '视频播放场景下仍有保护项未开启。', action: '应用“视频抗干扰”预设。', fixAction: 'apply_video_guard' },
         ],
+      })
+      return
+    }
+
+    if (url.pathname === '/voice/local/doctor/fix') {
+      localDoctorFixed = true
+      sendJson(res, {
+        ok: true,
+        action: 'start_local_voice',
+        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced' },
+        doctor: { ok: true, level: 'ok', checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
       })
       return
     }
@@ -640,6 +655,8 @@ try {
   if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行')) throw new Error('local voice doctor did not render readiness checks')
+  await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())
+  await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('运行中：sensevoice'))
   await page.waitForFunction(() => document.querySelector('#voice-preset-list')?.textContent.includes('视频抗干扰') && document.querySelector('#voice-preset-list')?.textContent.includes('建议：视频抗干扰'), null, { timeout: 5000 })
   await page.evaluate(() => [...document.querySelectorAll('.voice-preset-card')].find(btn => btn.textContent.includes('视频抗干扰'))?.click())
   await page.waitForFunction(() => document.querySelector('#voice-preset-feedback')?.textContent.includes('已应用'))

@@ -2899,7 +2899,33 @@ function initTTSSettings() {
     return checks.map(item => `<div class="voice-local-doctor-item voice-local-doctor-item-${escapeFocusText(item.status || "pending")}">
       <span>${escapeFocusText(item.status || "pending")}</span>
       <div><strong>${escapeFocusText(item.label || item.id || "检查项")}</strong><em>${escapeFocusText(item.detail || "")}${item.action ? ` · ${escapeFocusText(item.action)}` : ""}</em></div>
+      ${item.fixAction ? `<button class="voice-local-doctor-fix" data-action="${escapeFocusText(item.fixAction)}" type="button">一键修复</button>` : ""}
     </div>`).join("");
+  }
+
+  function bindVoiceLocalDoctorFixes() {
+    document.querySelectorAll(".voice-local-doctor-fix").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const action = btn.dataset.action || "";
+        if (!action) return;
+        btn.disabled = true;
+        btn.textContent = "修复中…";
+        try {
+          const resp = await fetch(`${API}/voice/local/doctor/fix`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action }),
+          });
+          const data = await resp.json();
+          if (!resp.ok || !data?.ok) throw new Error(data?.error || "修复失败");
+          if (data.voice) hydrateVoiceControlsFromConfig(data.voice);
+          await refreshVoiceLocalDoctor();
+        } catch (err) {
+          btn.textContent = err?.message || "修复失败";
+          setTimeout(() => { btn.textContent = "一键修复"; btn.disabled = false; }, 2500);
+        }
+      });
+    });
   }
 
   async function refreshVoiceLocalDoctor() {
@@ -2913,6 +2939,7 @@ function initTTSSettings() {
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "本地语音体检失败");
       list.innerHTML = renderVoiceLocalDoctor(data);
+      bindVoiceLocalDoctorFixes();
     } catch (err) {
       list.innerHTML = `<div class="voice-clients-error">${escapeFocusText(err?.message || "本地语音体检失败")}</div>`;
     }

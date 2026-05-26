@@ -336,3 +336,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 34: One-click fixes for local voice doctor
+- [x] Add safe fix action IDs to local voice doctor checks and next actions.
+- [x] Add backend `POST /voice/local/doctor/fix` with a strict whitelist of safe repairs.
+- [x] Support one-click repair for local SenseVoice mode, wake guard enablement, video-guard preset, and starting local voice service.
+- [x] Return refreshed voice config and doctor result after each fix.
+- [x] Render “一键修复” buttons inside Brain UI local voice doctor rows.
+- [x] Sync repaired voice config back into UI controls/localStorage.
+- [x] Extend voice-events and brain-ui smoke coverage for safe fixes and UI repair flow.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.
