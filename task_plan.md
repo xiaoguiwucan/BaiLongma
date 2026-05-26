@@ -548,3 +548,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend Brain UI smoke coverage for threshold calibration and persisted value sync.
 - [x] Verify syntax plus smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 56: Mic status in local voice overview
+- [x] Surface live microphone self-check state in the “本地语音总览” card.
+- [x] Show whether the microphone is inactive, below threshold, or clearly hearing the user.
+- [x] Include peak/threshold numbers directly in the overview so users do not need to scroll to the sensitivity section first.
+- [x] Refresh overview mic status from live `bailongma:mic-level` events with throttling.
+- [x] Style mic status as ok/warn chips alongside existing overview issues and actions.
+- [x] Extend Brain UI smoke coverage for mic status appearing in the overview.
+- [x] Verify syntax plus smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

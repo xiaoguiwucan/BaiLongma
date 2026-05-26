@@ -448,3 +448,9 @@
 - Applying calibration now synchronizes the sensitivity slider, numeric label, localStorage, mic meter threshold marker, and human advice text.
 - Extended Brain UI smoke coverage to verify the calibration computes `0.013` from a peak `0.024`, persists it, and updates the UI.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+
+- Continued the local-voice stability milestone by surfacing the microphone self-check result in the top “本地语音总览” card.
+- The overview now shows whether the microphone is inactive, below threshold, or already hearing the user, including peak-vs-threshold numbers.
+- Live `bailongma:mic-level` events refresh the overview mic chip with throttling, so users can see mic readiness without scrolling down to the sensitivity section.
+- Added ok/warn styling for overview mic status and Brain UI smoke coverage for “麦克风：已听见你”.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

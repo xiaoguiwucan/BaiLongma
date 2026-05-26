@@ -2914,9 +2914,31 @@ function initTTSSettings() {
     level.textContent = overview.level || "pending";
     summary.textContent = overview.summary || "暂无状态。";
     const issueHtml = Array.isArray(overview.issues) && overview.issues.length ? `<div class="voice-local-overview-issues">${overview.issues.slice(0, 3).map(item => `<span>${escapeFocusText(item)}</span>`).join("")}</div>` : "";
+    const mic = window.bailongmaVoice?.getMicMonitor?.() || window.bailongmaVoiceMicMonitor || null;
+    const micHtml = mic ? renderVoiceOverviewMicStatus(mic) : "";
     const action = overview.primaryAction || {};
     const buttonHtml = action.id && action.id !== "ready" ? `<button class="voice-readiness-action" data-overview-action="${escapeFocusText(action.id)}" type="button">${escapeFocusText(action.label || "处理")}</button>` : `<span class="voice-local-overview-ready">${escapeFocusText(action.label || "可以使用")}</span>`;
-    actions.innerHTML = `${issueHtml}${buttonHtml}<em>${escapeFocusText(action.action || "")}</em>`;
+    actions.innerHTML = `${issueHtml}${micHtml}${buttonHtml}<em>${escapeFocusText(action.action || "")}</em>`;
+  }
+
+  function renderVoiceOverviewMicStatus(mic = {}) {
+    const threshold = Math.max(0.002, Math.min(0.04, Number(mic.threshold || localStorage.getItem("bailongma-voice-threshold") || 0.008) || 0.008));
+    const peak = Math.max(0, Number(mic.peak || mic.current || 0) || 0);
+    const current = Math.max(0, Number(mic.current || 0) || 0);
+    const stale = !mic.updatedAt || Date.now() - Number(mic.updatedAt) > 5000;
+    let level = "pending";
+    let text = "麦克风：等待自检";
+    if (!mic.active && stale) {
+      level = "warn";
+      text = "麦克风：未开启/无实时音量";
+    } else if (peak >= threshold || current >= threshold) {
+      level = "ok";
+      text = `麦克风：已听见你（峰值 ${peak.toFixed(3)} / 阈值 ${threshold.toFixed(3)}）`;
+    } else if (peak > 0) {
+      level = "warn";
+      text = `麦克风：低于阈值（峰值 ${peak.toFixed(3)} / 阈值 ${threshold.toFixed(3)}）`;
+    }
+    return `<div class="voice-local-overview-mic voice-local-overview-mic-${level}">${escapeFocusText(text)}</div>`;
   }
 
   async function refreshVoiceOverview() {
@@ -3824,7 +3846,15 @@ function initTTSSettings() {
     showFeedback(adviceEl, `已校准触发阈值：${next.toFixed(3)}。${recommendation.reason}`);
   }
 
-  window.addEventListener("bailongma:mic-level", event => renderMicMeter(event.detail || {}));
+  let lastMicOverviewRefreshAt = 0;
+  window.addEventListener("bailongma:mic-level", event => {
+    renderMicMeter(event.detail || {});
+    const now = Date.now();
+    if (now - lastMicOverviewRefreshAt > 900) {
+      lastMicOverviewRefreshAt = now;
+      refreshVoiceOverview();
+    }
+  });
   document.getElementById("voice-mic-meter-reset")?.addEventListener("click", () => {
     window.bailongmaVoice?.resetMicMonitor?.();
     renderMicMeter();

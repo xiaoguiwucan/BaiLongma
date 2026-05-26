@@ -4993,3 +4993,7 @@ body.person-card-mode .person-card-panel,
 .voice-mic-meter-meta span { padding:3px 7px; border-radius:999px; color:var(--ink2); background:rgba(255,255,255,0.06); font-size:11px; }
 .voice-mic-meter-meta code { color:var(--ink); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
 .voice-mic-meter-actions .settings-feedback { font-size:11px; }
+
+.voice-local-overview-mic { padding:4px 8px; border-radius:999px; font-size:11px; color:var(--ink2); background:rgba(255,255,255,0.055); }
+.voice-local-overview-mic-ok { color:var(--good); background:rgba(143,240,179,0.10); }
+.voice-local-overview-mic-warn { color:var(--warm); background:rgba(211,152,114,0.10); }
