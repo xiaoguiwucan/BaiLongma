@@ -491,3 +491,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend Brain UI and voice-events smoke coverage for service source metadata.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 50: Reused service stop/restart controls
+- [x] Add UI controls for stopping/cancelling tracking and restarting local voice service.
+- [x] Make restart safe for externally adopted services without duplicate-starting on port 3723.
+- [x] Add force restart metadata path in `/voice/local/restart`.
+- [x] Show clear user feedback for external service tracking vs app-owned process stop.
+- [x] Extend voice manager and Brain UI smoke coverage.
+- [x] Verify syntax plus voice-manager, voice-events, and brain-ui smoke suites.
+- [ ] Push as a development checkpoint only, without tag/Release.

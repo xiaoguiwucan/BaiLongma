@@ -438,6 +438,13 @@ const createSettingsModal = () => `
                   <option value="accuracy">高精度：优先准确率</option>
                 </select>
               </div>
+              <div class="settings-row voice-local-service-actions">
+                <label class="settings-label">本地服务控制</label>
+                <button class="settings-save-btn" id="voice-local-stop" type="button" style="width:auto;padding:0 12px;">停止/取消跟踪</button>
+                <button class="settings-save-btn" id="voice-local-restart" type="button" style="width:auto;padding:0 12px;margin-left:8px;">按当前模型重启</button>
+                <span class="settings-feedback" id="voice-local-service-feedback"></span>
+              </div>
+              <p class="settings-hint">如果当前显示“复用已运行服务”，停止只会取消本应用跟踪，不会强杀其他进程；要切换模型，请先停止旧服务或使用重启。</p>
               <div class="voice-readiness-wizard" id="voice-readiness-wizard" hidden>
                 <div class="voice-readiness-head">
                   <div>

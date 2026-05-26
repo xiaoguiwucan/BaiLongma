@@ -403,3 +403,9 @@
 - Verification passed: `node --check src/api.js`, `node --check src/ui/brain-ui/app.js`, `node --check scripts/smoke-brain-ui.mjs`, `node --check scripts/smoke-voice-events.mjs`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
 - Pushed development checkpoint `fbaac08 feat: show reused voice service status` to `origin/main`.
 - No tag/GitHub Release created; this remains part of the next large-version milestone bundle.
+- Added explicit local voice service controls in Brain UI: “停止/取消跟踪” and “按当前模型重启”.
+- `restartVoiceServer()` now treats externally adopted services safely: by default it clears tracking and asks for manual stop instead of duplicate-starting on port 3723; force restart remains available through API payload/query.
+- `/voice/local/restart` now accepts `force` and returns `requiresManualStop`/`externalStopped` metadata when model switching is blocked by a reused service.
+- Brain UI restart/stop feedback explains whether the app stopped its own service or only cancelled tracking for a reused external service.
+- Extended voice manager and Brain UI smoke coverage for restart-with-external-service safety and UI feedback.
+- Verification passed: syntax checks for API/manager/Brain UI scripts, `npm run smoke:voice-manager` 7/7, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.

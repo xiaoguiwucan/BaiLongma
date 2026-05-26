@@ -2893,7 +2893,56 @@ function initTTSSettings() {
   document.getElementById("voice-local-doctor-refresh")?.addEventListener("click", refreshVoiceLocalDoctor);
   document.getElementById("voice-readiness-apply")?.addEventListener("click", applyVoiceReadinessWizard);
   document.getElementById("voice-self-test-start")?.addEventListener("click", startVoiceSelfTest);
+  document.getElementById("voice-local-stop")?.addEventListener("click", stopLocalVoiceService);
+  document.getElementById("voice-local-restart")?.addEventListener("click", restartLocalVoiceService);
   let voiceSelfTestSince = 0;
+
+  async function stopLocalVoiceService() {
+    const btn = document.getElementById("voice-local-stop");
+    const fb = document.getElementById("voice-local-service-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在停止或取消跟踪本地服务…");
+    try {
+      const resp = await fetch(`${API}/voice/local/stop`, { method: "POST" });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "停止失败");
+      showFeedback(fb, data.external ? "已取消跟踪复用服务" : "本地语音服务已停止");
+      await refreshVoiceReadinessWizard();
+      await refreshVoiceLocalDoctor();
+      await refreshSpeakerStatus();
+      await refreshVoiceSelfTest();
+    } catch (err) {
+      showFeedback(fb, err?.message || "停止失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function restartLocalVoiceService() {
+    const btn = document.getElementById("voice-local-restart");
+    const fb = document.getElementById("voice-local-service-feedback");
+    if (btn) btn.disabled = true;
+    showFeedback(fb, "正在按当前模型重启本地服务…");
+    try {
+      const model = document.getElementById("voice-local-asr-model")?.value || localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
+      const profile = document.getElementById("voice-asr-profile")?.value || localStorage.getItem(VOICE_ASR_PROFILE_KEY) || "balanced";
+      const resp = await fetch(`${API}/voice/local/restart`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ localAsrModel: model, model, asrProfile: profile }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "重启失败");
+      showFeedback(fb, data.requiresManualStop ? "已取消跟踪复用服务；请先停止旧的 3723 服务后再启动当前模型" : `已请求重启：${data.engineLabel || data.engine || model}`);
+      setTimeout(refreshVoiceReadinessWizard, 800);
+      setTimeout(refreshVoiceLocalDoctor, 1000);
+      setTimeout(refreshSpeakerStatus, 1100);
+    } catch (err) {
+      showFeedback(fb, err?.message || "重启失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
 
   function renderVoiceSelfTest(test = {}) {
     const steps = Array.isArray(test.steps) ? test.steps : [];

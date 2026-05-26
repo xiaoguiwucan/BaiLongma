@@ -1,5 +1,5 @@
 import net from 'net'
-import { startVoiceServer, stopVoiceServer, getVoiceStatus, detectExternalVoiceServer } from '../src/voice/manager.js'
+import { startVoiceServer, stopVoiceServer, restartVoiceServer, getVoiceStatus, detectExternalVoiceServer } from '../src/voice/manager.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -44,6 +44,13 @@ try {
 
   const started = startVoiceServer({ localAsrModel: 'sensevoice-small', profile: 'balanced' })
   assert(started.status === 'running' && started.external === true && started.pid === null, 'startVoiceServer reuses already adopted external service instead of spawning duplicate', JSON.stringify(started))
+
+  const restartTracked = restartVoiceServer('sensevoice-small', 'balanced')
+  assert(restartTracked.requiresManualStop === true && restartTracked.externalStopped === true, 'restartVoiceServer does not duplicate-start an externally adopted service without force', JSON.stringify(restartTracked))
+  assert(await canConnectVoicePort(), 'external port owner remains alive after restart tracking clears')
+
+  const detectedAgain = await detectExternalVoiceServer({ model: 'sensevoice-small', profile: 'balanced' })
+  assert(detectedAgain.status === 'running' && detectedAgain.external === true, 'detectExternalVoiceServer can re-adopt service after restart tracking clears', JSON.stringify(detectedAgain))
 
   const stopped = stopVoiceServer()
   assert(stopped.status === 'stopped', 'stopVoiceServer clears externally adopted service tracking without killing unrelated process', JSON.stringify(stopped))

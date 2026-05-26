@@ -238,10 +238,19 @@ export function stopVoiceServer() {
   return getVoiceStatus()
 }
 
-export function restartVoiceServer(model = DEFAULT_LOCAL_MODEL, profile = 'balanced') {
+export function restartVoiceServer(model = DEFAULT_LOCAL_MODEL, profile = 'balanced', { force = false } = {}) {
+  const wasExternal = !proc && status === 'running'
   stopVoiceServer()
   const nextProfile = normalizeAsrProfile(profile)
   const nextModel = normalizeLocalAsrModel(model || ASR_PROFILES[nextProfile]?.recommendedLocalModel)
+  if (wasExternal && !force) {
+    status = 'stopped'
+    statusMessage = '已停止跟踪复用服务；如需切换模型，请先手动停止旧的 3723 服务，或使用强制重启。'
+    currentModel = nextModel
+    currentEngine = engineForModel(nextModel)
+    currentProfile = nextProfile
+    return { ...getVoiceStatus(), externalStopped: true, requiresManualStop: true }
+  }
   setTimeout(() => startVoiceServer({ model: nextModel, profile: nextProfile }), 500)
-  return getVoiceStatus()
+  return { ...getVoiceStatus(), restarting: true, forced: Boolean(force), externalStopped: wasExternal }
 }

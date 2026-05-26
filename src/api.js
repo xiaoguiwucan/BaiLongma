@@ -2250,7 +2250,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
           const model = String(body.localAsrModel || body.model || body.whisperModel || 'sensevoice-small').trim() || 'sensevoice-small'
           const profile = String(body.asrProfile || body.profile || 'balanced').trim() || 'balanced'
-          const status = restartVoiceServer(model, profile)
+          const force = body.force === true || body.force === 'true' || url.searchParams.get('force') === '1'
+          const status = restartVoiceServer(model, profile, { force })
           jsonResponse(res, 200, { ok: true, ...status })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })

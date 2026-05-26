@@ -55,6 +55,7 @@ function createServer() {
   let speakerBackupAvailable = false
   let readinessApplied = false
   let externalVoiceService = false
+  let localServiceStopped = false
   let speakerGateLocked = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
@@ -498,7 +499,20 @@ new WebSocket(url)`,
 
     if (url.pathname === '/__smoke/external-voice-service') {
       externalVoiceService = true
+      localServiceStopped = false
       sendJson(res, { ok: true })
+      return
+    }
+
+    if (url.pathname === '/voice/local/stop') {
+      localServiceStopped = true
+      sendJson(res, { ok: true, status: 'stopped', external: externalVoiceService, message: externalVoiceService ? '已停止跟踪本地语音服务' : '已停止' })
+      return
+    }
+
+    if (url.pathname === '/voice/local/restart') {
+      localServiceStopped = true
+      sendJson(res, { ok: true, status: 'stopped', externalStopped: externalVoiceService, requiresManualStop: externalVoiceService, engine: 'sensevoice', model: 'sensevoice-small' })
       return
     }
 
@@ -549,10 +563,10 @@ new WebSocket(url)`,
     if (url.pathname === '/voice/local/readiness') {
       sendJson(res, {
         ok: true,
-        level: readinessApplied ? 'ok' : 'warn',
+        level: localServiceStopped ? 'warn' : readinessApplied ? 'ok' : 'warn',
         recommendedPreset: { id: 'balanced', label: '均衡推荐', reason: '建立稳定语音基线。' },
         speakerStatus: { reachable: readinessApplied, configured: localDoctorFixed, sampleCount: localDoctorFixed ? 3 : 0, detail: readinessApplied ? '本地服务可达。' : '本地服务未运行。' },
-        local: { status: readinessApplied ? 'running' : 'stopped', engine: 'sensevoice', model: 'sensevoice-small', external: externalVoiceService, port: 3723 },
+        local: { status: localServiceStopped ? 'stopped' : readinessApplied ? 'running' : 'stopped', engine: 'sensevoice', model: 'sensevoice-small', external: externalVoiceService && !localServiceStopped, port: 3723 },
         voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', wakeWordEnabled: true, speakerVerificationEnabled: speakerGateLocked },
         steps: speakerGateLocked ? [
           { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
@@ -842,6 +856,11 @@ try {
   await page.waitForFunction(() => document.querySelector('#voice-local-doctor-list')?.textContent.includes('复用') || document.querySelector('#voice-local-doctor-list')?.textContent.includes('本地 ASR 进程'))
   await page.click('#voice-readiness-apply')
   await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('复用已运行服务'))
+  await page.click('#voice-local-restart')
+  await page.waitForFunction(() => document.querySelector('#voice-local-service-feedback')?.textContent.includes('取消跟踪复用服务'))
+  await fetch(`${baseUrl}/__smoke/external-voice-service`, { method: 'POST' })
+  await page.click('#voice-local-stop')
+  await page.waitForFunction(() => document.querySelector('#voice-local-service-feedback')?.textContent.includes('取消跟踪复用服务'))
   const selfTestInitial = await page.textContent('#voice-self-test-list')
   if (!selfTestInitial.includes('语音实测') && !selfTestInitial.includes('本地服务')) throw new Error(`voice self-test panel did not initialize: ${selfTestInitial}`)
   await page.click('#voice-self-test-start')
