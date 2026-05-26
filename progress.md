@@ -580,3 +580,14 @@
 - Extended Brain UI smoke coverage for importing a model and syncing the imported model path.
 - Extended `smoke:kws-runtime` for the import/download endpoint and UI controls.
 - This closes the biggest KWS setup UX gap; remaining pre-release work is a real macOS packaged verification and, if desired, curated model download presets.
+
+## Checkpoint 67 - v2.4.0 formal release preparation
+
+- Responded to the release cadence concern by stopping further feature expansion and preparing v2.4.0 as the next formal large release.
+- Bumped package metadata to 2.4.0.
+- Updated CHANGELOG with the local KWS/openWakeWord release summary, motivation, impact, deployment notes, verification matrix, asset expectations, and known limitations.
+- Updated README, backup documentation, and Brain UI update notes so the app itself explains what v2.4.0 changes.
+- Added RELEASE-v2.4.0.md as the GitHub Release body.
+- Validation suites passed, including KWS runtime, voice-panel gating, Brain UI, voice events, and voice manager smoke checks.
+- macOS arm64 package build succeeded and produced the v2.4.0 DMG/ZIP artifacts.
+- Next steps before publishing: create source/bundle assets, commit, tag, push, and create GitHub Release.

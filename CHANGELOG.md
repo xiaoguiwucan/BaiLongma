@@ -6,6 +6,97 @@
 
 
 
+## v2.4.0 - 2026-05-26
+
+### 更新内容
+
+这是本地 KWS / openWakeWord 唤醒大版本，收束 v2.3.2 之后的 KWS 配置、运行时、模型管理和自测闭环。目标是让白龙马不再只依赖 ASR 文本里出现唤醒词，而是具备更接近“小智 / WakeNet”体验的本地关键词唤醒路径。
+
+- `package.json` / `package-lock.json` 版本升级到 `2.4.0`。
+- 设置页新增唤醒检测方式：`文本唤醒`、`混合唤醒（KWS + 文本）`、`本地 KWS`。
+- 新增 KWS 引擎配置：`openWakeWord` 已接入本地运行时协议；`sherpa-onnx` 保留但会明确提示需要完整 tokens/encoder/decoder/joiner 配置，不假装可用。
+- 前端语音链路会在启用 KWS 后向本地语音服务发送 `kws_detect`，接收 `kws_result` / `kws_status`，命中后打开 KWS 唤醒窗口，后续最终 ASR 文本可作为正式指令。
+- 纯 KWS 模式下，如果本地 KWS 没命中，不允许仅靠 ASR 文本唤醒，避免视频/他人说话被误当作命令。
+- 本地 `sensevoice_server.py` 增加 openWakeWord `.onnx` 懒加载和本地 KWS 推理，缺依赖/缺模型会返回清晰状态。
+- 新增 KWS 状态检测：模型路径、模型文件是否存在、Python/openWakeWord 依赖、运行时状态和下一步建议。
+- 新增 openWakeWord 依赖安装入口：可从设置页触发安装 `openwakeword` + `onnxruntime`。
+- 新增 KWS 模型管理：扫描 `models/kws` 下 `.onnx` 模型、本地路径导入、http/https URL 下载、自动规范文件名、自动处理重名。
+- 设置页新增“扫描模型”“导入/下载模型”“应用 openWakeWord 配置”“录音自测”。
+- KWS 决策会发出 `wake:kws` / `bailongma:kws-wake` 调试事件，便于在语音调试面板观察命中、分数和阈值。
+- 新增 `npm run smoke:kws-runtime`，并扩展 `smoke:brain-ui` / `smoke:voice-panel-gating` 覆盖 KWS 配置、协议、模型管理和自测入口。
+
+### 改变原因
+
+- 用户反馈视频播放或别人说话会误唤醒，同时本人唤醒又可能被视频声掩盖；单靠 ASR 文本匹配唤醒词稳定性不够。
+- 小智类设备反应快，关键原因之一是前端本地唤醒/KWS 与后续 ASR 分离。v2.4.0 把白龙马从“软件侧文本唤醒”推进到“可配置本地 KWS + 文本兜底/纯 KWS”。
+- 仅添加设置项不够，用户需要能安装依赖、导入模型、扫描模型、应用配置并录音自测，所以本版本补齐完整操作闭环。
+
+### 影响范围
+
+- 默认仍保持 `文本唤醒`，不会破坏现有稳定路径。
+- 用户选择 `混合唤醒` 后，KWS 命中可以提前打开唤醒窗口，文本唤醒仍可兜底。
+- 用户选择 `本地 KWS` 后，必须本地 KWS 命中才会接受后续 ASR 指令，更适合视频/多人环境，但需要正确模型和阈值。
+- openWakeWord 依赖通过 Python 环境安装；模型文件不写入 Git，默认放在本地 `models/kws`。
+- 模型下载仅支持用户提供的 http/https URL；项目不内置第三方模型权重。
+
+### 验证结果
+
+- `node --check src/api.js` 通过。
+- `node --check src/config.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/voice-panel.js` 通过。
+- `python3 -m py_compile src/voice/sensevoice_server.py` 通过。
+- `node --check scripts/smoke-kws-runtime.mjs` 通过。
+- `node --check scripts/smoke-voice-panel-gating.mjs` 通过。
+- `node --check scripts/smoke-brain-ui.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:kws-runtime` 16/16 通过。
+- `npm run smoke:voice-panel-gating` 11/11 通过。
+- `npm run smoke:brain-ui` 通过。
+- `npm run smoke:voice-events` 92/92 通过。
+- `npm run smoke:voice-manager` 7/7 通过。
+- `npm run build:mac` 应在 Release 前执行并上传产物。
+
+### 部署注意事项
+
+源码运行：
+
+```bash
+npm install
+npm start
+```
+
+Mac 打包：
+
+```bash
+npm run build:mac
+```
+
+KWS 使用建议：
+
+1. 打开 Brain UI -> 设置 -> 语音识别。
+2. 在“唤醒检测方式”选择“混合唤醒”作为推荐起点。
+3. 在“KWS 自检”中点击“安装 openWakeWord”。
+4. 将 openWakeWord `.onnx` 模型通过“导入模型路径”或“下载模型 URL”导入到 `models/kws`。
+5. 点击“扫描模型”，选择模型后点击“应用 openWakeWord 配置”。
+6. 点击“录音自测”，观察是否出现 KWS 命中；如误拒绝可降低阈值，如误触发可提高阈值。
+
+### 备份附件说明
+
+- Release 应上传 `BaiLongma-source-v2.4.0.zip`：Git 追踪源码快照。
+- Release 应上传 `BaiLongma-v2.4.0.bundle`：离线 Git bundle。
+- 如 Mac arm64 打包成功，应上传 `Bailongma-2.4.0-arm64.dmg` 和 `Bailongma-2.4.0-mac-arm64.zip`。
+- 不上传 `.env`、`config.json`、`data/`、`node_modules/`、本地 `.onnx` 模型、虚拟环境和运行时缓存。
+
+### 已知限制
+
+- 项目不内置 openWakeWord 第三方模型权重，用户需要自行导入或提供下载 URL。
+- openWakeWord 依赖安装需要本机 Python/pip 可用，网络不可用时安装会失败。
+- sherpa-onnx KWS 还没有完整模型组表单；当前会明确提示未完整接入。
+- Mac 包仍未 notarize，跨机器首次打开可能需要在系统设置中允许。
+
+
 ## v2.3.2 - 2026-05-26
 
 ### 更新内容

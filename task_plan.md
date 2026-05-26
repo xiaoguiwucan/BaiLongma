@@ -655,3 +655,17 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend smoke tests for import/download endpoint and UI sync.
 - [x] Run validation checks and smoke suites.
 - [x] Commit and push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 67 plan - v2.4.0 formal release
+
+- [x] Stop expanding scope and prepare one meaningful KWS release instead of waiting for more features.
+- [x] Bump package version to 2.4.0.
+- [x] Update CHANGELOG for v2.4.0.
+- [x] Update README current version and release summary.
+- [x] Update BACKUP-2026-05-26.md with v2.4.0 deployment, verification, assets, and limits.
+- [x] Update Brain UI Settings -> Update release notes.
+- [x] Add RELEASE-v2.4.0.md for GitHub Release notes.
+- [x] Run syntax checks and smoke suites.
+- [x] Build macOS package.
+- [x] Create release source zip and git bundle.
+- [ ] Commit and tag completed; push and publish GitHub Release pending.

@@ -954,6 +954,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.4.0</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">本地 KWS/openWakeWord 唤醒大版本：文本/混合/纯 KWS 唤醒、模型管理、依赖安装、应用配置和录音自测。</p>
+                <ul class="release-note-points">
+                  <li>新增唤醒检测方式：文本唤醒、混合唤醒、本地 KWS；默认仍保持文本唤醒，不破坏旧路径。</li>
+                  <li>openWakeWord 接入本地语音服务，支持 .onnx 模型懒加载、kws_detect 协议、wake:kws 调试事件。</li>
+                  <li>设置页支持检测 KWS、安装依赖、扫描 models/kws、导入本地模型、下载 URL 模型、应用配置和录音自测。</li>
+                  <li>纯 KWS 模式下必须先命中 KWS 才接受 final ASR 指令，降低视频/他人说话被误当唤醒的问题。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.3.2</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>
