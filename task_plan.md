@@ -645,3 +645,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend KWS and Brain UI smoke coverage.
 - [x] Run validation checks and smoke suites.
 - [x] Commit and push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 66 plan - KWS model import/download flow
+
+- [x] Add backend import/download endpoint for openWakeWord `.onnx` models.
+- [x] Normalize filenames and copy/download into `models/kws`.
+- [x] Add source path and URL fields to KWS settings.
+- [x] Add “导入/下载模型” action and sync imported model into selector/path.
+- [x] Extend smoke tests for import/download endpoint and UI sync.
+- [x] Run validation checks and smoke suites.
+- [ ] Commit and push as a development checkpoint only, without tag/Release.

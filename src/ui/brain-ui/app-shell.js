@@ -580,10 +580,19 @@ const createSettingsModal = () => `
                 <option value="">扫描 models/kws 中的 .onnx 模型</option>
               </select>
             </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-kws-import-source">导入模型路径</label>
+              <input class="settings-input" type="text" id="voice-kws-import-source" placeholder="/Users/你/Downloads/hey-longma.onnx">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="voice-kws-import-url">下载模型 URL</label>
+              <input class="settings-input" type="text" id="voice-kws-import-url" placeholder="https://.../model.onnx">
+            </div>
             <div class="settings-row" style="align-items:flex-start;gap:8px;flex-wrap:wrap;">
               <label class="settings-label">KWS 自检</label>
               <button class="settings-button ghost" type="button" id="voice-kws-refresh">检测 KWS</button>
               <button class="settings-button ghost" type="button" id="voice-kws-scan-models">扫描模型</button>
+              <button class="settings-button ghost" type="button" id="voice-kws-import-model">导入/下载模型</button>
               <button class="settings-button ghost" type="button" id="voice-kws-install-openwakeword">安装 openWakeWord</button>
               <button class="settings-button ghost" type="button" id="voice-kws-apply-openwakeword">应用 openWakeWord 配置</button>
               <button class="settings-button ghost" type="button" id="voice-kws-record-test">录音自测</button>

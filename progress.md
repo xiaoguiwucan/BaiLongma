@@ -569,3 +569,14 @@
 - Extended Brain UI smoke coverage for model scanning, model selection, one-click openWakeWord apply, and KWS record-test start.
 - Extended `smoke:kws-runtime` to cover the model scanner endpoint and UI controls.
 - This is still a development checkpoint; remaining gap before a formal Release is model acquisition/import UX and a real packaged macOS verification pass.
+
+## Checkpoint 66 - KWS model import/download flow
+
+- Continued from model selection/self-test by removing the remaining manual filesystem step.
+- Added `POST /voice/local/kws/import` so users can import a local `.onnx` file path or download a model from an http/https URL into `models/kws`.
+- Added safe model filename normalization, automatic `models/kws` directory creation, duplicate filename suffixing, and returned imported model metadata.
+- Added Brain UI fields for local model source path and model download URL plus a “导入/下载模型” action.
+- After import/download, the UI refreshes the local model list, selects the imported model, syncs the model path, and refreshes KWS readiness.
+- Extended Brain UI smoke coverage for importing a model and syncing the imported model path.
+- Extended `smoke:kws-runtime` for the import/download endpoint and UI controls.
+- This closes the biggest KWS setup UX gap; remaining pre-release work is a real macOS packaged verification and, if desired, curated model download presets.

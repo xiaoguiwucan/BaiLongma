@@ -253,6 +253,59 @@ function checkPythonModule(moduleName = '') {
   return { ok: result.status === 0, python: python.executable || python.command, error: result.status === 0 ? '' : String(result.stderr || result.stdout || '').trim().slice(0, 500) }
 }
 
+function ensureWakeKwsModelDir() {
+  const dir = path.join(process.cwd(), 'models', 'kws')
+  fs.mkdirSync(dir, { recursive: true })
+  return dir
+}
+
+function sanitizeKwsModelFilename(name = '') {
+  const fallback = `wakeword-${Date.now()}.onnx`
+  const raw = String(name || '').split(/[\/]/).pop() || fallback
+  const safe = raw.replace(/[^a-zA-Z0-9._-]+/g, '-').replace(/^-+|-+$/g, '') || fallback
+  return safe.toLowerCase().endsWith('.onnx') ? safe : `${safe}.onnx`
+}
+
+function relativeKwsModelPath(absPath = '') {
+  const rel = path.relative(process.cwd(), absPath)
+  return rel && !rel.startsWith('..') && !path.isAbsolute(rel) ? rel : absPath
+}
+
+async function importWakeKwsModel({ sourcePath = '', url = '', name = '' } = {}) {
+  const destDir = ensureWakeKwsModelDir()
+  let filename = sanitizeKwsModelFilename(name)
+  let dest = path.join(destDir, filename)
+  if (fs.existsSync(dest)) {
+    const parsed = path.parse(filename)
+    filename = `${parsed.name}-${Date.now()}${parsed.ext || '.onnx'}`
+    dest = path.join(destDir, filename)
+  }
+  const rawUrl = String(url || '').trim()
+  const rawSource = String(sourcePath || '').trim()
+  if (rawUrl) {
+    if (!/^https?:\/\//i.test(rawUrl)) throw Object.assign(new Error('仅支持 http/https 模型下载地址。'), { statusCode: 400 })
+    if (!name) {
+      try { filename = sanitizeKwsModelFilename(new URL(rawUrl).pathname); dest = path.join(destDir, filename) } catch (_) {}
+    }
+    const resp = await fetch(rawUrl)
+    if (!resp.ok) throw Object.assign(new Error(`模型下载失败: HTTP ${resp.status}`), { statusCode: 400 })
+    const buf = Buffer.from(await resp.arrayBuffer())
+    if (!buf.length) throw Object.assign(new Error('下载的模型文件为空。'), { statusCode: 400 })
+    fs.writeFileSync(dest, buf)
+  } else if (rawSource) {
+    const src = path.resolve(rawSource)
+    if (!fs.existsSync(src) || !fs.statSync(src).isFile()) throw Object.assign(new Error('找不到本地模型文件。'), { statusCode: 400 })
+    if (!src.toLowerCase().endsWith('.onnx')) throw Object.assign(new Error('只支持导入 .onnx 模型文件。'), { statusCode: 400 })
+    if (!name) { filename = sanitizeKwsModelFilename(path.basename(src)); dest = path.join(destDir, filename) }
+    fs.copyFileSync(src, dest)
+  } else {
+    throw Object.assign(new Error('请提供本地 sourcePath 或 http/https url。'), { statusCode: 400 })
+  }
+  const size = fs.statSync(dest).size
+  const model = { name: path.basename(dest), path: relativeKwsModelPath(dest), absolutePath: dest, size, engine: 'openwakeword' }
+  return { ok: true, imported: model, models: listWakeKwsModels().models }
+}
+
 function listWakeKwsModels() {
   const roots = [
     path.join(process.cwd(), 'models', 'kws'),
@@ -2565,6 +2618,14 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     if (req.method === 'POST' && url.pathname === '/voice/local/kws/install-openwakeword') {
       const result = installOpenWakeWordDependency()
       jsonResponse(res, result.ok ? 200 : 500, { ...result, status: buildWakeKwsStatus() })
+      return
+    }
+
+    // POST /voice/local/kws/import — import/download an openWakeWord .onnx model into models/kws
+    if (req.method === 'POST' && url.pathname === '/voice/local/kws/import') {
+      readJsonBody(req).then(body => importWakeKwsModel(body)).then(result => {
+        jsonResponse(res, 200, result)
+      }).catch(err => jsonResponse(res, err.statusCode || 500, { ok: false, error: err.message || 'KWS 模型导入失败。' }))
       return
     }
 

@@ -2905,6 +2905,7 @@ function initTTSSettings() {
   document.getElementById("voice-kws-scan-models")?.addEventListener("click", scanVoiceKwsModels);
   document.getElementById("voice-kws-model-select")?.addEventListener("change", event => { const value = event.target?.value || ""; if (value) { const input = document.getElementById("voice-kws-model-path"); if (input) input.value = value; localStorage.setItem(VOICE_KWS_MODEL_PATH_KEY, value); } });
   document.getElementById("voice-kws-install-openwakeword")?.addEventListener("click", installOpenWakeWordRuntime);
+  document.getElementById("voice-kws-import-model")?.addEventListener("click", importVoiceKwsModel);
   document.getElementById("voice-kws-apply-openwakeword")?.addEventListener("click", applyOpenWakeWordConfig);
   document.getElementById("voice-kws-record-test")?.addEventListener("click", startKwsRecordTest);
   document.getElementById("voice-local-restart")?.addEventListener("click", restartLocalVoiceService);
@@ -2980,6 +2981,41 @@ function initTTSSettings() {
     } catch (err) {
       showFeedback(fb, err?.message || "安装失败", true);
       await refreshVoiceKwsStatus();
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function importVoiceKwsModel() {
+    const btn = document.getElementById("voice-kws-import-model");
+    const fb = document.getElementById("voice-kws-feedback");
+    const sourcePath = document.getElementById("voice-kws-import-source")?.value?.trim() || "";
+    const url = document.getElementById("voice-kws-import-url")?.value?.trim() || "";
+    if (!sourcePath && !url) {
+      showFeedback(fb, "请填写本地 .onnx 路径或下载 URL", true);
+      return;
+    }
+    if (btn) btn.disabled = true;
+    showFeedback(fb, url ? "正在下载 KWS 模型…" : "正在导入 KWS 模型…");
+    try {
+      const resp = await fetch(`${API}/voice/local/kws/import`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sourcePath, url }),
+      });
+      const data = await resp.json();
+      if (!resp.ok || data?.ok === false) throw new Error(data?.error || "模型导入失败");
+      renderVoiceKwsModels({ models: data.models || [] });
+      const input = document.getElementById("voice-kws-model-path");
+      const importedPath = data.imported?.path || "";
+      if (input && importedPath) input.value = importedPath;
+      localStorage.setItem(VOICE_KWS_MODEL_PATH_KEY, importedPath);
+      const select = document.getElementById("voice-kws-model-select");
+      if (select && importedPath) select.value = importedPath;
+      showFeedback(fb, `已导入模型：${data.imported?.name || importedPath}`);
+      await refreshVoiceKwsStatus();
+    } catch (err) {
+      showFeedback(fb, err?.message || "模型导入失败", true);
     } finally {
       if (btn) btn.disabled = false;
     }
