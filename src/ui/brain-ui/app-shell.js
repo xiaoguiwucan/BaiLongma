@@ -738,6 +738,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.238</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">增强 voice:events 调试客户端：支持 protocol、身份登记和 capabilities 参数。</p>
+                <ul class="release-note-points">
+                  <li>listen/speak/cancel 默认发送 client:hello，便于 status 诊断。</li>
+                  <li>新增 --client-id、--device、--platform、--capability 和 --no-identify。</li>
+                  <li>新增 smoke:voice-events-client，覆盖 CLI 调试链路 8 项。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.237</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

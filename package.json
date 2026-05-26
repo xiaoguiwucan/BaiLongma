@@ -1,7 +1,7 @@
 {
   "name": "bailongma",
   "productName": "Bailongma",
-  "version": "2.1.237",
+  "version": "2.1.238",
   "description": "A continuously running digital consciousness framework",
   "type": "module",
   "main": "electron/main.cjs",
@@ -22,7 +22,8 @@
     "smoke:social": "node scripts/smoke-social.mjs",
     "voice:events": "node scripts/voice-events-client.mjs",
     "smoke:voice-events": "node scripts/smoke-voice-events.mjs",
-    "smoke:voice-mapping": "node scripts/smoke-voice-mapping.mjs"
+    "smoke:voice-mapping": "node scripts/smoke-voice-mapping.mjs",
+    "smoke:voice-events-client": "node scripts/smoke-voice-events-client.mjs"
   },
   "dependencies": {
     "better-sqlite3": "^12.8.0",

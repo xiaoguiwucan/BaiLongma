@@ -4,6 +4,44 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.238 - 2026-05-26
+
+### 更新内容
+
+- 增强 `npm run voice:events` 调试客户端：
+  - 新增 `protocol` 命令，可直接打印 `GET /voice/events/protocol` 的协议元数据；
+  - `listen` / `speak` / `cancel` 默认发送 `client:hello`，让 `/voice/events/status` 能看到 CLI 客户端身份；
+  - 新增身份参数：`--client-id`、`--device`、`--app`、`--client-version`、`--platform`；
+  - 新增可重复的 `--capability` 参数，支持逗号/空格分隔，自动与命令默认能力合并；
+  - 新增 `--no-identify`，需要兼容旧调试行为时可关闭自动身份登记。
+- 新增 `scripts/smoke-voice-events-client.mjs` 与 npm script `smoke:voice-events-client`，覆盖 CLI protocol、listen 身份登记、二进制音频订阅、capabilities 合并和 `--no-identify`。
+- `package.json` / `package-lock.json` 版本更新到 `2.1.238`。
+
+### 改变原因
+
+- v2.1.236-v2.1.237 已经让服务端支持 client identity/capabilities，但本机调试客户端还不能方便模拟 ESP32、小智桥接器或手机端。
+- 让 CLI 默认登记身份后，调试者可以直接在 `/voice/events/status` 里看到客户端是谁、订阅了什么、支持哪些能力，排查“设备连上但没有音频/没有唤醒/没有 TTS”的问题更直接。
+- `protocol` 命令让客户端开发者无需手写 curl 就能检查服务端当前 limits、auth 和 capabilities。
+
+### 影响范围
+
+- 仅增强调试脚本和测试，不改变 `/voice/events` 服务端协议版本和旧客户端兼容性。
+- 默认 CLI 连接会多发一条 `client:hello`；如某些测试必须保持旧行为，可使用 `--no-identify`。
+- 新增测试需要先能在本机启动临时 API 端口。
+
+### 验证结果
+
+- `node --check scripts/voice-events-client.mjs` 通过。
+- `node --check scripts/smoke-voice-events-client.mjs` 通过。
+- `npm run smoke:voice-events-client` 8/8 通过。
+- 完整 smoke 结果见本版本发布记录。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 调试小智式设备桥接时建议先执行：`npm run voice:events -- protocol`。
+- 示例：`npm run voice:events -- listen --audio --binary --client-id esp32-test --device xiaozhi-esp32 --platform esp32 --capability wake --capability display`。
+
 ## v2.1.237 - 2026-05-26
 
 ### 更新内容
