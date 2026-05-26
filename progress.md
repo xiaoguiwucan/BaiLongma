@@ -394,3 +394,5 @@
 - Tightened API startup paths (`readiness/apply`, `doctor/fix`, `self-test/start`, and `/voice/local/start`) to call `ensureLocalVoiceServer()`, which detects an already-running port before spawning.
 - Updated voice-events smoke assertions to tolerate real-world state where an external local voice service is already running, while still verifying runtime speaker diagnostics.
 - Verification passed: `npm run smoke:voice-manager`, `npm run smoke:voice-events` 87/87, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
+- Pushed development checkpoint `1c63d67 feat: reuse existing local voice service` to `origin/main`.
+- No tag/GitHub Release created; this remains part of the next large-version milestone bundle.

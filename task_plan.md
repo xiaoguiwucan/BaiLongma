@@ -482,4 +482,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Make stop tracking safe for externally adopted services.
 - [x] Add voice manager smoke coverage for port reuse.
 - [x] Verify syntax plus voice manager, brain-ui, and voice-events smoke suites.
-- [ ] Push as a development checkpoint only, without tag/Release.
+- [x] Push as a development checkpoint only, without tag/Release.
