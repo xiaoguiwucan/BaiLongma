@@ -175,3 +175,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 18: Verdict-based wake tuning stability advice
+- [x] Convert evaluation verdicts into keep/rollback/observe/wait advice.
+- [x] Include advice metadata in tuning history and evaluate endpoint responses.
+- [x] Render verdict styling and advice text in Brain UI.
+- [x] Surface a rollback recommendation action for worse verdicts.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

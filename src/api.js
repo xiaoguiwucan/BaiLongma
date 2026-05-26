@@ -59,8 +59,20 @@ function evaluateWakeTuningRecord(item, now = Date.now()) {
         : 'unchanged'
   return { windowMs, before, after, verdict }
 }
+
+function wakeTuningEvaluationAdvice(evaluation) {
+  const verdict = evaluation?.verdict || 'pending'
+  if (verdict === 'improved') return { level: 'ok', action: 'keep', text: '调参后唤醒表现变好，建议暂时保持当前参数并继续观察。' }
+  if (verdict === 'worse') return { level: 'warn', action: 'rollback', text: '调参后唤醒拒绝变多，建议立即回滚上一次调参。' }
+  if (verdict === 'unchanged') return { level: 'info', action: 'observe', text: '调参后效果变化不明显，建议继续观察或只做一次小幅调整。' }
+  return { level: 'pending', action: 'wait', text: '调参后样本不足，先继续使用一段时间再判断。' }
+}
+function enrichWakeTuningEvaluation(item) {
+  const evaluation = evaluateWakeTuningRecord(item)
+  return evaluation ? { ...evaluation, advice: wakeTuningEvaluationAdvice(evaluation) } : null
+}
 function publicWakeTuningHistory() {
-  return wakeTuningHistory.slice(-12).map(item => ({ ...item, before: { ...(item.before || {}) }, after: { ...(item.after || {}) }, applied: { ...(item.applied || {}) }, evaluation: evaluateWakeTuningRecord(item) }))
+  return wakeTuningHistory.slice(-12).map(item => ({ ...item, before: { ...(item.before || {}) }, after: { ...(item.after || {}) }, applied: { ...(item.applied || {}) }, evaluation: enrichWakeTuningEvaluation(item) }))
 }
 function pushWakeTuningRecord(record) {
   wakeTuningHistory.push({ id: `wake_tune_${Date.now()}_${wakeTuningHistory.length + 1}`, at: Date.now(), ...record })
@@ -1203,7 +1215,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     if (req.method === 'GET' && url.pathname === '/voice/wake/tuning/evaluate') {
       const id = url.searchParams.get('id') || ''
       const items = id ? wakeTuningHistory.filter(item => item.id === id) : wakeTuningHistory.filter(item => item.reason !== 'rollback').slice(-6)
-      jsonResponse(res, 200, { ok: true, evaluations: items.map(item => ({ id: item.id, label: item.label, reason: item.reason, at: item.at, evaluation: evaluateWakeTuningRecord(item) })) })
+      jsonResponse(res, 200, { ok: true, evaluations: items.map(item => ({ id: item.id, label: item.label, reason: item.reason, at: item.at, evaluation: enrichWakeTuningEvaluation(item) })) })
       return
     }
 

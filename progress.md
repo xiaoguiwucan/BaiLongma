@@ -164,3 +164,11 @@
 - Extended `smoke:brain-ui` to assert tuning verdict and before/after metrics render before rollback.
 - Verification passed: `npm run smoke:voice-events` 55/55, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
+- Added verdict-based advice for wake tuning evaluations so the system can recommend keep/rollback/observe/wait instead of only showing raw metrics.
+- Evaluation objects now include `advice.level`, `advice.action`, and `advice.text` for `improved`, `worse`, `unchanged`, and `pending` verdicts.
+- Brain UI renders verdict-specific styling and human advice under the wake tuning history.
+- If evaluation is `worse`, the advice area can surface a “建议回滚” action using the existing rollback flow.
+- Extended `smoke:voice-events` to verify evaluation advice text is returned.
+- Extended `smoke:brain-ui` to verify improved verdict advice is rendered with before/after metrics.
+- Verification passed: `npm run smoke:voice-events` 55/55, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.

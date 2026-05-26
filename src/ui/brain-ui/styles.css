@@ -4540,3 +4540,24 @@ body.person-card-mode .person-card-panel,
   padding: 3px 7px;
   background: rgba(0,0,0,0.10);
 }
+
+.voice-wake-tuning-verdict-ok { color: #8ff0b3; border-color: rgba(143,240,179,0.35); background: rgba(143,240,179,0.08); }
+.voice-wake-tuning-verdict-warn { color: var(--warm); border-color: rgba(211,152,114,0.40); background: rgba(211,152,114,0.08); }
+.voice-wake-tuning-verdict-info { color: var(--cool); }
+.voice-wake-tuning-verdict-pending { color: var(--dim); }
+.voice-wake-tuning-advice {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px 8px;
+  color: var(--ink2);
+  background: rgba(255,255,255,0.025);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.voice-wake-tuning-advice-ok { border-color: rgba(143,240,179,0.28); background: rgba(143,240,179,0.06); }
+.voice-wake-tuning-advice-warn { border-color: rgba(211,152,114,0.32); background: rgba(211,152,114,0.08); }
+.voice-wake-tuning-advice-pending { color: var(--dim); }

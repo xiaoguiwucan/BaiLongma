@@ -299,7 +299,7 @@ new WebSocket(url)`,
         actions: [
           { reason: 'command too short', label: '降低最短指令字数到 1 字', patch: { wakeMinCommandChars: 1 }, safe: true, advice: '降低最短指令字数' },
         ],
-        history: wakeTuningApplied ? [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', reason: 'command too short', applied: { wakeMinCommandChars: 1 }, evaluation: { verdict: 'improved', before: { wakeRejected: 2, wakeAccepted: 1 }, after: { wakeRejected: 0, wakeAccepted: 2 } } }] : [],
+        history: wakeTuningApplied ? [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', reason: 'command too short', applied: { wakeMinCommandChars: 1 }, evaluation: { verdict: 'improved', advice: { level: 'ok', action: 'keep', text: '调参后唤醒表现变好，建议暂时保持当前参数并继续观察。' }, before: { wakeRejected: 2, wakeAccepted: 1 }, after: { wakeRejected: 0, wakeAccepted: 2 } } }] : [],
       })
       return
     }
@@ -527,7 +527,7 @@ try {
   await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))
-  await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝'))
+  await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('建议暂时保持当前参数'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-rollback')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已回滚'))
   if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop') || !voiceClientSnapshot.history.includes('confidence:0.81')) throw new Error('voice events history timeline did not render recent events and wake guard meta')
