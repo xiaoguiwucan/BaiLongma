@@ -2097,6 +2097,7 @@ function initVoiceClientsPanel() {
       if (voice.wakeMinCommandChars != null) localStorage.setItem("bailongma-voice-wake-min-command-chars", String(voice.wakeMinCommandChars));
       if (voice.wakeCooldownMs != null) localStorage.setItem("bailongma-voice-wake-cooldown-ms", String(voice.wakeCooldownMs));
       if (voice.wakeRequireSpeakerWhenEnabled != null) localStorage.setItem("bailongma-voice-wake-require-speaker", String(voice.wakeRequireSpeakerWhenEnabled));
+      if (voice.speakerThreshold != null) localStorage.setItem("bailongma-voice-speaker-threshold", String(voice.speakerThreshold));
       if (feedbackEl) feedbackEl.textContent = "自动调参已应用";
       refreshVoiceLinkSummary({ quiet: true });
     } catch (err) {
@@ -2135,6 +2136,7 @@ function initVoiceClientsPanel() {
       if (voice.wakeMinCommandChars != null) localStorage.setItem("bailongma-voice-wake-min-command-chars", String(voice.wakeMinCommandChars));
       if (voice.wakeCooldownMs != null) localStorage.setItem("bailongma-voice-wake-cooldown-ms", String(voice.wakeCooldownMs));
       if (voice.wakeRequireSpeakerWhenEnabled != null) localStorage.setItem("bailongma-voice-wake-require-speaker", String(voice.wakeRequireSpeakerWhenEnabled));
+      if (voice.speakerThreshold != null) localStorage.setItem("bailongma-voice-speaker-threshold", String(voice.speakerThreshold));
       if (voice.wakeMode) localStorage.setItem("bailongma-voice-wake-mode", voice.wakeMode);
       if (voice.wakeRepeatSuppression != null) localStorage.setItem("bailongma-voice-wake-repeat-suppression", String(voice.wakeRepeatSuppression));
       if (feedbackEl) feedbackEl.textContent = "唤醒调参已应用";
@@ -2159,6 +2161,7 @@ function initVoiceClientsPanel() {
       if (voice.wakeMinCommandChars != null) localStorage.setItem("bailongma-voice-wake-min-command-chars", String(voice.wakeMinCommandChars));
       if (voice.wakeCooldownMs != null) localStorage.setItem("bailongma-voice-wake-cooldown-ms", String(voice.wakeCooldownMs));
       if (voice.wakeRequireSpeakerWhenEnabled != null) localStorage.setItem("bailongma-voice-wake-require-speaker", String(voice.wakeRequireSpeakerWhenEnabled));
+      if (voice.speakerThreshold != null) localStorage.setItem("bailongma-voice-speaker-threshold", String(voice.speakerThreshold));
       if (voice.wakeMode) localStorage.setItem("bailongma-voice-wake-mode", voice.wakeMode);
       if (voice.wakeRepeatSuppression != null) localStorage.setItem("bailongma-voice-wake-repeat-suppression", String(voice.wakeRepeatSuppression));
       if (feedbackEl) feedbackEl.textContent = "唤醒调参已回滚";

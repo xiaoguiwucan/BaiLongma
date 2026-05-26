@@ -343,6 +343,7 @@ new WebSocket(url)`,
         current: { wakeMinCommandChars: 2, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true },
         actions: [
           { reason: 'command too short', label: '降低最短指令字数到 1 字', patch: { wakeMinCommandChars: 1 }, safe: true, advice: '降低最短指令字数' },
+          { reason: 'speaker rejected', label: '降低声纹严格度到 0.50', patch: { speakerThreshold: 0.50 }, safe: true, advice: '降低声纹严格度' },
         ],
         history: wakeTuningApplied ? [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', reason: 'command too short', applied: { wakeMinCommandChars: 1 }, evaluation: { verdict: 'improved', advice: { level: 'ok', action: 'keep', text: '调参后唤醒表现变好，建议暂时保持当前参数并继续观察。' }, before: { wakeRejected: 2, wakeAccepted: 1 }, after: { wakeRejected: 0, wakeAccepted: 2 } } }] : [],
       })
@@ -351,14 +352,14 @@ new WebSocket(url)`,
 
     if (url.pathname === '/voice/wake/tuning/apply') {
       wakeTuningApplied = true
-      sendJson(res, { ok: true, applied: { wakeMinCommandChars: 1 }, record: { id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', before: { wakeMinCommandChars: 2 }, after: { wakeMinCommandChars: 1 }, applied: { wakeMinCommandChars: 1 } }, history: [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字' }], voice: { wakeMinCommandChars: 1, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true } })
+      sendJson(res, { ok: true, applied: { wakeMinCommandChars: 1, speakerThreshold: 0.50 }, record: { id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', before: { wakeMinCommandChars: 2, speakerThreshold: 0.63 }, after: { wakeMinCommandChars: 1, speakerThreshold: 0.50 }, applied: { wakeMinCommandChars: 1, speakerThreshold: 0.50 } }, history: [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字' }], voice: { wakeMinCommandChars: 1, speakerThreshold: 0.50, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true } })
       return
     }
 
 
     if (url.pathname === '/voice/wake/tuning/rollback') {
       wakeTuningApplied = false
-      sendJson(res, { ok: true, rolledBack: 'wake_tune_smoke', record: { id: 'wake_tune_rollback', rollbackOf: 'wake_tune_smoke' }, voice: { wakeMinCommandChars: 2, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true }, history: [] })
+      sendJson(res, { ok: true, rolledBack: 'wake_tune_smoke', record: { id: 'wake_tune_rollback', rollbackOf: 'wake_tune_smoke' }, voice: { wakeMinCommandChars: 2, speakerThreshold: 0.63, wakeConfidenceThreshold: 0.72, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true }, history: [] })
       return
     }
 
@@ -606,12 +607,14 @@ try {
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/package')) throw new Error('voice clients protocol diagnostics did not render package endpoint')
   if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('最短指令字数')) throw new Error('voice link summary did not render wake reject tuning advice')
   if (!voiceClientSnapshot.summary.includes('声纹拒绝') || !voiceClientSnapshot.summary.includes('声纹严格度')) throw new Error('voice link summary did not render speaker rejection diagnostics')
-  await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('安全自动调参'))
+  await page.waitForFunction(() => document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低最短指令字数') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('降低声纹严格度') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('安全自动调参'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))
+  await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-threshold') === '0.5')
   await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('建议暂时保持当前参数'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-rollback')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已回滚'))
+  await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-threshold') === '0.63')
   if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop') || !voiceClientSnapshot.history.includes('confidence:0.81')) throw new Error('voice events history timeline did not render recent events and wake guard meta')
   await page.evaluate(() => document.querySelector('#voice-link-check-btn')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-link-check')?.textContent.includes('一键语音链路自检'))

@@ -234,3 +234,14 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 24: One-click speaker rejection tuning actions
+- [x] Convert recent speaker rejection details into safe bounded tuning actions.
+- [x] Suggest lowering `speakerThreshold` when rejected speaker scores indicate the threshold is too strict.
+- [x] Suggest disabling “wake also requires speaker verification” as a wake-stage recovery action when appropriate.
+- [x] Return combined wake + speaker tuning actions from `/voice/wake/tuning`.
+- [x] Allow `speakerThreshold` through the safe apply whitelist and record it in tuning history/rollback metadata.
+- [x] Mirror applied and rolled-back speaker threshold into Brain UI localStorage runtime settings.
+- [x] Extend wake-guard, voice-events, and brain-ui smoke coverage.
+- [x] Verify syntax plus wake-guard, voice-events, and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

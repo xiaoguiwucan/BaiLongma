@@ -135,3 +135,31 @@ export function buildWakeGuardTuningActions({ summary = {}, current = {} } = {})
     }
   }).filter(item => item.safe)
 }
+
+export function buildSpeakerTuningActions({ summary = {}, current = {} } = {}) {
+  const details = Array.isArray(summary?.recent?.speakerRejectedDetails) ? summary.recent.speakerRejectedDetails : []
+  if (!details.length) return []
+  const currentThreshold = Number.isFinite(Number(current.speakerThreshold)) ? Number(current.speakerThreshold) : 0.55
+  const lowestScore = details.reduce((min, item) => Number.isFinite(Number(item.score)) ? Math.min(min, Number(item.score)) : min, currentThreshold)
+  const target = Math.max(0.45, Math.min(0.80, Number((Math.min(currentThreshold - 0.03, lowestScore + 0.03)).toFixed(2))))
+  const actions = []
+  if (target < currentThreshold) {
+    actions.push({
+      reason: 'speaker rejected',
+      label: `降低声纹严格度到 ${target.toFixed(2)}`,
+      patch: { speakerThreshold: target },
+      safe: true,
+      advice: details[details.length - 1]?.advice || '如果这是你的声音，请降低声纹严格度或重新录入声纹。',
+    })
+  }
+  if (current.wakeRequireSpeakerWhenEnabled !== false) {
+    actions.push({
+      reason: 'speaker rejected',
+      label: '关闭“唤醒也必须通过声纹”',
+      patch: { wakeRequireSpeakerWhenEnabled: false },
+      safe: true,
+      advice: '先允许唤醒词通过，再在最终识别阶段继续使用声纹过滤。',
+    })
+  }
+  return actions
+}

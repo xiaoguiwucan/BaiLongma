@@ -1,4 +1,4 @@
-import { buildWakeGuardTuningActions, estimateWakeConfidence, evaluateWakeGuard, normalizeWakeGuardConfig, wakeGuardPatchForReason } from '../src/voice/wake-guard.js'
+import { buildSpeakerTuningActions, buildWakeGuardTuningActions, estimateWakeConfidence, evaluateWakeGuard, normalizeWakeGuardConfig, wakeGuardPatchForReason } from '../src/voice/wake-guard.js'
 
 const checks = []
 function assert(condition, label, detail = '') {
@@ -23,6 +23,8 @@ const lowConfidencePatch = wakeGuardPatchForReason('wake confidence too low', { 
 assert(lowConfidencePatch.patch.wakeConfidenceThreshold === 0.68, 'builds safe patch for low confidence wake')
 const tuningActions = buildWakeGuardTuningActions({ summary: { recent: { wakeRejectedDetails: [{ reason: 'command too short', advice: '降低最短指令字数' }] } }, current: { wakeMinCommandChars: 2 } })
 assert(tuningActions.length === 1 && tuningActions[0].patch.wakeMinCommandChars === 1, 'builds tuning actions from summary wake reject details')
+const speakerActions = buildSpeakerTuningActions({ summary: { recent: { speakerRejectedDetails: [{ score: 0.47, threshold: 0.63, advice: '降低声纹严格度' }] } }, current: { speakerThreshold: 0.63, wakeRequireSpeakerWhenEnabled: true } })
+assert(speakerActions.some(item => item.patch.speakerThreshold === 0.5) && speakerActions.some(item => item.patch.wakeRequireSpeakerWhenEnabled === false), 'builds speaker tuning actions from rejection details', JSON.stringify(speakerActions))
 
 const failed = checks.filter(item => !item.ok)
 console.log(`\nWake guard smoke checks: ${checks.length - failed.length}/${checks.length} passed`)

@@ -279,12 +279,13 @@ try {
   assert(summaryAfterRejects.summary?.issues?.includes('speaker_rejected_high') && summaryAfterRejects.summary?.suggestions?.some(item => item.includes('重新录入声纹')), 'summary endpoint promotes speaker rejection issues into suggestions', JSON.stringify(summaryAfterRejects.summary))
   const tuning = await fetch(`${API}/voice/wake/tuning?windowMs=60000`).then(r => r.json())
   assert(tuning.ok === true && tuning.actions?.some(item => item.reason === 'command too short' && item.patch?.wakeMinCommandChars != null), 'wake tuning endpoint suggests safe patch from rejection summary', JSON.stringify(tuning.actions))
+  assert(tuning.actions?.some(item => item.reason === 'speaker rejected' && item.patch?.speakerThreshold != null), 'wake tuning endpoint suggests safe speaker threshold patch from rejection summary', JSON.stringify(tuning.actions))
   const applyTuning = await fetch(`${API}/voice/wake/tuning/apply`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ patch: { wakeMinCommandChars: 1, unknownUnsafeField: true } }),
+    body: JSON.stringify({ patch: { wakeMinCommandChars: 1, speakerThreshold: 0.50, unknownUnsafeField: true } }),
   }).then(r => r.json())
-  assert(applyTuning.ok === true && applyTuning.applied?.wakeMinCommandChars === 1 && !('unknownUnsafeField' in applyTuning.applied) && applyTuning.record?.before && applyTuning.history?.length >= 1, 'wake tuning apply endpoint persists only safe fields and records history', JSON.stringify(applyTuning))
+  assert(applyTuning.ok === true && applyTuning.applied?.wakeMinCommandChars === 1 && applyTuning.applied?.speakerThreshold === 0.50 && !('unknownUnsafeField' in applyTuning.applied) && applyTuning.record?.before && applyTuning.history?.length >= 1, 'wake tuning apply endpoint persists only safe fields and records history', JSON.stringify(applyTuning))
   const evalBeforeRollback = await fetch(`${API}/voice/wake/tuning/evaluate?id=${encodeURIComponent(applyTuning.record.id)}`).then(r => r.json())
   assert(evalBeforeRollback.ok === true && evalBeforeRollback.evaluations?.[0]?.evaluation?.before && evalBeforeRollback.evaluations?.[0]?.evaluation?.after && evalBeforeRollback.evaluations?.[0]?.evaluation?.advice?.text, 'wake tuning evaluate endpoint returns before/after metrics and advice', JSON.stringify(evalBeforeRollback))
   const autoBefore = await fetch(`${API}/voice/wake/tuning/auto?windowMs=60000`).then(r => r.json())

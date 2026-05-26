@@ -24,7 +24,7 @@ import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
-import { buildWakeGuardTuningActions } from './voice/wake-guard.js'
+import { buildSpeakerTuningActions, buildWakeGuardTuningActions } from './voice/wake-guard.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
 import { setDocPanelState, getDocPanelState, DOC_TOPICS } from './docs.js'
 
@@ -62,7 +62,8 @@ function countWakeAutoActionsSince(since = Date.now() - 3600000) {
 }
 function evaluateWakeAutoTuning({ windowMs = 60000 } = {}) {
   const summary = getVoiceEventLinkSummary({ windowMs })
-  const actions = buildWakeGuardTuningActions({ summary, current: getVoiceConfig() })
+  const current = getVoiceConfig()
+  const actions = [...buildWakeGuardTuningActions({ summary, current }), ...buildSpeakerTuningActions({ summary, current })]
   const reasons = summary?.recent?.wakeRejectedReasons || {}
   const topReason = Object.entries(reasons).sort((a, b) => b[1] - a[1])[0] || null
   const now = Date.now()
@@ -1263,7 +1264,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         service: 'bailongma.voice.wake.tuning',
         current: getVoiceConfig(),
         summary,
-        actions: buildWakeGuardTuningActions({ summary, current: getVoiceConfig() }),
+        actions: [...buildWakeGuardTuningActions({ summary, current: getVoiceConfig() }), ...buildSpeakerTuningActions({ summary, current: getVoiceConfig() })],
         history: publicWakeTuningHistory(),
       })
       return
@@ -1277,7 +1278,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         try {
           const body = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
           const patch = body.patch && typeof body.patch === 'object' ? body.patch : {}
-          const allowed = new Set(['wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeMode', 'wakeRepeatSuppression'])
+          const allowed = new Set(['wakeConfidenceThreshold', 'wakeMinCommandChars', 'wakeCooldownMs', 'wakeRequireSpeakerWhenEnabled', 'wakeMode', 'wakeRepeatSuppression', 'speakerThreshold'])
           const safePatch = Object.fromEntries(Object.entries(patch).filter(([key]) => allowed.has(key)))
           if (!Object.keys(safePatch).length) {
             jsonResponse(res, 400, { ok: false, error: 'No safe wake tuning fields provided.' })

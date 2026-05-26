@@ -214,3 +214,13 @@
 - Verification passed: syntax checks for voice event bus, Brain UI app, and smoke scripts; `npm run smoke:voice-events` 60/60; `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Extended safe voice tuning actions beyond wake-word settings to include speaker verification rejection recovery.
+- Added `buildSpeakerTuningActions()` so recent `speaker:rejected` diagnostics can suggest bounded actions such as lowering `speakerThreshold` or disabling “wake also requires speaker verification”.
+- `/voice/wake/tuning` now returns combined wake + speaker safe tuning actions, and `/voice/wake/tuning/apply` allows the whitelisted `speakerThreshold` field.
+- Brain UI one-click tuning apply/rollback now mirrors `speakerThreshold` into localStorage so the local ASR websocket runtime immediately uses the adjusted or restored value.
+- Extended `smoke:wake-guard` to 10/10 for speaker tuning action generation.
+- Extended `smoke:voice-events` to 61/61 for speaker threshold tuning endpoint coverage.
+- Extended `smoke:brain-ui` to verify speaker tuning action rendering, apply localStorage sync, and rollback localStorage restore.
+- Verification passed: syntax checks for wake guard, API, Brain UI app, and smoke scripts; `npm run smoke:wake-guard` 10/10; `npm run smoke:voice-events` 61/61; `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
