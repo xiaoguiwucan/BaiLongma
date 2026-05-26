@@ -417,3 +417,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend brain-ui and voice-events smoke coverage.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 42: Offline voiceprint clear fallback
+- [x] Add offline file deletion fallback for `POST /voice/local/speaker/clear`.
+- [x] Delete `data/voiceprint.json` from the shared user data directory even when the local ASR WebSocket is stopped.
+- [x] Prefer runtime `speaker_clear` when service is running, but fall back to offline deletion on timeout/error.
+- [x] Keep disabling `speakerVerificationEnabled` after clear so users are not locked out by missing voiceprint.
+- [x] Extend voice-events smoke coverage for offline clear success while local service is stopped.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

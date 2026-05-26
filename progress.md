@@ -340,3 +340,8 @@
 - Brain UI now has a “清除声纹” button beside enroll/test; after clearing it refreshes speaker status and local voice doctor and prompts the user to re-enroll.
 - Extended smoke coverage for stopped-service clear rejection and UI clear flow.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Improved voiceprint recovery by allowing local voiceprint clearing even when the local ASR service is stopped or unreachable.
+- `POST /voice/local/speaker/clear` now prefers runtime `speaker_clear`, but falls back to deleting `${paths.dataDir}/voiceprint.json` directly on stopped service, timeout, or WebSocket error.
+- Offline clear still disables speaker verification afterward, preventing a missing voiceprint from blocking all wake attempts.
+- Updated smoke coverage so stopped-service clear is now expected to succeed via `offline_file` mode.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

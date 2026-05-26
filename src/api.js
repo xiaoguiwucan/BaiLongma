@@ -233,14 +233,24 @@ async function queryLocalSpeakerStatus({ timeoutMs = 900 } = {}) {
 }
 
 
+function clearLocalSpeakerVoiceprintOffline() {
+  const filePath = path.join(paths.dataDir, 'voiceprint.json')
+  let existed = false
+  try {
+    existed = fs.existsSync(filePath)
+    if (existed) fs.unlinkSync(filePath)
+  } catch (err) {
+    const error = new Error(`Failed to delete local voiceprint file: ${err.message}`)
+    error.statusCode = 500
+    error.code = 'voiceprint_file_delete_failed'
+    throw error
+  }
+  return { ok: true, mode: 'offline_file', configured: false, sampleCount: 0, filePath, existed }
+}
+
 async function clearLocalSpeakerVoiceprint({ timeoutMs = 1200 } = {}) {
   const local = getVoiceStatus()
-  if (local.status !== 'running') {
-    const err = new Error('Local voice service is not running.')
-    err.statusCode = 409
-    err.code = 'local_voice_not_running'
-    throw err
-  }
+  if (local.status !== 'running') return clearLocalSpeakerVoiceprintOffline()
   return await new Promise((resolve, reject) => {
     let settled = false
     const finish = (err, value) => {
@@ -251,16 +261,16 @@ async function clearLocalSpeakerVoiceprint({ timeoutMs = 1200 } = {}) {
       err ? reject(err) : resolve(value)
     }
     const ws = new WebSocket(`ws://127.0.0.1:${local.port || 3723}`)
-    const timer = setTimeout(() => finish(new Error('Speaker clear timeout.')), timeoutMs)
+    const timer = setTimeout(() => finish(null, { ...clearLocalSpeakerVoiceprintOffline(), warning: 'runtime_clear_timeout' }), timeoutMs)
     ws.on('open', () => ws.send(JSON.stringify({ type: 'speaker_clear' })))
     ws.on('message', raw => {
       try {
         const msg = JSON.parse(String(raw))
-        if (msg.type === 'speaker_clear_ok') finish(null, { ok: true, configured: Boolean(msg.configured), sampleCount: Number(msg.sampleCount || 0), threshold: msg.threshold })
-        if (msg.type === 'error') finish(new Error(msg.message || 'Speaker clear failed.'))
+        if (msg.type === 'speaker_clear_ok') finish(null, { ok: true, mode: 'runtime', configured: Boolean(msg.configured), sampleCount: Number(msg.sampleCount || 0), threshold: msg.threshold })
+        if (msg.type === 'error') finish(null, { ...clearLocalSpeakerVoiceprintOffline(), warning: msg.message || 'runtime_clear_failed' })
       } catch (_) {}
     })
-    ws.on('error', err => finish(err))
+    ws.on('error', err => finish(null, { ...clearLocalSpeakerVoiceprintOffline(), warning: err?.message || 'runtime_clear_error' }))
   })
 }
 
