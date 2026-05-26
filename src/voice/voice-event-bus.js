@@ -379,6 +379,28 @@ export function publishVoiceEvent(event) {
   return { delivered: clients.size, xiaozhi }
 }
 
+
+export function getVoiceEventMetricsWindow({ since = 0, until = Date.now() } = {}) {
+  const start = Number(since || 0)
+  const end = Number(until || Date.now())
+  const metrics = { total: 0, wakeAccepted: 0, wakeRejected: 0, asrFinal: 0, ttsStop: 0 }
+  for (const item of history) {
+    const event = item.event || {}
+    const at = Number(event.at || event.ts || item.at || 0)
+    if (start && at < start) continue
+    if (end && at > end) continue
+    metrics.total += 1
+    if (event.type === 'wake:accepted') metrics.wakeAccepted += 1
+    else if (event.type === 'wake:rejected') metrics.wakeRejected += 1
+    else if (event.type === 'asr:final') metrics.asrFinal += 1
+    else if (event.type === 'tts:stop') metrics.ttsStop += 1
+  }
+  metrics.acceptanceRate = metrics.wakeAccepted + metrics.wakeRejected > 0
+    ? Number((metrics.wakeAccepted / (metrics.wakeAccepted + metrics.wakeRejected)).toFixed(3))
+    : null
+  return metrics
+}
+
 export function sendVoiceEventToClient(ws, event) {
   const normalized = {
     type: event?.type || 'unknown',

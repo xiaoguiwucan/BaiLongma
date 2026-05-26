@@ -14,7 +14,7 @@ import { paths } from './paths.js'
 import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { createTTSSession, cancelTTSSession, streamTTSSegment, getTTSSession } from './voice/tts-session.js'
-import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventClientDetails, getVoiceEventHistory, getVoiceEventLinkSummary, getVoiceEventLinkSelfCheck, getVoiceEventsOnboardingPackage, getVoiceEventsOnboarding, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, normalizeVoiceEventsTTSSpeakLimits, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
+import { addVoiceEventClient, removeVoiceEventClient, handleVoiceEventClientMessage, sendVoiceEventClientJson, sendVoiceEventToClient, getVoiceEventClientOptions, setVoiceEventClientOptions, publishVoiceEvent, getVoiceEventBusStatus, getVoiceEventClientDetails, getVoiceEventHistory, getVoiceEventMetricsWindow, getVoiceEventLinkSummary, getVoiceEventLinkSelfCheck, getVoiceEventsOnboardingPackage, getVoiceEventsOnboarding, getVoiceEventsProtocolMetadata, validateVoiceEventClientMessage, sendVoiceEventProtocolError, normalizeVoiceEventsTTSSpeakLimits, publishTTSAudioStart, publishTTSAudioChunk, publishTTSAudioEnd, publishTTSAudioError } from './voice/voice-event-bus.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
 import { replaceProvider } from './providers/registry.js'
@@ -45,8 +45,22 @@ const DEFAULT_AGENT_NAME = '小白龙'
 const DEFAULT_API_HOST = '127.0.0.1'
 
 const wakeTuningHistory = []
+function evaluateWakeTuningRecord(item, now = Date.now()) {
+  if (!item || item.reason === 'rollback') return null
+  const windowMs = Math.max(30000, Math.min(10 * 60 * 1000, Number(item.windowMs || 60000)))
+  const before = item.beforeMetrics || getVoiceEventMetricsWindow({ since: item.at - windowMs, until: item.at })
+  const after = getVoiceEventMetricsWindow({ since: item.at, until: now })
+  const verdict = after.wakeRejected < before.wakeRejected || (after.acceptanceRate != null && before.acceptanceRate != null && after.acceptanceRate > before.acceptanceRate)
+    ? 'improved'
+    : after.total === 0
+      ? 'pending'
+      : after.wakeRejected > before.wakeRejected
+        ? 'worse'
+        : 'unchanged'
+  return { windowMs, before, after, verdict }
+}
 function publicWakeTuningHistory() {
-  return wakeTuningHistory.slice(-12).map(item => ({ ...item, before: { ...(item.before || {}) }, after: { ...(item.after || {}) }, applied: { ...(item.applied || {}) } }))
+  return wakeTuningHistory.slice(-12).map(item => ({ ...item, before: { ...(item.before || {}) }, after: { ...(item.after || {}) }, applied: { ...(item.applied || {}) }, evaluation: evaluateWakeTuningRecord(item) }))
 }
 function pushWakeTuningRecord(record) {
   wakeTuningHistory.push({ id: `wake_tune_${Date.now()}_${wakeTuningHistory.length + 1}`, at: Date.now(), ...record })
@@ -1175,12 +1189,21 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           const before = getVoiceConfig()
           setVoiceConfig(safePatch)
           const after = getVoiceConfig()
-          const record = pushWakeTuningRecord({ reason: body.reason || '', label: body.label || '', before, after, applied: safePatch })
+          const record = pushWakeTuningRecord({ reason: body.reason || '', label: body.label || '', before, after, applied: safePatch, windowMs: Number(body.windowMs || 60000), beforeMetrics: getVoiceEventMetricsWindow({ since: Date.now() - Number(body.windowMs || 60000), until: Date.now() }) })
           jsonResponse(res, 200, { ok: true, applied: safePatch, voice: after, record, history: publicWakeTuningHistory() })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
         }
       })
+      return
+    }
+
+
+    // GET /voice/wake/tuning/evaluate — compare before/after wake metrics for tuning records
+    if (req.method === 'GET' && url.pathname === '/voice/wake/tuning/evaluate') {
+      const id = url.searchParams.get('id') || ''
+      const items = id ? wakeTuningHistory.filter(item => item.id === id) : wakeTuningHistory.filter(item => item.reason !== 'rollback').slice(-6)
+      jsonResponse(res, 200, { ok: true, evaluations: items.map(item => ({ id: item.id, label: item.label, reason: item.reason, at: item.at, evaluation: evaluateWakeTuningRecord(item) })) })
       return
     }
 

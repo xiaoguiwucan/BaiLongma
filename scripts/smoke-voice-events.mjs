@@ -278,6 +278,8 @@ try {
     body: JSON.stringify({ patch: { wakeMinCommandChars: 1, unknownUnsafeField: true } }),
   }).then(r => r.json())
   assert(applyTuning.ok === true && applyTuning.applied?.wakeMinCommandChars === 1 && !('unknownUnsafeField' in applyTuning.applied) && applyTuning.record?.before && applyTuning.history?.length >= 1, 'wake tuning apply endpoint persists only safe fields and records history', JSON.stringify(applyTuning))
+  const evalBeforeRollback = await fetch(`${API}/voice/wake/tuning/evaluate?id=${encodeURIComponent(applyTuning.record.id)}`).then(r => r.json())
+  assert(evalBeforeRollback.ok === true && evalBeforeRollback.evaluations?.[0]?.evaluation?.before && evalBeforeRollback.evaluations?.[0]?.evaluation?.after, 'wake tuning evaluate endpoint returns before/after metrics', JSON.stringify(evalBeforeRollback))
   const rollbackTuning = await fetch(`${API}/voice/wake/tuning/rollback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

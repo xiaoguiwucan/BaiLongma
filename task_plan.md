@@ -165,3 +165,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 17: Wake tuning effect evaluation
+- [x] Add arbitrary-window voice event metrics helper.
+- [x] Capture before metrics when applying wake tuning.
+- [x] Add `GET /voice/wake/tuning/evaluate` for before/after verdicts.
+- [x] Include evaluation data in wake tuning history.
+- [x] Render verdict and before/after counts in Brain UI.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

@@ -155,3 +155,12 @@
 - Extended `smoke:brain-ui` to apply a tuning action and then rollback it from the UI.
 - Verification passed: `npm run smoke:voice-events` 54/54, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
+- Added wake tuning effect evaluation to close the apply/rollback loop with before-vs-after metrics.
+- Added `getVoiceEventMetricsWindow()` to compute wake accepted/rejected, ASR final, TTS stop, total events, and acceptance rate over arbitrary windows.
+- Wake tuning apply records now capture `beforeMetrics` for the tuning window, and public history includes an `evaluation` object.
+- Added `GET /voice/wake/tuning/evaluate` to return before/after metrics and verdict (`improved`, `pending`, `worse`, or `unchanged`) for one record or recent records.
+- Brain UI wake tuning history now shows verdict plus “应用前拒绝/成功” and “应用后拒绝/成功” counts.
+- Extended `smoke:voice-events` to 55/55 for evaluation endpoint coverage.
+- Extended `smoke:brain-ui` to assert tuning verdict and before/after metrics render before rollback.
+- Verification passed: `npm run smoke:voice-events` 55/55, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 9/9, and `npm run smoke:voice-config` 8/8.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
