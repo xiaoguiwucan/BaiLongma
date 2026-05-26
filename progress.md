@@ -416,3 +416,5 @@
 - The overview primary action can launch one-click preparation, start self-test, or guide speaker enrollment from the summary card.
 - Extended voice-events and Brain UI smoke coverage for the local voice overview endpoint and summary card rendering.
 - Verification passed: syntax checks for API/Brain UI scripts, `npm run smoke:voice-events` 88/88, and `npm run smoke:brain-ui`; reset smoke-mutated `config.json`.
+- Pushed development checkpoint `aa26816 feat: add local voice overview` to `origin/main`.
+- No tag/GitHub Release created; this remains part of the next large-version milestone bundle.

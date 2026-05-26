@@ -508,4 +508,4 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Wire overview actions to one-click prepare/self-test/enroll flows.
 - [x] Extend voice-events and Brain UI smoke coverage.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
-- [ ] Push as a development checkpoint only, without tag/Release.
+- [x] Push as a development checkpoint only, without tag/Release.
