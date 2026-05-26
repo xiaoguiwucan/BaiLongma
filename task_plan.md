@@ -136,3 +136,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add `smoke:wake-guard` coverage.
 - [x] Verify wake guard, voice config, and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 14: Wake rejection diagnostics in summary/history
+- [x] Aggregate recent wake rejected reasons and details in `/voice/events/summary`.
+- [x] Convert wake guard reasons into human tuning suggestions.
+- [x] Render wake rejection confidence/threshold/min-command/cooldown metadata in Brain UI history.
+- [x] Render recent wake rejection advice cards in Brain UI voice link summary.
+- [x] Extend voice-events and brain-ui smoke coverage.
+- [x] Verify voice-events, brain-ui, wake-guard, and voice-config smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.

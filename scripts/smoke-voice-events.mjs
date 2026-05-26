@@ -257,6 +257,19 @@ try {
   assert(filteredHistory.events?.some(item => item.event?.type === 'asr:final' && item.xiaozhi?.state === 'final'), 'history endpoint filters by raw event type and includes xiaozhi mapping', JSON.stringify(filteredHistory))
   const summaryAfterPublish = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
   assert(summaryAfterPublish.summary?.recent?.wakeAccepted >= 1 && summaryAfterPublish.summary?.recent?.asrFinal >= 1 && summaryAfterPublish.summary?.recent?.ttsStop >= 1, 'summary endpoint aggregates recent wake/asr/tts events', JSON.stringify(summaryAfterPublish))
+  await fetch(`${API}/voice/events/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event: { type: 'wake:rejected', at: Date.now(), detail: { text: '龙马', reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2 } } }),
+  })
+  await fetch(`${API}/voice/events/publish`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ event: { type: 'wake:rejected', at: Date.now(), detail: { text: '龙马', reason: 'command too short', confidence: 0.80, threshold: 0.72, minCommandChars: 2 } } }),
+  })
+  const summaryAfterRejects = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
+  assert(summaryAfterRejects.summary?.recent?.wakeRejectedDetails?.some(item => item.reason === 'command too short' && item.advice?.includes('最短指令字数')), 'summary endpoint exposes wake reject details and tuning advice', JSON.stringify(summaryAfterRejects.summary?.recent))
+  assert(summaryAfterRejects.summary?.issues?.some(item => item.includes('wake_guard_command_too_short')) && summaryAfterRejects.summary?.suggestions?.some(item => item.includes('最短指令字数')), 'summary endpoint promotes wake guard issues into suggestions', JSON.stringify(summaryAfterRejects.summary))
   assert(publishMessages.some(msg => msg.type === 'voice_event' && msg.event?.type === 'asr:final'), 'publish broadcasts raw voice_event', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'stt' && msg.state === 'final' && msg.text === '烟雾测试'), 'publish maps asr:final to Xiaozhi-style stt final', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'wake' && msg.state === 'accepted' && msg.word === '小白龙'), 'publish maps wake:accepted to Xiaozhi-style wake accepted', JSON.stringify(publishMessages))

@@ -467,15 +467,43 @@ export function getVoiceEventClientDetails() {
 }
 
 
+function wakeRejectAdvice(reason = '') {
+  const key = String(reason || 'unknown')
+  if (key === 'command too short') return '唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。'
+  if (key === 'wake confidence too low') return '唤醒置信度偏低：确认唤醒词在句首，必要时降低“唤醒置信度阈值”。'
+  if (key === 'wake cooldown') return '唤醒冷却中：如果连续指令很多，可缩短“唤醒冷却时间”。'
+  if (key === 'speaker verification required for wake') return '声纹未通过：重新录入声纹、降低声纹严格度，或关闭“唤醒也必须通过声纹”。'
+  if (key === 'repeat suppressed') return '重复误识别已抑制：这是正常保护；如果误抑制，可关闭重复误识别抑制。'
+  if (key === 'wake not at prefix') return '严格模式要求唤醒词在句首：请说“龙马，……”，或切到宽松模式。'
+  if (key === 'wake missing') return '没有检测到唤醒词：检查唤醒词列表或提高说话清晰度。'
+  return '唤醒被拒绝：查看最近语音事件中的 reason/confidence，再调整唤醒词、声纹或视频抗干扰。'
+}
+
 function countRecentVoiceEvents({ since = Date.now() - 60000 } = {}) {
   const counts = { total: 0, wakeAccepted: 0, wakeRejected: 0, asrFinal: 0, asrPartial: 0, ttsStart: 0, ttsStop: 0, interrupt: 0, unknown: 0 }
+  const wakeRejectedReasons = {}
+  const wakeRejectedDetails = []
   for (const item of history) {
     const event = item.event || {}
+    const detail = event.detail || {}
     const at = Number(event.at || event.ts || item.at || 0)
     if (at && at < since) continue
     counts.total += 1
     if (event.type === 'wake:accepted') counts.wakeAccepted += 1
-    else if (event.type === 'wake:rejected') counts.wakeRejected += 1
+    else if (event.type === 'wake:rejected') {
+      counts.wakeRejected += 1
+      const reason = String(detail.reason || 'unknown')
+      wakeRejectedReasons[reason] = (wakeRejectedReasons[reason] || 0) + 1
+      wakeRejectedDetails.push({
+        reason,
+        text: detail.text || '',
+        confidence: detail.confidence,
+        threshold: detail.threshold,
+        minCommandChars: detail.minCommandChars,
+        remainingMs: detail.remainingMs,
+        advice: wakeRejectAdvice(reason),
+      })
+    }
     else if (event.type === 'asr:final') counts.asrFinal += 1
     else if (event.type === 'asr:partial') counts.asrPartial += 1
     else if (event.type === 'tts:start') counts.ttsStart += 1
@@ -483,6 +511,8 @@ function countRecentVoiceEvents({ since = Date.now() - 60000 } = {}) {
     else if (event.type === 'interrupt') counts.interrupt += 1
     else counts.unknown += 1
   }
+  counts.wakeRejectedReasons = wakeRejectedReasons
+  counts.wakeRejectedDetails = wakeRejectedDetails.slice(-8)
   return counts
 }
 
@@ -509,7 +539,14 @@ export function getVoiceEventLinkSummary({ windowMs = 60000 } = {}) {
   }
   if (recent.wakeRejected > recent.wakeAccepted && recent.wakeRejected >= 2) {
     issues.push('wake_rejected_high')
-    suggestions.push('最近唤醒拒绝偏多：检查唤醒词、声纹阈值和视频抗干扰设置。')
+    const topReject = Object.entries(recent.wakeRejectedReasons || {}).sort((a, b) => b[1] - a[1])[0]
+    suggestions.push(topReject ? `最近唤醒拒绝偏多，主要原因：${topReject[0]}（${topReject[1]} 次）。${wakeRejectAdvice(topReject[0])}` : '最近唤醒拒绝偏多：检查唤醒词、声纹阈值和视频抗干扰设置。')
+  }
+  for (const detail of recent.wakeRejectedDetails || []) {
+    if (detail.reason && !issues.includes(`wake_guard_${detail.reason.replace(/\W+/g, '_')}`)) {
+      issues.push(`wake_guard_${detail.reason.replace(/\W+/g, '_')}`)
+      suggestions.push(detail.advice)
+    }
   }
   if (recent.asrFinal === 0 && recent.wakeAccepted > 0) {
     issues.push('wake_without_asr_final')

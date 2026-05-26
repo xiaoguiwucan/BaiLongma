@@ -213,9 +213,9 @@ new WebSocket(url)`,
           windowMs: 60000,
           checkedAt: Date.now(),
           status: { clients: 1, audioSubscribers: 1, binaryAudioSubscribers: 1, history: 4, version: 3 },
-          recent: { total: 4, wakeAccepted: 1, wakeRejected: 0, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0 },
+          recent: { total: 5, wakeAccepted: 1, wakeRejected: 1, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0, wakeRejectedDetails: [{ reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2, advice: '唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。' }] },
           issues: [],
-          suggestions: ['链路整体正常：客户端、订阅、事件历史均可观测。'],
+          suggestions: ['唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。'],
           clientDetails: [],
         },
       })
@@ -233,9 +233,9 @@ new WebSocket(url)`,
           windowMs: 60000,
           checkedAt: Date.now(),
           status: { clients: 1, audioSubscribers: 1, binaryAudioSubscribers: 1, history: 4, version: 3 },
-          recent: { total: 4, wakeAccepted: 1, wakeRejected: 0, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0 },
+          recent: { total: 5, wakeAccepted: 1, wakeRejected: 1, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0, wakeRejectedDetails: [{ reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2, advice: '唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。' }] },
           issues: [],
-          suggestions: ['链路整体正常：客户端、订阅、事件历史均可观测。'],
+          suggestions: ['唤醒后指令太短：降低“最短指令字数”，或说完整命令如“龙马，打开灯”。'],
           clientDetails: [],
         },
       })
@@ -248,6 +248,7 @@ new WebSocket(url)`,
         { type: 'voice_event', event: { type: 'wake:accepted', word: '小白龙', ts: Date.now() - 2400, roundId: 'r1' }, xiaozhi: { type: 'wake', state: 'accepted', word: '小白龙' } },
         { type: 'voice_event', event: { type: 'asr:partial', text: '打开', ts: Date.now() - 1800, roundId: 'r1' }, xiaozhi: { type: 'stt', state: 'partial', text: '打开' } },
         { type: 'voice_event', event: { type: 'asr:final', text: '打开灯光', ts: Date.now() - 1200, roundId: 'r1' }, xiaozhi: { type: 'stt', state: 'final', text: '打开灯光' } },
+        { type: 'voice_event', event: { type: 'wake:rejected', reason: 'command too short', confidence: 0.81, threshold: 0.72, minCommandChars: 2, ts: Date.now() - 900, roundId: 'r1' }, xiaozhi: { type: 'wake', state: 'rejected', reason: 'command too short' } },
         { type: 'voice_event', event: { type: 'tts:stop', reason: 'completed', ts: Date.now() - 600, roundId: 'r1' }, xiaozhi: { type: 'tts', state: 'stop', reason: 'completed' } },
       ].filter(item => !type || item.event.type === type || item.xiaozhi.type === type)
       sendJson(res, { ok: true, service: 'bailongma.voice.events', version: 3, total: events.length, limit: 20, events })
@@ -494,8 +495,8 @@ try {
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/summary')) throw new Error('voice clients protocol diagnostics did not render summary endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/check')) throw new Error('voice clients protocol diagnostics did not render check endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/package')) throw new Error('voice clients protocol diagnostics did not render package endpoint')
-  if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('链路正常')) throw new Error('voice link summary did not render healthy status')
-  if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop')) throw new Error('voice events history timeline did not render recent events')
+  if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('最短指令字数')) throw new Error('voice link summary did not render wake reject tuning advice')
+  if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop') || !voiceClientSnapshot.history.includes('confidence:0.81')) throw new Error('voice events history timeline did not render recent events and wake guard meta')
   await page.evaluate(() => document.querySelector('#voice-link-check-btn')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-link-check')?.textContent.includes('一键语音链路自检'))
   const selfCheckText = await page.textContent('#voice-link-check')

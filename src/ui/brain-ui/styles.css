@@ -4421,3 +4421,32 @@ body.person-card-mode .person-card-panel,
   background: rgba(255,255,255,0.025);
   font-size: 10px;
 }
+
+.voice-link-wake-rejects {
+  display: grid;
+  gap: 6px;
+  margin-top: 10px;
+}
+.voice-link-wake-rejects span {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  border: 1px solid rgba(211,152,114,0.32);
+  border-radius: 10px;
+  padding: 7px 8px;
+  color: var(--ink2);
+  background: rgba(211,152,114,0.07);
+  font-size: 10px;
+  line-height: 1.45;
+}
+.voice-link-wake-rejects strong {
+  color: var(--warm);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+}
+.voice-link-wake-rejects code {
+  color: var(--cool);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+}

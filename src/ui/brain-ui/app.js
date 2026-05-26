@@ -1752,6 +1752,26 @@ function formatVoiceEventTime(value) {
   return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 }
 
+
+function voiceWakeRejectAdvice(reason = "") {
+  if (reason === "command too short") return "建议降低最短指令字数，或说完整命令。";
+  if (reason === "wake confidence too low") return "建议让唤醒词位于句首，或降低唤醒置信度阈值。";
+  if (reason === "wake cooldown") return "建议缩短唤醒冷却时间，或等待冷却结束。";
+  if (reason === "speaker verification required for wake") return "建议重录声纹、降低声纹严格度，或关闭唤醒声纹联动。";
+  if (reason === "wake not at prefix") return "严格模式要求以唤醒词开头。";
+  if (reason === "wake missing") return "没有检测到唤醒词，请检查唤醒词列表。";
+  return "查看置信度、阈值和声纹状态后调整设置。";
+}
+
+function renderWakeRejectMeta(event = {}) {
+  const bits = [];
+  if (Number.isFinite(Number(event.confidence))) bits.push(`confidence:${Number(event.confidence).toFixed(2)}`);
+  if (Number.isFinite(Number(event.threshold))) bits.push(`threshold:${Number(event.threshold).toFixed(2)}`);
+  if (Number.isFinite(Number(event.minCommandChars))) bits.push(`min:${event.minCommandChars}字`);
+  if (Number.isFinite(Number(event.remainingMs))) bits.push(`cooldown:${Math.max(0, Number(event.remainingMs) / 1000).toFixed(1)}s`);
+  return bits;
+}
+
 function voiceEventLabel(item = {}) {
   const event = item.event || {};
   const mapped = item.xiaozhi || {};
@@ -1759,7 +1779,7 @@ function voiceEventLabel(item = {}) {
   if (type === "asr:final" || mapped.state === "final") return `识别完成：${event.text || mapped.text || "—"}`;
   if (type === "asr:partial" || mapped.state === "partial") return `识别中：${event.text || mapped.text || "—"}`;
   if (type === "wake:accepted") return `唤醒成功：${event.word || mapped.word || "—"}`;
-  if (type === "wake:rejected") return `唤醒拒绝：${event.reason || mapped.reason || "未命中"}`;
+  if (type === "wake:rejected") return `唤醒拒绝：${event.reason || mapped.reason || "未命中"} · ${voiceWakeRejectAdvice(event.reason || mapped.reason || "")}`;
   if (type === "tts:start") return `TTS 开始：${event.text || mapped.text || `${event.segments || mapped.segments || 0} 段`}`;
   if (type === "tts:stop") return `TTS 结束：${event.reason || mapped.reason || "completed"}`;
   if (type === "interrupt") return `中断：${event.source || mapped.source || "unknown"}`;
@@ -1779,7 +1799,8 @@ function renderVoiceEventHistoryItem(item = {}) {
   const mapped = item.xiaozhi || {};
   const type = event.type || item.type || mapped.type || "unknown";
   const tone = voiceEventTone(type);
-  const meta = [mapped.type && `xiaozhi:${mapped.type}`, mapped.state && `state:${mapped.state}`, event.roundId && `round:${event.roundId}`].filter(Boolean).join(" · ");
+  const rejectMeta = type === "wake:rejected" ? renderWakeRejectMeta(event) : [];
+  const meta = [mapped.type && `xiaozhi:${mapped.type}`, mapped.state && `state:${mapped.state}`, event.roundId && `round:${event.roundId}`, ...rejectMeta].filter(Boolean).join(" · ");
   return `
     <article class="voice-event-item voice-event-item-${escapeFocusText(tone)}">
       <div class="voice-event-dot"></div>
@@ -1797,6 +1818,7 @@ function renderVoiceLinkSummary(summary = {}) {
   const recent = summary.recent || {};
   const suggestions = Array.isArray(summary.suggestions) ? summary.suggestions : [];
   const issues = Array.isArray(summary.issues) ? summary.issues : [];
+  const wakeDetails = Array.isArray(recent.wakeRejectedDetails) ? recent.wakeRejectedDetails : [];
   const levelText = level === "ok" ? "链路正常" : level === "offline" ? "未连接" : "需要注意";
   return `
     <div class="voice-link-summary-head">
@@ -1816,6 +1838,9 @@ function renderVoiceLinkSummary(summary = {}) {
       <div><span>TTS</span><strong>${escapeFocusText(`${recent.ttsStart ?? 0}/${recent.ttsStop ?? 0}`)}</strong></div>
       <div><span>中断</span><strong>${escapeFocusText(recent.interrupt ?? 0)}</strong></div>
     </div>
+    ${wakeDetails.length ? `<div class="voice-link-wake-rejects">
+      ${wakeDetails.slice(-4).map(item => `<span><strong>${escapeFocusText(item.reason || "unknown")}</strong>${escapeFocusText(item.advice || voiceWakeRejectAdvice(item.reason || ""))}${Number.isFinite(Number(item.confidence)) ? `<code>${escapeFocusText(Number(item.confidence).toFixed(2))}</code>` : ""}</span>`).join("")}
+    </div>` : ""}
     <div class="voice-link-suggestions">
       ${suggestions.map(item => `<span>${escapeFocusText(item)}</span>`).join("")}
       ${issues.length ? `<code>${escapeFocusText(issues.join(" · "))}</code>` : ""}

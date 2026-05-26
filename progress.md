@@ -125,3 +125,12 @@
 - Added `smoke:wake-guard` with 7/7 checks for config clamping, strict-vs-loose confidence, minimum command length, confidence threshold, cooldown, speaker requirement, and speaker acceptance.
 - Verification passed: `npm run smoke:wake-guard` 7/7, `npm run smoke:voice-config` 8/8, and `npm run smoke:brain-ui`.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
+- Surfaced wake guard rejection diagnostics in the backend voice link summary instead of leaving them only as raw events.
+- `/voice/events/summary` now counts recent `wake:rejected` reasons, keeps recent rejection details, and turns guard reasons into concrete tuning suggestions.
+- Added reason-specific advice for command too short, low confidence, cooldown, speaker verification requirement, strict-prefix mismatch, missing wake word, and repeat suppression.
+- Brain UI recent voice event timeline now shows wake rejection tuning advice plus confidence/threshold/min-command/cooldown metadata.
+- Brain UI “语音链路总控” now renders recent wake rejection detail cards, so users can see why wake was rejected and which setting to adjust.
+- Extended `smoke:voice-events` to 51/51 with wake guard rejection summary/advice coverage.
+- Extended `smoke:brain-ui` to verify wake rejection metadata and tuning advice are rendered.
+- Verification passed: `npm run smoke:voice-events` 51/51, `npm run smoke:brain-ui`, `npm run smoke:wake-guard` 7/7, and `npm run smoke:voice-config` 8/8.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release.
