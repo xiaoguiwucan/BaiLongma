@@ -141,11 +141,12 @@ function createServer() {
         ok: true,
         service: 'bailongma.voice.events',
         version: 3,
-        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'event_history'],
+        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'event_history', 'link_summary'],
         endpoints: {
           websocket: '/voice/events',
           clients: '/voice/events/clients',
           history: '/voice/events/history',
+          summary: '/voice/events/summary',
           protocol: '/voice/events/protocol',
           publish: '/voice/events/publish',
         },
@@ -157,6 +158,27 @@ function createServer() {
       return
     }
 
+
+
+    if (url.pathname === '/voice/events/summary') {
+      sendJson(res, {
+        ok: true,
+        service: 'bailongma.voice.events',
+        version: 3,
+        summary: {
+          ok: true,
+          level: 'ok',
+          windowMs: 60000,
+          checkedAt: Date.now(),
+          status: { clients: 1, audioSubscribers: 1, binaryAudioSubscribers: 1, history: 4, version: 3 },
+          recent: { total: 4, wakeAccepted: 1, wakeRejected: 0, asrFinal: 1, asrPartial: 1, ttsStart: 1, ttsStop: 1, interrupt: 0 },
+          issues: [],
+          suggestions: ['链路整体正常：客户端、订阅、事件历史均可观测。'],
+          clientDetails: [],
+        },
+      })
+      return
+    }
 
     if (url.pathname === '/voice/events/history') {
       const type = url.searchParams.get('type') || ''
@@ -398,6 +420,7 @@ try {
     diagnostics: document.querySelector('#voice-clients-diagnostics')?.textContent || '',
     guide: document.querySelector('#voice-clients-guide')?.textContent || '',
     history: document.querySelector('#voice-events-history-list')?.textContent || '',
+    summary: document.querySelector('#voice-link-summary')?.textContent || '',
   }))
   if (voiceClientSnapshot.count !== '1') throw new Error('voice clients panel did not show connected client count')
   if (!voiceClientSnapshot.card.includes('binary')) throw new Error('voice clients panel did not render negotiated binary mode')
@@ -405,6 +428,8 @@ try {
   if (!voiceClientSnapshot.card.includes('Healthok')) throw new Error('voice clients panel did not render backend health level')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/clients')) throw new Error('voice clients protocol diagnostics did not render clients endpoint')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/history')) throw new Error('voice clients protocol diagnostics did not render history endpoint')
+  if (!voiceClientSnapshot.diagnostics.includes('/voice/events/summary')) throw new Error('voice clients protocol diagnostics did not render summary endpoint')
+  if (!voiceClientSnapshot.summary.includes('语音链路总控') || !voiceClientSnapshot.summary.includes('链路正常')) throw new Error('voice link summary did not render healthy status')
   if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop')) throw new Error('voice events history timeline did not render recent events')
   if (!voiceClientSnapshot.guide.includes('npm run voice:events -- listen')) throw new Error('voice clients guide did not render debug connect command')
   if (!voiceClientSnapshot.guide.includes('esp32-test') || !voiceClientSnapshot.guide.includes('client:hello')) throw new Error('voice clients guide did not render LAN command and handshake example')

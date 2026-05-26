@@ -4146,3 +4146,85 @@ body.person-card-mode .person-card-panel,
   font-size: 9px;
   font-family: "JetBrains Mono", ui-monospace, monospace;
 }
+
+.voice-link-summary {
+  margin: 0 0 12px;
+  padding: 12px;
+  border: 1px solid rgba(130,210,255,0.25);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at 90% 0%, rgba(130,210,255,0.12), transparent 34%),
+    linear-gradient(135deg, rgba(130,210,255,0.06), rgba(0,0,0,0.08));
+}
+.voice-link-summary-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+.voice-link-summary-title {
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 800;
+}
+.voice-link-summary-sub {
+  margin-top: 3px;
+  color: var(--dim);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+}
+.voice-link-badge {
+  flex: none;
+  border-radius: 999px;
+  padding: 5px 9px;
+  border: 1px solid var(--line);
+  font-size: 10px;
+  font-weight: 700;
+}
+.voice-link-badge-ok { color: #8ff0b3; border-color: rgba(143,240,179,0.35); background: rgba(143,240,179,0.08); }
+.voice-link-badge-warn { color: var(--warm); border-color: rgba(211,152,114,0.4); background: rgba(211,152,114,0.08); }
+.voice-link-badge-offline { color: var(--dim); border-color: var(--line); background: rgba(255,255,255,0.025); }
+.voice-link-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 7px;
+}
+.voice-link-metrics div {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 7px;
+  background: rgba(0,0,0,0.10);
+}
+.voice-link-metrics span {
+  display: block;
+  color: var(--dim);
+  font-size: 9px;
+}
+.voice-link-metrics strong {
+  display: block;
+  margin-top: 3px;
+  color: var(--cool);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 14px;
+}
+.voice-link-suggestions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+.voice-link-suggestions span,
+.voice-link-suggestions code {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 4px 8px;
+  color: var(--ink2);
+  background: rgba(255,255,255,0.025);
+  font-size: 10px;
+  line-height: 1.4;
+}
+.voice-link-suggestions code {
+  color: var(--dim);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}

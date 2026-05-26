@@ -73,3 +73,15 @@
 - Verification passed: `npm run smoke:voice-mapping` 41/41, `npm run smoke:voice-events` 45/45, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.
+- Added backend `GET /voice/events/summary` as a consolidated voice-link health endpoint for v2.2.0.
+- Added `link_summary` protocol capability and `endpoints.summary` metadata; onboarding URLs now also advertise history and summary endpoints.
+- Added `getVoiceEventLinkSummary()` to aggregate connected clients, audio/binary subscribers, recent wake/asr/tts/interrupt counts, health issues, and human suggestions.
+- Summary logic reports offline when no client is connected, warns for missing audio subscription/client health problems, detects repeated wake rejection, wake-without-ASR-final, and likely stuck TTS.
+- Added Brain UI “语音链路总控” card above client diagnostics, showing health level, client/audio metrics, recent wake/asr/tts counts, and actionable suggestions.
+- Brain UI auto-refresh now refreshes client details, event history, and link summary together.
+- Extended `smoke:voice-mapping` to 42/42 for `link_summary` protocol metadata and offline summary logic.
+- Extended `smoke:voice-events` to 47/47 for `/voice/events/summary` offline and recent-event aggregation.
+- Extended `smoke:brain-ui` to mock and verify the link summary card plus `/voice/events/summary` diagnostics endpoint.
+- Verification passed: `npm run smoke:voice-mapping` 42/42, `npm run smoke:voice-events` 47/47, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.

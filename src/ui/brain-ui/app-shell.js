@@ -373,6 +373,7 @@ const createSettingsModal = () => `
               <label class="voice-clients-auto"><input id="voice-clients-auto-refresh" type="checkbox" checked> 自动刷新</label>
               <span class="settings-feedback" id="voice-clients-feedback"></span>
             </div>
+            <div id="voice-link-summary" class="voice-link-summary" hidden></div>
             <div id="voice-clients-diagnostics" class="voice-clients-diagnostics" hidden></div>
             <div id="voice-clients-guide" class="voice-clients-guide" hidden></div>
             <div id="voice-clients-list" class="voice-clients-list">

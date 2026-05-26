@@ -1790,6 +1790,38 @@ function renderVoiceEventHistoryItem(item = {}) {
     </article>`;
 }
 
+
+function renderVoiceLinkSummary(summary = {}) {
+  const level = summary.level || "unknown";
+  const status = summary.status || {};
+  const recent = summary.recent || {};
+  const suggestions = Array.isArray(summary.suggestions) ? summary.suggestions : [];
+  const issues = Array.isArray(summary.issues) ? summary.issues : [];
+  const levelText = level === "ok" ? "链路正常" : level === "offline" ? "未连接" : "需要注意";
+  return `
+    <div class="voice-link-summary-head">
+      <div>
+        <div class="voice-link-summary-title">语音链路总控</div>
+        <div class="voice-link-summary-sub">最近 ${Math.round((summary.windowMs || 60000) / 1000)} 秒 · ${escapeFocusText(new Date(summary.checkedAt || Date.now()).toLocaleTimeString())}</div>
+      </div>
+      <div class="voice-link-badge voice-link-badge-${escapeFocusText(level)}">${escapeFocusText(levelText)}</div>
+    </div>
+    <div class="voice-link-metrics">
+      <div><span>客户端</span><strong>${escapeFocusText(status.clients ?? 0)}</strong></div>
+      <div><span>音频订阅</span><strong>${escapeFocusText(status.audioSubscribers ?? 0)}</strong></div>
+      <div><span>二进制</span><strong>${escapeFocusText(status.binaryAudioSubscribers ?? 0)}</strong></div>
+      <div><span>事件</span><strong>${escapeFocusText(recent.total ?? 0)}</strong></div>
+      <div><span>唤醒成功</span><strong>${escapeFocusText(recent.wakeAccepted ?? 0)}</strong></div>
+      <div><span>识别完成</span><strong>${escapeFocusText(recent.asrFinal ?? 0)}</strong></div>
+      <div><span>TTS</span><strong>${escapeFocusText(`${recent.ttsStart ?? 0}/${recent.ttsStop ?? 0}`)}</strong></div>
+      <div><span>中断</span><strong>${escapeFocusText(recent.interrupt ?? 0)}</strong></div>
+    </div>
+    <div class="voice-link-suggestions">
+      ${suggestions.map(item => `<span>${escapeFocusText(item)}</span>`).join("")}
+      ${issues.length ? `<code>${escapeFocusText(issues.join(" · "))}</code>` : ""}
+    </div>`;
+}
+
 function initVoiceClientsPanel() {
   const listEl = document.getElementById("voice-clients-list");
   if (!listEl) return;
@@ -1801,6 +1833,7 @@ function initVoiceClientsPanel() {
   const protocolBtn = document.getElementById("voice-clients-protocol-btn");
   const copyBtn = document.getElementById("voice-clients-copy-btn");
   const diagnosticsEl = document.getElementById("voice-clients-diagnostics");
+  const summaryEl = document.getElementById("voice-link-summary");
   const guideEl = document.getElementById("voice-clients-guide");
   const autoEl = document.getElementById("voice-clients-auto-refresh");
   const historyListEl = document.getElementById("voice-events-history-list");
@@ -1854,6 +1887,7 @@ function initVoiceClientsPanel() {
       <div class="voice-diagnostic-line"><span>WebSocket</span><code>${escapeFocusText(endpoints.websocket || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>Clients</span><code>${escapeFocusText(endpoints.clients || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>History</span><code>${escapeFocusText(endpoints.history || "/voice/events/history")}</code></div>
+      <div class="voice-diagnostic-line"><span>Summary</span><code>${escapeFocusText(endpoints.summary || "/voice/events/summary")}</code></div>
       <div class="voice-diagnostic-line"><span>Audio Modes</span><code>${escapeFocusText(modes.join(" / ") || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>Capabilities</span><code>${escapeFocusText(caps.filter(c => ["client_identity", "audio_negotiation", "client_diagnostics", "tts_speak"].includes(c)).join(" · ") || "—")}</code></div>
     `;
@@ -1889,6 +1923,21 @@ function initVoiceClientsPanel() {
         diagnosticsEl.innerHTML = `<div class="voice-clients-error">协议自检失败：${escapeFocusText(err.message || err)}</div>`;
       }
       if (feedbackEl) feedbackEl.textContent = "协议失败";
+    }
+  }
+
+  async function refreshVoiceLinkSummary({ quiet = false } = {}) {
+    if (!summaryEl) return;
+    try {
+      const res = await fetch(`${API}/voice/events/summary?windowMs=60000`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      summaryEl.hidden = false;
+      summaryEl.innerHTML = renderVoiceLinkSummary(data.summary || data);
+    } catch (err) {
+      summaryEl.hidden = false;
+      summaryEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/summary 失败：${escapeFocusText(err.message || err)}</div>`;
+      if (!quiet && feedbackEl) feedbackEl.textContent = "总控读取失败";
     }
   }
 
@@ -1944,10 +1993,11 @@ function initVoiceClientsPanel() {
     if (autoEl?.checked) timer = setInterval(() => {
       refreshVoiceClients({ quiet: true });
       refreshVoiceEventsHistory({ quiet: true });
+      refreshVoiceLinkSummary({ quiet: true });
     }, 5000);
   }
 
-  refreshBtn?.addEventListener("click", () => { refreshVoiceClients(); refreshVoiceEventsHistory({ quiet: true }); });
+  refreshBtn?.addEventListener("click", () => { refreshVoiceClients(); refreshVoiceEventsHistory({ quiet: true }); refreshVoiceLinkSummary({ quiet: true }); });
   historyRefreshBtn?.addEventListener("click", () => refreshVoiceEventsHistory());
   historyFilterEl?.addEventListener("change", () => refreshVoiceEventsHistory());
   protocolBtn?.addEventListener("click", () => refreshProtocolDiagnostics());
@@ -1963,6 +2013,7 @@ function initVoiceClientsPanel() {
   autoEl?.addEventListener("change", restartTimer);
   refreshProtocolDiagnostics();
   refreshVoiceClients({ quiet: true });
+  refreshVoiceLinkSummary({ quiet: true });
   refreshVoiceEventsHistory({ quiet: true });
   restartTimer();
 }

@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding', 'event_history'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding', 'event_history', 'link_summary'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -47,6 +47,8 @@ export function getVoiceEventsOnboarding({ host = '127.0.0.1', port = 3721, prot
       lanWebSocket: lanWsUrl,
       protocol: '/voice/events/protocol',
       clients: '/voice/events/clients',
+      history: '/voice/events/history',
+      summary: '/voice/events/summary',
     },
     commands: { local: localCommand, lan: lanCommand },
     messages: { clientHello, subscribe },
@@ -69,6 +71,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
       status: '/voice/events/status',
       clients: '/voice/events/clients',
       history: '/voice/events/history',
+      summary: '/voice/events/summary',
       onboarding: '/voice/events/onboarding',
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
@@ -457,6 +460,80 @@ export function getVoiceEventClientDetails() {
       advice: health.advice,
     }
   })
+}
+
+
+function countRecentVoiceEvents({ since = Date.now() - 60000 } = {}) {
+  const counts = { total: 0, wakeAccepted: 0, wakeRejected: 0, asrFinal: 0, asrPartial: 0, ttsStart: 0, ttsStop: 0, interrupt: 0, unknown: 0 }
+  for (const item of history) {
+    const event = item.event || {}
+    const at = Number(event.at || event.ts || item.at || 0)
+    if (at && at < since) continue
+    counts.total += 1
+    if (event.type === 'wake:accepted') counts.wakeAccepted += 1
+    else if (event.type === 'wake:rejected') counts.wakeRejected += 1
+    else if (event.type === 'asr:final') counts.asrFinal += 1
+    else if (event.type === 'asr:partial') counts.asrPartial += 1
+    else if (event.type === 'tts:start') counts.ttsStart += 1
+    else if (event.type === 'tts:stop') counts.ttsStop += 1
+    else if (event.type === 'interrupt') counts.interrupt += 1
+    else counts.unknown += 1
+  }
+  return counts
+}
+
+export function getVoiceEventLinkSummary({ windowMs = 60000 } = {}) {
+  const now = Date.now()
+  const windowSize = Math.max(5000, Math.min(10 * 60 * 1000, Math.round(Number(windowMs) || 60000)))
+  const clientDetails = getVoiceEventClientDetails()
+  const status = getVoiceEventBusStatus()
+  const recent = countRecentVoiceEvents({ since: now - windowSize })
+  const issues = []
+  const suggestions = []
+  if (!clientDetails.length) {
+    issues.push('no_clients')
+    suggestions.push('没有外部语音客户端连接：先运行本机调试命令或接入 ESP32/手机端。')
+  }
+  if (clientDetails.length && !status.audioSubscribers) {
+    issues.push('no_audio_subscribers')
+    suggestions.push('客户端已连接但未订阅音频：发送 subscribe audio=true，二进制设备建议 binaryAudio=true。')
+  }
+  const unhealthy = clientDetails.filter(client => client.health && client.health.ok === false)
+  if (unhealthy.length) {
+    issues.push('client_health_warnings')
+    suggestions.push('存在未完成握手或 capabilities 不完整的客户端：检查 client:hello、binary_audio/base64_audio。')
+  }
+  if (recent.wakeRejected > recent.wakeAccepted && recent.wakeRejected >= 2) {
+    issues.push('wake_rejected_high')
+    suggestions.push('最近唤醒拒绝偏多：检查唤醒词、声纹阈值和视频抗干扰设置。')
+  }
+  if (recent.asrFinal === 0 && recent.wakeAccepted > 0) {
+    issues.push('wake_without_asr_final')
+    suggestions.push('有唤醒但没有最终识别：检查麦克风采集、VAD 截断和本地 ASR 服务。')
+  }
+  if (recent.ttsStart > recent.ttsStop) {
+    issues.push('tts_maybe_stuck')
+    suggestions.push('TTS start 多于 stop：可能存在播报未结束或取消事件未上报。')
+  }
+  if (!suggestions.length) suggestions.push('链路整体正常：客户端、订阅、事件历史均可观测。')
+  const level = issues.includes('no_clients') ? 'offline' : issues.length ? 'warn' : 'ok'
+  return {
+    ok: level === 'ok',
+    level,
+    windowMs: windowSize,
+    checkedAt: now,
+    status: {
+      clients: status.clients,
+      audioSubscribers: status.audioSubscribers,
+      binaryAudioSubscribers: status.binaryAudioSubscribers,
+      history: status.history,
+      version: status.version,
+    },
+    recent,
+    issues,
+    suggestions,
+    clientDetails,
+  }
 }
 
 export function getVoiceEventBusStatus() {

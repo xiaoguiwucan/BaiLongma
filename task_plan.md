@@ -92,3 +92,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Add Brain UI recent voice events timeline with type filter, manual refresh, and auto-refresh.
 - [x] Extend mapping, voice-events, and brain-ui smoke coverage for history endpoint/timeline.
 - [x] Verify all relevant smoke suites.
+
+## Checkpoint 9: Voice link summary and command center
+- [x] Add `GET /voice/events/summary` backend endpoint.
+- [x] Add `link_summary` protocol capability and `endpoints.summary` metadata.
+- [x] Aggregate client counts, audio/binary subscriptions, recent wake/asr/tts/interrupt event counts, issues, and suggestions.
+- [x] Add Brain UI “语音链路总控” card with health level, metrics, and human troubleshooting suggestions.
+- [x] Refresh summary together with clients/history in auto-refresh mode.
+- [x] Extend mapping, voice-events, and brain-ui smoke coverage.
+- [x] Verify all relevant smoke suites.

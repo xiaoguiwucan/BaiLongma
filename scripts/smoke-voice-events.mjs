@@ -75,8 +75,8 @@ try {
   assert(statusBefore.ok === true && statusBefore.version >= 3, 'status exposes voice event protocol version', JSON.stringify(statusBefore))
 
   const protocolMeta = await fetch(`${API}/voice/events/protocol`).then(r => r.json())
-  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits') && protocolMeta.capabilities?.includes('client_identity') && protocolMeta.capabilities?.includes('audio_negotiation') && protocolMeta.capabilities?.includes('client_diagnostics') && protocolMeta.capabilities?.includes('client_onboarding') && protocolMeta.capabilities?.includes('event_history'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
-  assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish' && protocolMeta.endpoints?.clients === '/voice/events/clients' && protocolMeta.endpoints?.onboarding === '/voice/events/onboarding' && protocolMeta.endpoints?.history === '/voice/events/history', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
+  assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits') && protocolMeta.capabilities?.includes('client_identity') && protocolMeta.capabilities?.includes('audio_negotiation') && protocolMeta.capabilities?.includes('client_diagnostics') && protocolMeta.capabilities?.includes('client_onboarding') && protocolMeta.capabilities?.includes('event_history') && protocolMeta.capabilities?.includes('link_summary'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
+  assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish' && protocolMeta.endpoints?.clients === '/voice/events/clients' && protocolMeta.endpoints?.onboarding === '/voice/events/onboarding' && protocolMeta.endpoints?.history === '/voice/events/history' && protocolMeta.endpoints?.summary === '/voice/events/summary', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
   assert(protocolMeta.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocolMeta.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol endpoint exposes tts speak limits', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol endpoint exposes remote address tts speak scope', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.auth?.localhostExempt === true && protocolMeta.auth?.methods?.includes('?token=<token>'), 'protocol endpoint exposes auth metadata', JSON.stringify(protocolMeta.auth))
@@ -88,6 +88,8 @@ try {
   const onboarding = await fetch(`${API}/voice/events/onboarding`).then(r => r.json())
   assert(onboarding.ok === true && onboarding.urls?.localWebSocket?.includes('/voice/events') && onboarding.commands?.local?.includes('npm run voice:events'), 'onboarding endpoint exposes local websocket and CLI command', JSON.stringify(onboarding))
   assert(onboarding.messages?.clientHello?.type === 'client:hello' && onboarding.messages?.subscribe?.binaryAudio === true, 'onboarding endpoint exposes client hello and binary subscribe examples', JSON.stringify(onboarding.messages))
+  const summaryBefore = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
+  assert(summaryBefore.ok === true && summaryBefore.summary?.level === 'offline' && summaryBefore.summary?.issues?.includes('no_clients'), 'summary endpoint reports offline before clients connect', JSON.stringify(summaryBefore))
 
   await fetch(`${API}/settings/tts`, {
     method: 'POST',
@@ -249,6 +251,8 @@ try {
   assert(historyAfterPublish.ok === true && historyAfterPublish.total === 3 && historyAfterPublish.events?.some(item => item.event?.type === 'tts:stop'), 'history endpoint exposes recent voice events', JSON.stringify(historyAfterPublish))
   const filteredHistory = await fetch(`${API}/voice/events/history?type=asr:final&limit=10`).then(r => r.json())
   assert(filteredHistory.events?.some(item => item.event?.type === 'asr:final' && item.xiaozhi?.state === 'final'), 'history endpoint filters by raw event type and includes xiaozhi mapping', JSON.stringify(filteredHistory))
+  const summaryAfterPublish = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
+  assert(summaryAfterPublish.summary?.recent?.wakeAccepted >= 1 && summaryAfterPublish.summary?.recent?.asrFinal >= 1 && summaryAfterPublish.summary?.recent?.ttsStop >= 1, 'summary endpoint aggregates recent wake/asr/tts events', JSON.stringify(summaryAfterPublish))
   assert(publishMessages.some(msg => msg.type === 'voice_event' && msg.event?.type === 'asr:final'), 'publish broadcasts raw voice_event', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'stt' && msg.state === 'final' && msg.text === '烟雾测试'), 'publish maps asr:final to Xiaozhi-style stt final', JSON.stringify(publishMessages))
   assert(publishMessages.some(msg => msg.type === 'wake' && msg.state === 'accepted' && msg.word === '小白龙'), 'publish maps wake:accepted to Xiaozhi-style wake accepted', JSON.stringify(publishMessages))
