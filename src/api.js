@@ -64,8 +64,11 @@ function evaluateWakeAutoTuning({ windowMs = 60000 } = {}) {
   const summary = getVoiceEventLinkSummary({ windowMs })
   const current = getVoiceConfig()
   const actions = [...buildWakeGuardTuningActions({ summary, current }), ...buildSpeakerTuningActions({ summary, current })]
-  const reasons = summary?.recent?.wakeRejectedReasons || {}
+  const reasons = { ...(summary?.recent?.wakeRejectedReasons || {}) }
+  const speakerRejected = Number(summary?.recent?.speakerRejected || 0)
+  if (speakerRejected > 0) reasons['speaker rejected'] = speakerRejected
   const topReason = Object.entries(reasons).sort((a, b) => b[1] - a[1])[0] || null
+  const topAction = topReason ? actions.find(item => item.reason === topReason[0]) || actions[0] : actions[0]
   const now = Date.now()
   const hourlyCount = countWakeAutoActionsSince(now - 3600000)
   const blocked = []
@@ -82,7 +85,7 @@ function evaluateWakeAutoTuning({ windowMs = 60000 } = {}) {
     hourlyCount,
     blocked,
     eligible: blocked.length === 0,
-    action: actions[0] || null,
+    action: topAction || null,
     summary,
   }
 }

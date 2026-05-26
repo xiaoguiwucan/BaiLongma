@@ -245,3 +245,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend wake-guard, voice-events, and brain-ui smoke coverage.
 - [x] Verify syntax plus wake-guard, voice-events, and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 25: Safe auto-tuning for speaker rejection
+- [x] Include recent `speakerRejected` counts in automatic tuning top-reason selection.
+- [x] Prefer the matching speaker tuning action when speaker rejection is the dominant failure mode.
+- [x] Keep existing auto-tuning safety gates: explicit enable, minimum rejection count, cooldown, hourly limit, and safe patch availability.
+- [x] Allow `/voice/wake/tuning/auto` to report speaker-rejection eligibility and selected action.
+- [x] Allow `/voice/wake/tuning/auto/apply` to apply/record a speaker-threshold action and persist the last-applied timestamp.
+- [x] Extend voice-events smoke coverage for speaker-rejection auto-tuning and auto-apply.
+- [x] Verify syntax plus voice-events smoke suite.
+- [x] Push as a development checkpoint only, without tag/Release.

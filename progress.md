@@ -224,3 +224,11 @@
 - Verification passed: syntax checks for wake guard, API, Brain UI app, and smoke scripts; `npm run smoke:wake-guard` 10/10; `npm run smoke:voice-events` 61/61; `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Extended safe automatic tuning to prioritize speaker rejection when it is the dominant recent failure mode.
+- `evaluateWakeAutoTuning()` now folds `speakerRejected` counts into the top-reason calculation, selects the matching safe action, and can automatically choose a speaker-threshold patch instead of only wake-word patches.
+- `/voice/wake/tuning/auto` now reports `topReason: speaker rejected` and an eligible `speakerThreshold` action when repeated speaker rejection dominates the recent window.
+- `/voice/wake/tuning/auto/apply` can apply and record the selected speaker-threshold action while preserving cooldown/hourly safety limits and persisted `wakeAutoTuningLastAppliedAt`.
+- Extended `smoke:voice-events` to 63/63 checks for speaker-rejection auto-tuning prioritization and auto-apply persistence.
+- Verification passed: syntax checks for API and voice-events smoke script; `npm run smoke:voice-events` 63/63.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

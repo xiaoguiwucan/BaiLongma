@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws'
 import { startAPI } from '../src/api.js'
 import { VOICE_EVENTS_TTS_SPEAK_LIMITS } from '../src/voice/voice-event-bus.js'
+import { setVoiceConfig } from '../src/config.js'
 
 const PORT = Number(process.env.BAILONGMA_VOICE_SMOKE_PORT || 39221)
 const API = `http://127.0.0.1:${PORT}`
@@ -267,11 +268,13 @@ try {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ event: { type: 'wake:rejected', at: Date.now(), detail: { text: '龙马', reason: 'command too short', confidence: 0.80, threshold: 0.72, minCommandChars: 2 } } }),
   })
-  await fetch(`${API}/voice/events/publish`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ event: { type: 'speaker:rejected', at: Date.now(), detail: { score: 0.47, threshold: 0.63, reason: 'speaker verification failed' } } }),
-  })
+  for (const score of [0.47, 0.48, 0.46]) {
+    await fetch(`${API}/voice/events/publish`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ event: { type: 'speaker:rejected', at: Date.now(), detail: { score, threshold: 0.63, reason: 'speaker verification failed' } } }),
+    })
+  }
   const summaryAfterRejects = await fetch(`${API}/voice/events/summary?windowMs=60000`).then(r => r.json())
   assert(summaryAfterRejects.summary?.recent?.wakeRejectedDetails?.some(item => item.reason === 'command too short' && item.advice?.includes('最短指令字数')), 'summary endpoint exposes wake reject details and tuning advice', JSON.stringify(summaryAfterRejects.summary?.recent))
   assert(summaryAfterRejects.summary?.issues?.some(item => item.includes('wake_guard_command_too_short')) && summaryAfterRejects.summary?.suggestions?.some(item => item.includes('最短指令字数')), 'summary endpoint promotes wake guard issues into suggestions', JSON.stringify(summaryAfterRejects.summary))
@@ -293,11 +296,15 @@ try {
   const autoEnabled = await fetch(`${API}/voice/wake/tuning/auto`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ enabled: true, minRejects: 2, cooldownMs: 60000, maxActionsPerHour: 2 }),
+    body: JSON.stringify({ enabled: true, minRejects: 1, cooldownMs: 60000, maxActionsPerHour: 2 }),
   }).then(r => r.json())
   assert(autoEnabled.ok === true && autoEnabled.enabled === true && autoEnabled.policy?.minRejects === 2, 'wake auto tuning policy can be enabled safely', JSON.stringify(autoEnabled))
+  assert(autoEnabled.topReason?.reason === 'speaker rejected' && autoEnabled.action?.patch?.speakerThreshold != null, 'wake auto tuning can prioritize speaker rejection actions', JSON.stringify(autoEnabled))
   const persistedAutoVoice = await fetch(`${API}/settings/voice`).then(r => r.json())
   assert(persistedAutoVoice.voice?.wakeAutoTuningEnabled === true && persistedAutoVoice.voice?.wakeAutoTuningMinRejects === 2, 'wake auto tuning policy persists in voice config', JSON.stringify(persistedAutoVoice.voice))
+  setVoiceConfig({ wakeAutoTuningLastAppliedAt: 0 })
+  const autoApply = await fetch(`${API}/voice/wake/tuning/auto/apply`, { method: 'POST' }).then(r => r.json())
+  assert(autoApply.ok === true && autoApply.applied?.speakerThreshold != null && autoApply.record?.auto === true, 'wake auto tuning apply can persist speaker threshold action', JSON.stringify(autoApply))
   const rollbackTuning = await fetch(`${API}/voice/wake/tuning/rollback`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
