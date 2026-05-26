@@ -4534,6 +4534,23 @@ body.person-card-mode .person-card-panel,
   font-family: "JetBrains Mono", ui-monospace, monospace;
   font-size: 9px;
 }
+.voice-wake-tuning-diff {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  color: var(--ink2);
+  font-size: 10px;
+}
+.voice-wake-tuning-diff span {
+  border: 1px solid rgba(130,210,255,0.22);
+  border-radius: 999px;
+  padding: 3px 7px;
+  background: rgba(130,210,255,0.06);
+}
+.voice-wake-tuning-diff strong {
+  margin-right: 5px;
+  color: var(--cool);
+}
 .voice-wake-tuning-eval span {
   border: 1px solid var(--line);
   border-radius: 999px;

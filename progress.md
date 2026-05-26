@@ -242,3 +242,9 @@
 - Verification passed: syntax checks for voice event bus, API, Brain UI app, and smoke scripts; `npm run smoke:voice-events` 64/64; `npm run smoke:brain-ui`.
 - Reset smoke-mutated `config.json` back to tracked state.
 - This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.
+- Added readable tuning-change diff chips to Brain UI tuning history so users can see exactly which voice parameters changed.
+- Added labels and formatting for wake confidence, minimum command length, cooldown, wake speaker coupling, wake mode, repeat suppression, and speaker threshold.
+- Tuning history now renders changes such as `最短指令字数 2字 → 1字` and `声纹严格度 0.63 → 0.50` before the before/after effect metrics.
+- Extended `smoke:brain-ui` to verify the tuning diff chips render for both wake command length and speaker threshold changes.
+- Verification passed: syntax checks for Brain UI app and smoke script; `npm run smoke:brain-ui`.
+- This remains a post-v2.2.0 development checkpoint only: no tag and no GitHub Release per major-version cadence.

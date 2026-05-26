@@ -1854,6 +1854,37 @@ function renderVoiceLinkSummary(summary = {}) {
     <div id="voice-wake-tuning-actions" class="voice-wake-tuning-actions"></div>`;
 }
 
+function voiceTuningFieldLabel(key = "") {
+  const labels = {
+    wakeConfidenceThreshold: "唤醒置信度",
+    wakeMinCommandChars: "最短指令字数",
+    wakeCooldownMs: "唤醒冷却",
+    wakeRequireSpeakerWhenEnabled: "唤醒声纹联动",
+    wakeMode: "唤醒模式",
+    wakeRepeatSuppression: "重复抑制",
+    speakerThreshold: "声纹严格度",
+  };
+  return labels[key] || key;
+}
+
+function formatVoiceTuningValue(key = "", value) {
+  if (value === true) return "开启";
+  if (value === false) return "关闭";
+  if (key === "wakeCooldownMs" && Number.isFinite(Number(value))) return `${(Number(value) / 1000).toFixed(1)}s`;
+  if ((key === "wakeConfidenceThreshold" || key === "speakerThreshold") && Number.isFinite(Number(value))) return Number(value).toFixed(2);
+  if (key === "wakeMinCommandChars" && Number.isFinite(Number(value))) return `${Math.round(Number(value))}字`;
+  return String(value ?? "—");
+}
+
+function renderVoiceTuningDiffChips(record = {}) {
+  const applied = record.applied && typeof record.applied === "object" ? record.applied : {};
+  const before = record.before && typeof record.before === "object" ? record.before : {};
+  const after = record.after && typeof record.after === "object" ? record.after : {};
+  const keys = Object.keys(applied);
+  if (!keys.length) return "";
+  return `<div class="voice-wake-tuning-diff">${keys.map(key => `<span><strong>${escapeFocusText(voiceTuningFieldLabel(key))}</strong>${escapeFocusText(formatVoiceTuningValue(key, before[key]))} → ${escapeFocusText(formatVoiceTuningValue(key, after[key] ?? applied[key]))}</span>`).join("")}</div>`;
+}
+
 
 function renderVoiceLinkCheck(check = {}) {
   const statusText = check.overall === "ok" ? "全部通过" : check.overall === "warn" ? "需要处理" : check.overall === "pending" ? "等待接入" : "存在错误";
@@ -2040,7 +2071,7 @@ function initVoiceClientsPanel() {
       <div class="voice-wake-auto-panel" id="voice-wake-auto-panel"></div>
       ${safeActions.length ? `<div class="voice-wake-tuning-title">可一键应用的调参建议</div>
       ${safeActions.map((item, index) => `<button class="voice-wake-tuning-action" data-index="${index}" type="button"><strong>${escapeFocusText(item.label || item.reason)}</strong><span>${escapeFocusText(item.reason || "")}</span></button>`).join("")}` : ""}
-      ${latest ? `<div class="voice-wake-tuning-history"><span>最近调参：${escapeFocusText(latest.label || latest.reason || latest.id)}</span><span class="voice-wake-tuning-verdict voice-wake-tuning-verdict-${escapeFocusText(latest.evaluation?.advice?.level || latest.evaluation?.verdict || "pending")}">${escapeFocusText(latest.evaluation?.verdict || "pending")}</span><button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">回滚</button></div>${latest.evaluation ? `<div class="voice-wake-tuning-eval"><span>应用前拒绝 ${escapeFocusText(latest.evaluation.before?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.before?.wakeAccepted ?? 0)}</span><span>应用后拒绝 ${escapeFocusText(latest.evaluation.after?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.after?.wakeAccepted ?? 0)}</span><span>声纹拒绝 ${escapeFocusText(latest.evaluation.before?.speakerRejected ?? 0)} → ${escapeFocusText(latest.evaluation.after?.speakerRejected ?? 0)}</span></div><div class="voice-wake-tuning-advice voice-wake-tuning-advice-${escapeFocusText(latest.evaluation.advice?.level || "pending")}"><span>${escapeFocusText(latest.evaluation.advice?.text || "继续观察调参效果。")}</span>${latest.evaluation.advice?.action === "rollback" ? `<button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">建议回滚</button>` : ""}</div>` : ""}` : ""}`;
+      ${latest ? `<div class="voice-wake-tuning-history"><span>最近调参：${escapeFocusText(latest.label || latest.reason || latest.id)}</span><span class="voice-wake-tuning-verdict voice-wake-tuning-verdict-${escapeFocusText(latest.evaluation?.advice?.level || latest.evaluation?.verdict || "pending")}">${escapeFocusText(latest.evaluation?.verdict || "pending")}</span><button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">回滚</button></div>${renderVoiceTuningDiffChips(latest)}${latest.evaluation ? `<div class="voice-wake-tuning-eval"><span>应用前拒绝 ${escapeFocusText(latest.evaluation.before?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.before?.wakeAccepted ?? 0)}</span><span>应用后拒绝 ${escapeFocusText(latest.evaluation.after?.wakeRejected ?? 0)} / 成功 ${escapeFocusText(latest.evaluation.after?.wakeAccepted ?? 0)}</span><span>声纹拒绝 ${escapeFocusText(latest.evaluation.before?.speakerRejected ?? 0)} → ${escapeFocusText(latest.evaluation.after?.speakerRejected ?? 0)}</span></div><div class="voice-wake-tuning-advice voice-wake-tuning-advice-${escapeFocusText(latest.evaluation.advice?.level || "pending")}"><span>${escapeFocusText(latest.evaluation.advice?.text || "继续观察调参效果。")}</span>${latest.evaluation.advice?.action === "rollback" ? `<button class="voice-wake-tuning-rollback" data-id="${escapeFocusText(latest.id || "")}" type="button">建议回滚</button>` : ""}</div>` : ""}` : ""}`;
     host.querySelectorAll(".voice-wake-tuning-action").forEach(btn => {
       btn.addEventListener("click", () => applyWakeTuningAction(Number(btn.dataset.index || -1)));
     });

@@ -266,3 +266,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events and brain-ui smoke coverage.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 27: Visible tuning change diff in Brain UI
+- [x] Add field labels for voice tuning parameters.
+- [x] Add human formatting for boolean, threshold, cooldown, and command-length values.
+- [x] Render applied tuning changes as before → after chips in Brain UI tuning history.
+- [x] Include both wake and speaker threshold changes in the diff display.
+- [x] Style tuning diff chips to be readable inside the voice link command center.
+- [x] Extend brain-ui smoke coverage for wake and speaker tuning diff rendering.
+- [x] Verify syntax plus brain-ui smoke suite.
+- [x] Push as a development checkpoint only, without tag/Release.

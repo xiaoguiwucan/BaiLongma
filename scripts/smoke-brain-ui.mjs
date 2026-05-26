@@ -345,7 +345,7 @@ new WebSocket(url)`,
           { reason: 'command too short', label: '降低最短指令字数到 1 字', patch: { wakeMinCommandChars: 1 }, safe: true, advice: '降低最短指令字数' },
           { reason: 'speaker rejected', label: '降低声纹严格度到 0.50', patch: { speakerThreshold: 0.50 }, safe: true, advice: '降低声纹严格度' },
         ],
-        history: wakeTuningApplied ? [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', reason: 'command too short', applied: { wakeMinCommandChars: 1 }, evaluation: { verdict: 'improved', advice: { level: 'ok', action: 'keep', text: '调参后唤醒表现变好，建议暂时保持当前参数并继续观察。' }, before: { wakeRejected: 2, wakeAccepted: 1 }, after: { wakeRejected: 0, wakeAccepted: 2 } } }] : [],
+        history: wakeTuningApplied ? [{ id: 'wake_tune_smoke', label: '降低最短指令字数到 1 字', reason: 'command too short', before: { wakeMinCommandChars: 2, speakerThreshold: 0.63 }, after: { wakeMinCommandChars: 1, speakerThreshold: 0.50 }, applied: { wakeMinCommandChars: 1, speakerThreshold: 0.50 }, evaluation: { verdict: 'improved', advice: { level: 'ok', action: 'keep', text: '调参后唤醒表现变好，建议暂时保持当前参数并继续观察。' }, before: { wakeRejected: 2, wakeAccepted: 1, speakerRejected: 1 }, after: { wakeRejected: 0, wakeAccepted: 2, speakerRejected: 0 } } }] : [],
       })
       return
     }
@@ -611,7 +611,7 @@ try {
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-action')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已应用'))
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-threshold') === '0.5')
-  await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('声纹拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('建议暂时保持当前参数'))
+  await page.waitForFunction(() => document.querySelector('.voice-wake-tuning-rollback')?.textContent.includes('回滚') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('improved') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('应用前拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('声纹拒绝') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('最短指令字数') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('2字 → 1字') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('声纹严格度') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('0.63 → 0.50') && document.querySelector('#voice-wake-tuning-actions')?.textContent.includes('建议暂时保持当前参数'))
   await page.evaluate(() => document.querySelector('.voice-wake-tuning-rollback')?.click())
   await page.waitForFunction(() => document.querySelector('#voice-clients-feedback')?.textContent.includes('唤醒调参已回滚'))
   await page.waitForFunction(() => localStorage.getItem('bailongma-voice-speaker-threshold') === '0.63')
