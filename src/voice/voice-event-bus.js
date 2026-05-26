@@ -43,7 +43,10 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
     errorCodes: ['invalid_json', 'invalid_message', 'missing_type', 'unsupported_type', 'missing_text', 'text_too_long', 'rate_limited'],
     mappedStates: Object.fromEntries(Object.entries(VOICE_EVENTS_PROTOCOL_STATES).map(([key, value]) => [key, [...value]])),
     limits: {
-      ttsSpeak: activeTTSSpeakLimits,
+      ttsSpeak: {
+        ...activeTTSSpeakLimits,
+        scopes: ['connection', 'remoteAddress'],
+      },
     },
     audio: {
       defaultContentType: 'audio/mpeg',

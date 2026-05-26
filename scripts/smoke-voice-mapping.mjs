@@ -82,6 +82,7 @@ assert(protocol.version >= 3 && protocol.capabilities.includes('tts_speak') && p
 assert(protocol.endpoints?.protocol === '/voice/events/protocol' && protocol.endpoints?.websocket === '/voice/events', 'protocol metadata exposes endpoints')
 assert(protocol.auth?.localhostExempt === true && protocol.auth?.methods?.length >= 2, 'protocol metadata exposes auth methods')
 assert(protocol.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocol.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol metadata exposes tts speak limits')
+assert(protocol.limits?.ttsSpeak?.scopes?.includes('connection') && protocol.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol metadata exposes tts speak limit scopes')
 const customProtocol = getVoiceEventsProtocolMetadata({ ttsSpeakLimits: { maxTextChars: 123, cooldownMs: 456 }, auth: { tokenConfigured: true } })
 assert(customProtocol.limits?.ttsSpeak?.maxTextChars === 123 && customProtocol.limits?.ttsSpeak?.cooldownMs === 456, 'protocol metadata accepts configured tts speak limits')
 assert(customProtocol.auth?.tokenConfigured === true && customProtocol.auth?.requiredForRemote === true, 'protocol metadata accepts auth configuration')

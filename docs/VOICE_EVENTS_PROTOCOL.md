@@ -1,6 +1,6 @@
 # BaiLongma Voice Events Protocol
 
-版本：v3（BaiLongma v2.1.234 更新：/voice/events 可选 token 鉴权）
+版本：v3（BaiLongma v2.1.235 更新：tts:speak 远端地址级冷却）
 
 本文档描述白龙马 `/voice/events` WebSocket 语音事件协议，用于调试工具、手机端、ESP32/硬件端或局域网客户端接入。
 
@@ -56,7 +56,7 @@ ws://<mac-ip>:3721/voice/events?token=<token>
   "service": "bailongma.voice.events",
   "version": 3,
   "capabilities": ["json_events", "tts_audio_chunks", "tts_speak", "protocol_errors", "tts_speak_limits"],
-  "limits": { "ttsSpeak": { "maxTextChars": 800, "cooldownMs": 1200 } },
+  "limits": { "ttsSpeak": { "maxTextChars": 800, "cooldownMs": 1200, "scopes": ["connection", "remoteAddress"] } },
   "auth": {
     "requiredForRemote": true,
     "tokenConfigured": true,
@@ -74,7 +74,7 @@ ws://<mac-ip>:3721/voice/events?token=<token>
 |---|---|
 | `version` | 当前协议版本。v3 支持 JSON 事件、TTS 音频块、直接 `tts:speak`。 |
 | `capabilities` | 能力声明。客户端应按能力判断是否启用 speak/audio/protocol_error/tts_speak_limits 处理。 |
-| `limits.ttsSpeak` | `tts:speak` 文本长度和发送冷却限制。 |
+| `limits.ttsSpeak` | `tts:speak` 文本长度和发送冷却限制。`scopes` 表示会同时按连接和远端地址限流。 |
 | `auth` | 鉴权元数据，说明 token 是否配置、远端是否建议鉴权、支持的传 token 方法。 |
 | `history` | 最近事件历史，方便调试客户端连上后看到上下文。 |
 
@@ -341,7 +341,7 @@ voice_event tts:stop
 | `unsupported_type` | `type` 不在支持列表 | 检查协议版本或拼写 |
 | `missing_text` | `tts:speak` / `speak` 缺少非空 `text`/`ttsText` | 补齐要合成的文本 |
 | `text_too_long` | `tts:speak` / `speak` 文本超过 `limits.ttsSpeak.maxTextChars` | 截断或分段发送 |
-| `rate_limited` | 同一连接发送 `tts:speak` 太快 | 根据 `retryAfterMs` 稍后重试 |
+| `rate_limited` | 发送 `tts:speak` 太快，可能是 `scope=connection` 或 `scope=remote` | 根据 `retryAfterMs` 稍后重试 |
 
 支持的客户端消息类型可以通过：
 
@@ -425,5 +425,5 @@ npm run voice:events -- listen --url ws://192.168.1.10:3721/voice/events
 - 当前协议未做鉴权，局域网暴露时请自行控制访问范围。
 - 当前 `tts:cancel` 只取消同连接 active speak，不支持跨连接 session 管理。
 - 当前调试客户端是参考实现，不是正式 SDK。
-- 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本和单连接 speak 冷却；文本长度和冷却可配置。
+- 当前 `protocol_error` 已覆盖格式、类型、空文本、超长文本、单连接 speak 冷却和远端地址 speak 冷却；文本长度和冷却可配置。
 - `/voice/events` 已支持复用 `BAILONGMA_API_TOKEN` 的可选 token 鉴权，但还没有每设备配对或全局/IP 级限流。

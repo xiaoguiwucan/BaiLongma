@@ -4,6 +4,50 @@
 
 维护铁规：任何版本修改、功能更新、修复、文档更新，只要形成版本，都必须上传 GitHub 备份，并创建 GitHub Release。Release 里必须写清更新内容、改变原因、部署方式、备份附件说明和已知限制，不能只推 commit 或 tag。
 
+## v2.1.235 - 2026-05-26
+
+### 更新内容
+
+- `/voice/events` WebSocket `tts:speak` 冷却从“仅单连接”增强为双层保护：
+  - per-connection；
+  - per-remote-address。
+- `rate_limited` 错误新增 `scope` 字段：
+  - `connection`：同一个 WebSocket 连接太快；
+  - `remote`：同一个远端地址通过多个连接太快。
+- `/voice/events/protocol` 的 `limits.ttsSpeak` 新增 `scopes: ["connection", "remoteAddress"]`。
+- WebSocket hello 同步携带新的 `limits.ttsSpeak.scopes`。
+- 后端新增远端地址 `tts:speak` 时间戳表，并定期清理过期项，避免无限增长。
+- `scripts/smoke-voice-mapping.mjs` 从 27 项扩展到 28 项，覆盖 limit scopes 元数据。
+- `scripts/smoke-voice-events.mjs` 从 29 项扩展到 31 项，覆盖 protocol scopes 和跨连接 remote rate limit。
+
+### 改变原因
+
+- v2.1.232-v2.1.234 已有单连接冷却，但同一设备如果打开多个 WebSocket 连接，仍可能绕过限流。
+- 硬件端或调试工具在异常重连时可能短时间创建多个连接，远端地址级冷却能降低 TTS session 被频繁创建/取消的概率。
+- `scope` 字段让客户端日志能明确知道是当前连接太快，还是同一设备/地址整体太快。
+
+### 影响范围
+
+- 默认冷却配置仍来自 `/settings/tts` 的 `voiceEventsTtsSpeakCooldownMs`。
+- 同一远端地址在冷却时间内多连接发送 `tts:speak` 会收到 `protocol_error / rate_limited`，`scope` 为 `remote`。
+- localhost 开发仍可正常使用，只是同样遵守 remote-address 冷却。
+
+### 验证结果
+
+- `node --check src/voice/voice-event-bus.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check scripts/smoke-voice-mapping.mjs` 通过。
+- `node --check scripts/smoke-voice-events.mjs` 通过。
+- `npm run smoke:voice-mapping` 28/28 通过。
+- `npm run smoke:voice-events` 31/31 通过。
+- `npm run smoke:tools` 6/6 通过；本机 Node v24 下仍有已知 `better-sqlite3` ABI 日志警告。
+
+### 部署注意事项
+
+- 源码部署方式不变：`npm install` 后 `npm start`。
+- 外部客户端应处理 `rate_limited.scope`，并根据 `retryAfterMs` 延迟重试。
+- 如果需要更快调试，可在设置页降低“单连接冷却 ms”；它现在同时影响 connection 和 remote address 两个 scope。
+
 ## v2.1.234 - 2026-05-26
 
 ### 更新内容

@@ -1,45 +1,45 @@
-# Task Plan: v2.1.234 Voice Events Optional Token Authentication
+# Task Plan: v2.1.235 Voice Events Remote Address TTS Speak Cooldown
 
 ## Goal
-Continue the Xiaozhi-inspired voice optimization by shipping v2.1.234 with optional token authentication metadata and enforcement for `/voice/events`, so LAN/external clients can use the existing `BAILONGMA_API_TOKEN` mechanism instead of leaving the voice WebSocket unauthenticated.
+Continue the Xiaozhi-inspired voice optimization by shipping v2.1.235 with remote-address-level `tts:speak` cooldown for `/voice/events`, preventing a client from bypassing per-WebSocket cooldown by opening multiple connections. The change must be reflected in protocol metadata, tests, docs, UI release notes, and GitHub Release assets.
 
 ## Current Phase
-Complete
+Verification complete; release in progress
 
 ## Phases
 
 ### Phase 1: Discovery
-- [x] Confirm v2.1.233 clean baseline and release state
-- [x] Inspect API access helpers and WebSocket upgrade handling
-- [x] Identify `/voice/events` upgrade lacks the same access guard as `/acui`
+- [x] Confirm v2.1.234 clean baseline and release state
+- [x] Inspect current per-WebSocket cooldown implementation
+- [x] Identify that multiple connections from same remote address can bypass the cooldown
 - **Status:** complete
 
 ### Phase 2: Implementation
-- [x] Add auth metadata to voice events protocol response and hello
-- [x] Enforce origin/access checks for `/voice/events` WebSocket upgrade
-- [x] Reuse existing `BAILONGMA_API_TOKEN` Bearer/query token behavior
-- [x] Keep localhost developer usage working without token
+- [x] Add remote-address cooldown metadata to protocol limits
+- [x] Track last `tts:speak` timestamp per normalized remote address
+- [x] Apply both per-connection and per-remote cooldown in WebSocket handler
+- [x] Clean up stale remote cooldown entries to avoid unbounded growth
 - **Status:** complete
 
 ### Phase 3: Tests, docs, UI notes
-- [x] Extend smoke tests for auth metadata and query-token WebSocket connection
-- [x] Bump version to 2.1.234 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
+- [x] Extend smoke tests for metadata and cross-connection rate limit
+- [x] Bump version to 2.1.235 and update README/CHANGELOG/BACKUP/protocol docs/UI release notes
 - [x] Run syntax checks and smoke tests
 - **Status:** complete
 
 ### Phase 4: GitHub release
-- [x] Commit changes
-- [x] Tag and push v2.1.234
-- [x] Create source tarball and git bundle assets
-- [x] Create GitHub Release with detailed notes and upload assets
-- **Status:** complete
+- [ ] Commit changes
+- [ ] Tag and push v2.1.235
+- [ ] Create source tarball and git bundle assets
+- [ ] Create GitHub Release with detailed notes and upload assets
+- **Status:** in_progress
 
 ## Decisions Made
 | Decision | Rationale |
 |----------|-----------|
-| Reuse `BAILONGMA_API_TOKEN` | Avoids inventing another token mechanism and aligns HTTP settings/admin security behavior |
-| Allow localhost without token | Keeps local Electron/dev workflow unchanged |
-| Advertise auth metadata without exposing token | Clients need to know how to authenticate, but never receive the secret itself |
+| Use the same cooldownMs for per-connection and per-remote address | Keeps the UI/config simple while preventing multi-connection bypass |
+| Report `scope` in rate_limited errors | Clients can distinguish `connection` vs `remote` throttling in logs |
+| Keep protocol version 3 | This is backward-compatible validation metadata/behavior |
 
 ## Errors Encountered
 | Error | Attempt | Resolution |

@@ -738,6 +738,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v2.1.235</span>
+                  <span class="release-note-date">2026-05-26</span>
+                </div>
+                <p class="release-note-summary">为 /voice/events tts:speak 增加远端地址级冷却，防止多连接绕过限流。</p>
+                <ul class="release-note-points">
+                  <li>rate_limited 新增 scope=connection/remote。</li>
+                  <li>limits.ttsSpeak 新增 scopes: connection 与 remoteAddress。</li>
+                  <li>smoke:voice-mapping 增至 28 项，smoke:voice-events 增至 31 项。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v2.1.234</span>
                   <span class="release-note-date">2026-05-26</span>
                 </div>

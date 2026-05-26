@@ -1518,6 +1518,19 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     ws.on('error', () => { session?.close(); session = null })
   })
 
+  const voiceEventsRemoteSpeakAt = new Map()
+
+  function pruneVoiceEventsRemoteSpeakAt(now = Date.now()) {
+    const ttl = Math.max(60000, getConfiguredVoiceEventsTTSSpeakLimits().cooldownMs * 10)
+    for (const [key, at] of voiceEventsRemoteSpeakAt.entries()) {
+      if (now - Number(at || 0) > ttl) voiceEventsRemoteSpeakAt.delete(key)
+    }
+  }
+
+  function getVoiceEventRemoteKey(req) {
+    return normalizeRemoteAddress(req?.socket?.remoteAddress || 'unknown') || 'unknown'
+  }
+
   function getConfiguredVoiceEventsTTSSpeakLimits() {
     const ttsConfig = getTTSConfig()
     return normalizeVoiceEventsTTSSpeakLimits({
@@ -1620,7 +1633,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
   // Experimental voice event WebSocket channel: JSON lifecycle events and opt-in TTS audio for external clients
   const voiceEventWss = new WebSocketServer({ noServer: true })
-  voiceEventWss.on('connection', (ws) => {
+  voiceEventWss.on('connection', (ws, req) => {
+    ws.voiceEventRemoteKey = getVoiceEventRemoteKey(req)
     addVoiceEventClient(ws, { ttsSpeakLimits: getConfiguredVoiceEventsTTSSpeakLimits(), auth: getVoiceEventsAuthMetadata() })
     const cleanupVoiceClient = () => {
       cancelVoiceEventTTSSpeak(ws, 'client_disconnected')
@@ -1644,6 +1658,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       }
       if (msg?.type === 'tts:speak' || msg?.type === 'speak') {
         const now = Date.now()
+        pruneVoiceEventsRemoteSpeakAt(now)
         const lastAt = Number(ws.lastTTSSpeakAt || 0)
         const retryAfterMs = Math.max(0, activeTTSSpeakLimits.cooldownMs - (now - lastAt))
         if (retryAfterMs > 0) {
@@ -1652,10 +1667,25 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
             receivedType: msg.type,
             limitMs: activeTTSSpeakLimits.cooldownMs,
             retryAfterMs,
+            scope: 'connection',
+          })
+          return
+        }
+        const remoteKey = ws.voiceEventRemoteKey || 'unknown'
+        const remoteLastAt = Number(voiceEventsRemoteSpeakAt.get(remoteKey) || 0)
+        const remoteRetryAfterMs = Math.max(0, activeTTSSpeakLimits.cooldownMs - (now - remoteLastAt))
+        if (remoteRetryAfterMs > 0) {
+          sendVoiceEventProtocolError(ws, 'rate_limited', `tts:speak is limited per remote address to one request every ${activeTTSSpeakLimits.cooldownMs} ms.`, {
+            requestId: msg.requestId || msg.id || undefined,
+            receivedType: msg.type,
+            limitMs: activeTTSSpeakLimits.cooldownMs,
+            retryAfterMs: remoteRetryAfterMs,
+            scope: 'remote',
           })
           return
         }
         ws.lastTTSSpeakAt = now
+        voiceEventsRemoteSpeakAt.set(remoteKey, now)
         handleVoiceEventTTSSpeak(ws, msg).catch(err => sendVoiceEventClientJson(ws, { type: 'tts', state: 'error', error: err.message }))
         return
       }

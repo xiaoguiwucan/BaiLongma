@@ -1,24 +1,17 @@
-# Findings: v2.1.234 Voice Events Optional Token Authentication
+# Findings: v2.1.235 Voice Events Remote Address TTS Speak Cooldown
 
 ## Current baseline
-- v2.1.233 made `tts:speak` limits configurable.
-- HTTP paths already use `hasAllowedAccess(req, url)` / `requireLocalOrToken(req, res, url)`.
-- `/acui` WebSocket upgrade checks origin and allowed access.
-- `/voice/events` WebSocket upgrade currently calls `handleUpgrade` directly without origin/access checks.
+- v2.1.234 added optional token authentication and access checks for `/voice/events`.
+- v2.1.233/v2.1.232 added configurable `tts:speak` max text and per-WebSocket cooldown.
+- The cooldown is stored on `ws.lastTTSSpeakAt`, so opening a second WebSocket connection from the same client can bypass it.
 
 ## Design finding
-- `/voice/events` is increasingly capable: it can receive `tts:speak`, stream audio, expose protocol metadata, and receive client commands.
-- Before recommending LAN/external clients, the WebSocket should have the same access posture as `/acui`.
-- Existing `BAILONGMA_API_TOKEN` supports Authorization Bearer and `?token=` query parameter via `hasValidAuthToken`.
-- Protocol metadata should say whether auth is configured and which methods are accepted, without exposing the token.
-
-## Auth behavior
-- Loopback clients remain allowed without token.
-- LAN/private clients are allowed if `BAILONGMA_ALLOW_LAN=true`, matching existing helper behavior.
-- If `BAILONGMA_API_TOKEN` is set, clients can pass `Authorization: Bearer <token>` or `?token=<token>`.
-- Origin must be loopback or private LAN origin when LAN is enabled.
+- Hardware or desktop clients can accidentally reconnect/open multiple sockets.
+- A minimal remote-address-level cooldown prevents obvious multi-connection bypass without requiring device identity yet.
+- The same configured `cooldownMs` can be reused for both scopes.
+- `rate_limited` should include `scope: "connection" | "remote"` so clients/debug logs know what happened.
 
 ## Remaining future direction
-- Add per-device pairing tokens.
-- Add global/IP-level rate limiting.
-- Add UI helper to generate/copy token and LAN connection URL.
+- Add per-device pairing tokens for stronger identity than remote address.
+- Add token management UI.
+- Add more complete global/IP rate limiting windows beyond speak cooldown.

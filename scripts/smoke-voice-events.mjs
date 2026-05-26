@@ -78,6 +78,7 @@ try {
   assert(protocolMeta.ok === true && protocolMeta.version >= 3 && protocolMeta.capabilities?.includes('tts_speak') && protocolMeta.capabilities?.includes('protocol_errors') && protocolMeta.capabilities?.includes('tts_speak_limits'), 'protocol endpoint exposes version and capabilities', JSON.stringify(protocolMeta))
   assert(protocolMeta.endpoints?.websocket === '/voice/events' && protocolMeta.endpoints?.publish === '/voice/events/publish', 'protocol endpoint exposes websocket and publish endpoints', JSON.stringify(protocolMeta))
   assert(protocolMeta.limits?.ttsSpeak?.maxTextChars === VOICE_EVENTS_TTS_SPEAK_LIMITS.maxTextChars && protocolMeta.limits?.ttsSpeak?.cooldownMs === VOICE_EVENTS_TTS_SPEAK_LIMITS.cooldownMs, 'protocol endpoint exposes tts speak limits', JSON.stringify(protocolMeta.limits))
+  assert(protocolMeta.limits?.ttsSpeak?.scopes?.includes('remoteAddress'), 'protocol endpoint exposes remote address tts speak scope', JSON.stringify(protocolMeta.limits))
   assert(protocolMeta.auth?.localhostExempt === true && protocolMeta.auth?.methods?.includes('?token=<token>'), 'protocol endpoint exposes auth metadata', JSON.stringify(protocolMeta.auth))
 
   await fetch(`${API}/settings/tts`, {
@@ -152,7 +153,25 @@ try {
     until: msg => msg.type === 'protocol_error' && msg.code === 'rate_limited',
   })
   const rateLimited = rateLimitMessages.find(msg => msg.type === 'protocol_error' && msg.code === 'rate_limited')
-  assert(rateLimited?.requestId === 'rate-2' && rateLimited?.retryAfterMs > 0 && rateLimited?.limitMs === 250, 'rapid tts:speak receives rate_limited protocol_error', JSON.stringify(rateLimited))
+  assert(rateLimited?.requestId === 'rate-2' && rateLimited?.retryAfterMs > 0 && rateLimited?.limitMs === 250 && rateLimited?.scope === 'connection', 'rapid tts:speak receives connection rate_limited protocol_error', JSON.stringify(rateLimited))
+
+  const remoteRateFirst = new WebSocket(WS)
+  await new Promise((resolve, reject) => {
+    const timer = setTimeout(() => reject(new Error('timeout waiting remote rate first open')), 1500)
+    remoteRateFirst.on('open', () => {
+      remoteRateFirst.send(JSON.stringify({ type: 'tts:speak', requestId: 'remote-rate-1', text: '第一句' }))
+      setTimeout(() => { try { remoteRateFirst.close() } catch {}; clearTimeout(timer); resolve() }, 30)
+    })
+    remoteRateFirst.on('error', err => { clearTimeout(timer); reject(err) })
+  })
+  const remoteRateMessages = await connectAndCollect({
+    onOpen: ws => ws.send(JSON.stringify({ type: 'tts:speak', requestId: 'remote-rate-2', text: '第二句' })),
+    until: msg => msg.type === 'protocol_error' && msg.code === 'rate_limited' && msg.scope === 'remote',
+  })
+  const remoteRateLimited = remoteRateMessages.find(msg => msg.type === 'protocol_error' && msg.code === 'rate_limited' && msg.scope === 'remote')
+  assert(remoteRateLimited?.requestId === 'remote-rate-2' && remoteRateLimited?.retryAfterMs > 0 && remoteRateLimited?.limitMs === 250, 'second connection receives remote rate_limited protocol_error', JSON.stringify(remoteRateLimited))
+
+  await new Promise(resolve => setTimeout(resolve, 280))
 
   const cancelMessages = await connectAndCollect({
     onOpen: ws => ws.send(JSON.stringify({ type: 'tts:cancel', requestId: 'smoke-no-active' })),
