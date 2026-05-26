@@ -318,3 +318,9 @@
 - Brain UI local voice doctor now renders a “声纹服务” status strip showing whether the runtime service is reachable and whether a voiceprint is enrolled.
 - Extended smoke coverage for backend speaker status when service is not running and for Brain UI speaker status rendering.
 - This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.
+- Added a unified backend speaker status endpoint so settings and local voice doctor use the same runtime diagnostic source.
+- New `GET /voice/local/speaker/status` returns local ASR process state, persisted voice config, and runtime speaker enrollment status from `speaker_status` when available.
+- Brain UI speaker status no longer opens its own raw WebSocket for status probing; it calls the backend endpoint and displays service-unreachable, enrolled sample count, threshold, or not-enrolled states.
+- This reduces mismatches between “声纹状态” and “本地语音体检”, making voiceprint troubleshooting more consistent.
+- Extended smoke coverage for the backend endpoint and settings speaker status rendering.
+- This remains a development checkpoint only: no tag and no GitHub Release per “大版本更新，不要改动一点点就更新”.

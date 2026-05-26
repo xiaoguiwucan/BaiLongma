@@ -1817,6 +1817,17 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     }
 
 
+
+    // GET /voice/local/speaker/status — runtime speaker enrollment status from local ASR service
+    if (req.method === 'GET' && url.pathname === '/voice/local/speaker/status') {
+      queryLocalSpeakerStatus().then(speakerStatus => {
+        jsonResponse(res, 200, { ok: true, speaker: speakerStatus, local: getVoiceStatus(), voice: getVoiceConfig() })
+      }).catch(err => {
+        jsonResponse(res, 200, { ok: true, speaker: { ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' }, local: getVoiceStatus(), voice: getVoiceConfig() })
+      })
+      return
+    }
+
     // GET /voice/local/doctor — local voice readiness and human troubleshooting checklist
     if (req.method === 'GET' && url.pathname === '/voice/local/doctor') {
       const windowMs = Math.max(10000, Math.min(10 * 60 * 1000, Number(url.searchParams.get('windowMs') || 60000) || 60000))

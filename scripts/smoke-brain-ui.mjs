@@ -490,6 +490,19 @@ new WebSocket(url)`,
       return
     }
 
+
+    if (url.pathname === '/voice/local/speaker/status') {
+      sendJson(res, {
+        ok: true,
+        speaker: localDoctorFixed
+          ? { ok: true, reachable: true, configured: true, sampleCount: 3, threshold: 0.58, detail: '已录入 3 个声纹样本。' }
+          : { ok: false, reachable: false, configured: false, reason: 'local_voice_not_running', detail: '本地语音服务未运行，无法读取声纹状态。' },
+        local: { status: localDoctorFixed ? 'running' : 'stopped', model: 'sensevoice-small' },
+        voice: { speakerVerificationEnabled: false, speakerThreshold: 0.63 },
+      })
+      return
+    }
+
     if (url.pathname === '/voice/local/doctor') {
       sendJson(res, {
         ok: true,
@@ -673,6 +686,8 @@ try {
   if (videoVoiceSnapshot.duckLevel !== '0.25' || videoVoiceSnapshot.duckHold !== '3600' || videoVoiceSnapshot.sensitivity !== '1.35') throw new Error('server video voice numeric settings did not hydrate settings UI')
   if (videoVoiceSnapshot.storedDuck !== 'false' || videoVoiceSnapshot.storedPtt !== 'true' || videoVoiceSnapshot.storedAec !== 'false') throw new Error('server video voice booleans were not mirrored to localStorage')
   if (videoVoiceSnapshot.storedLevel !== '0.25' || videoVoiceSnapshot.storedHold !== '3600' || videoVoiceSnapshot.storedSensitivity !== '1.35') throw new Error('server video voice numeric settings were not mirrored to localStorage')
+  const speakerStatusText = await page.textContent('#voice-speaker-status')
+  if (!speakerStatusText.includes('服务不可达') || !speakerStatusText.includes('本地语音服务未运行')) throw new Error(`speaker status did not use backend runtime endpoint: ${speakerStatusText}`)
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('视频抗干扰') || !localDoctorText.includes('本地语音服务未运行') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-fix')?.click())

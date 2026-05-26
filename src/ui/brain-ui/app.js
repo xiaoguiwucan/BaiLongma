@@ -3354,24 +3354,21 @@ function initTTSSettings() {
   async function refreshSpeakerStatus() {
     const el = document.getElementById("voice-speaker-status");
     if (!el) return;
+    el.textContent = "检测中…";
     try {
-      await ensureLocalAsrForEnrollment();
-      const ws = new WebSocket("ws://127.0.0.1:3723");
-      const status = await new Promise((resolve, reject) => {
-        const timer = setTimeout(() => reject(new Error("声纹状态超时")), 5000);
-        ws.onopen = () => ws.send(JSON.stringify({ type: "speaker_status" }));
-        ws.onerror = () => reject(new Error("声纹服务连接失败"));
-        ws.onmessage = (ev) => {
-          try {
-            const msg = JSON.parse(ev.data);
-            if (msg.type === "speaker_status") { clearTimeout(timer); resolve(msg); }
-          } catch {}
-        };
-      });
-      try { ws.close(); } catch {}
-      el.textContent = status.configured ? `已录入（${status.sampleCount || 1} 个样本）` : "未录入";
-    } catch {
-      el.textContent = "状态未知";
+      const resp = await fetch(`${API}/voice/local/speaker/status`);
+      const data = await resp.json();
+      if (!resp.ok || !data?.ok) throw new Error(data?.error || "声纹状态查询失败");
+      const speaker = data.speaker || {};
+      if (speaker.reachable === false) {
+        el.textContent = `服务不可达：${speaker.detail || speaker.reason || "本地语音服务未运行"}`;
+      } else if (speaker.configured) {
+        el.textContent = `已录入（${speaker.sampleCount || 1} 个样本，阈值 ${speaker.threshold ?? "—"}）`;
+      } else {
+        el.textContent = "未录入（本地服务可达）";
+      }
+    } catch (err) {
+      el.textContent = err?.message || "状态未知";
     }
   }
 

@@ -378,3 +378,13 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Extend voice-events smoke coverage for local-service-not-running speaker status.
 - [x] Verify syntax plus voice-events and brain-ui smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 38: Unified backend speaker status endpoint
+- [x] Add backend `GET /voice/local/speaker/status` using the same runtime `speaker_status` query as local voice doctor.
+- [x] Return speaker runtime status, local ASR process status, and voice config in one response.
+- [x] Replace Brain UI direct `ws://127.0.0.1:3723` speaker-status probing with the backend endpoint.
+- [x] Show clearer speaker status text for unreachable service, enrolled sample count, threshold, and not-enrolled state.
+- [x] Extend voice-events smoke coverage for the speaker status endpoint.
+- [x] Extend brain-ui smoke coverage to verify settings speaker status uses backend runtime diagnostics.
+- [x] Verify syntax plus voice-events and brain-ui smoke suites.
+- [x] Push as a development checkpoint only, without tag/Release.
