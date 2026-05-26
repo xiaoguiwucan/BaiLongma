@@ -141,10 +141,11 @@ function createServer() {
         ok: true,
         service: 'bailongma.voice.events',
         version: 3,
-        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics'],
+        capabilities: ['json_events', 'tts_speak', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'event_history'],
         endpoints: {
           websocket: '/voice/events',
           clients: '/voice/events/clients',
+          history: '/voice/events/history',
           protocol: '/voice/events/protocol',
           publish: '/voice/events/publish',
         },
@@ -153,6 +154,19 @@ function createServer() {
           autoSubscribe: false,
         },
       })
+      return
+    }
+
+
+    if (url.pathname === '/voice/events/history') {
+      const type = url.searchParams.get('type') || ''
+      const events = [
+        { type: 'voice_event', event: { type: 'wake:accepted', word: '小白龙', ts: Date.now() - 2400, roundId: 'r1' }, xiaozhi: { type: 'wake', state: 'accepted', word: '小白龙' } },
+        { type: 'voice_event', event: { type: 'asr:partial', text: '打开', ts: Date.now() - 1800, roundId: 'r1' }, xiaozhi: { type: 'stt', state: 'partial', text: '打开' } },
+        { type: 'voice_event', event: { type: 'asr:final', text: '打开灯光', ts: Date.now() - 1200, roundId: 'r1' }, xiaozhi: { type: 'stt', state: 'final', text: '打开灯光' } },
+        { type: 'voice_event', event: { type: 'tts:stop', reason: 'completed', ts: Date.now() - 600, roundId: 'r1' }, xiaozhi: { type: 'tts', state: 'stop', reason: 'completed' } },
+      ].filter(item => !type || item.event.type === type || item.xiaozhi.type === type)
+      sendJson(res, { ok: true, service: 'bailongma.voice.events', version: 3, total: events.length, limit: 20, events })
       return
     }
 
@@ -383,12 +397,15 @@ try {
     card: document.querySelector('.voice-client-card')?.textContent || '',
     diagnostics: document.querySelector('#voice-clients-diagnostics')?.textContent || '',
     guide: document.querySelector('#voice-clients-guide')?.textContent || '',
+    history: document.querySelector('#voice-events-history-list')?.textContent || '',
   }))
   if (voiceClientSnapshot.count !== '1') throw new Error('voice clients panel did not show connected client count')
   if (!voiceClientSnapshot.card.includes('binary')) throw new Error('voice clients panel did not render negotiated binary mode')
   if (!voiceClientSnapshot.card.includes('链路正常')) throw new Error('voice clients panel did not render human advice')
   if (!voiceClientSnapshot.card.includes('Healthok')) throw new Error('voice clients panel did not render backend health level')
   if (!voiceClientSnapshot.diagnostics.includes('/voice/events/clients')) throw new Error('voice clients protocol diagnostics did not render clients endpoint')
+  if (!voiceClientSnapshot.diagnostics.includes('/voice/events/history')) throw new Error('voice clients protocol diagnostics did not render history endpoint')
+  if (!voiceClientSnapshot.history.includes('识别完成：打开灯光') || !voiceClientSnapshot.history.includes('tts:stop')) throw new Error('voice events history timeline did not render recent events')
   if (!voiceClientSnapshot.guide.includes('npm run voice:events -- listen')) throw new Error('voice clients guide did not render debug connect command')
   if (!voiceClientSnapshot.guide.includes('esp32-test') || !voiceClientSnapshot.guide.includes('client:hello')) throw new Error('voice clients guide did not render LAN command and handshake example')
   await page.hover('.pc-card')

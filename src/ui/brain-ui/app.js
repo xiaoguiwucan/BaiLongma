@@ -1745,6 +1745,51 @@ function renderVoiceClientCard(client = {}) {
     </article>`;
 }
 
+
+function formatVoiceEventTime(value) {
+  const ts = Number(value || 0);
+  if (!Number.isFinite(ts) || ts <= 0) return "—";
+  return new Date(ts).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+}
+
+function voiceEventLabel(item = {}) {
+  const event = item.event || {};
+  const mapped = item.xiaozhi || {};
+  const type = event.type || item.type || mapped.type || "unknown";
+  if (type === "asr:final" || mapped.state === "final") return `识别完成：${event.text || mapped.text || "—"}`;
+  if (type === "asr:partial" || mapped.state === "partial") return `识别中：${event.text || mapped.text || "—"}`;
+  if (type === "wake:accepted") return `唤醒成功：${event.word || mapped.word || "—"}`;
+  if (type === "wake:rejected") return `唤醒拒绝：${event.reason || mapped.reason || "未命中"}`;
+  if (type === "tts:start") return `TTS 开始：${event.text || mapped.text || `${event.segments || mapped.segments || 0} 段`}`;
+  if (type === "tts:stop") return `TTS 结束：${event.reason || mapped.reason || "completed"}`;
+  if (type === "interrupt") return `中断：${event.source || mapped.source || "unknown"}`;
+  return `${type}${event.text ? `：${event.text}` : ""}`;
+}
+
+function voiceEventTone(type = "") {
+  if (type.includes("rejected") || type === "interrupt") return "warn";
+  if (type.includes("asr")) return "asr";
+  if (type.includes("wake")) return "wake";
+  if (type.includes("tts")) return "tts";
+  return "info";
+}
+
+function renderVoiceEventHistoryItem(item = {}) {
+  const event = item.event || {};
+  const mapped = item.xiaozhi || {};
+  const type = event.type || item.type || mapped.type || "unknown";
+  const tone = voiceEventTone(type);
+  const meta = [mapped.type && `xiaozhi:${mapped.type}`, mapped.state && `state:${mapped.state}`, event.roundId && `round:${event.roundId}`].filter(Boolean).join(" · ");
+  return `
+    <article class="voice-event-item voice-event-item-${escapeFocusText(tone)}">
+      <div class="voice-event-dot"></div>
+      <div class="voice-event-main">
+        <div class="voice-event-row"><strong>${escapeFocusText(voiceEventLabel(item))}</strong><code>${escapeFocusText(type)}</code></div>
+        <div class="voice-event-meta"><span>${escapeFocusText(formatVoiceEventTime(event.ts || item.ts))}</span>${meta ? `<span>${escapeFocusText(meta)}</span>` : ""}</div>
+      </div>
+    </article>`;
+}
+
 function initVoiceClientsPanel() {
   const listEl = document.getElementById("voice-clients-list");
   if (!listEl) return;
@@ -1758,6 +1803,9 @@ function initVoiceClientsPanel() {
   const diagnosticsEl = document.getElementById("voice-clients-diagnostics");
   const guideEl = document.getElementById("voice-clients-guide");
   const autoEl = document.getElementById("voice-clients-auto-refresh");
+  const historyListEl = document.getElementById("voice-events-history-list");
+  const historyFilterEl = document.getElementById("voice-events-history-filter");
+  const historyRefreshBtn = document.getElementById("voice-events-history-refresh-btn");
   let timer = null;
 
   let latestProtocol = null;
@@ -1805,6 +1853,7 @@ function initVoiceClientsPanel() {
     diagnosticsEl.innerHTML = `
       <div class="voice-diagnostic-line"><span>WebSocket</span><code>${escapeFocusText(endpoints.websocket || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>Clients</span><code>${escapeFocusText(endpoints.clients || "—")}</code></div>
+      <div class="voice-diagnostic-line"><span>History</span><code>${escapeFocusText(endpoints.history || "/voice/events/history")}</code></div>
       <div class="voice-diagnostic-line"><span>Audio Modes</span><code>${escapeFocusText(modes.join(" / ") || "—")}</code></div>
       <div class="voice-diagnostic-line"><span>Capabilities</span><code>${escapeFocusText(caps.filter(c => ["client_identity", "audio_negotiation", "client_diagnostics", "tts_speak"].includes(c)).join(" · ") || "—")}</code></div>
     `;
@@ -1865,13 +1914,42 @@ function initVoiceClientsPanel() {
     }
   }
 
+
+  async function refreshVoiceEventsHistory({ quiet = false } = {}) {
+    if (!historyListEl) return;
+    if (!quiet && feedbackEl) feedbackEl.textContent = "读取事件中…";
+    const type = String(historyFilterEl?.value || "").trim();
+    const query = new URLSearchParams({ limit: "20" });
+    if (type) query.set("type", type);
+    try {
+      const res = await fetch(`${API}/voice/events/history?${query.toString()}`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const data = await res.json();
+      const events = Array.isArray(data.events) ? data.events.slice().reverse() : [];
+      if (!events.length) {
+        historyListEl.innerHTML = '<div class="voice-clients-empty">暂无匹配语音事件。触发一次唤醒/识别/TTS 后会显示在这里。</div>';
+      } else {
+        historyListEl.innerHTML = events.map(renderVoiceEventHistoryItem).join("");
+      }
+      if (!quiet && feedbackEl) feedbackEl.textContent = "事件已刷新";
+    } catch (err) {
+      historyListEl.innerHTML = `<div class="voice-clients-error">读取 /voice/events/history 失败：${escapeFocusText(err.message || err)}</div>`;
+      if (feedbackEl) feedbackEl.textContent = "事件读取失败";
+    }
+  }
+
   function restartTimer() {
     if (timer) clearInterval(timer);
     timer = null;
-    if (autoEl?.checked) timer = setInterval(() => refreshVoiceClients({ quiet: true }), 5000);
+    if (autoEl?.checked) timer = setInterval(() => {
+      refreshVoiceClients({ quiet: true });
+      refreshVoiceEventsHistory({ quiet: true });
+    }, 5000);
   }
 
-  refreshBtn?.addEventListener("click", () => refreshVoiceClients());
+  refreshBtn?.addEventListener("click", () => { refreshVoiceClients(); refreshVoiceEventsHistory({ quiet: true }); });
+  historyRefreshBtn?.addEventListener("click", () => refreshVoiceEventsHistory());
+  historyFilterEl?.addEventListener("change", () => refreshVoiceEventsHistory());
   protocolBtn?.addEventListener("click", () => refreshProtocolDiagnostics());
   copyBtn?.addEventListener("click", async () => {
     const command = voiceClientConnectCommand();
@@ -1885,6 +1963,7 @@ function initVoiceClientsPanel() {
   autoEl?.addEventListener("change", restartTimer);
   refreshProtocolDiagnostics();
   refreshVoiceClients({ quiet: true });
+  refreshVoiceEventsHistory({ quiet: true });
   restartTimer();
 }
 

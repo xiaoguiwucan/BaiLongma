@@ -62,3 +62,14 @@
 - Extended brain-ui smoke fixture and assertion to verify backend health level renders in the client card.
 - Verification passed: syntax checks for voice bus, API, Brain UI app, and smoke scripts.
 - Verification passed: `npm run smoke:voice-mapping` 41/41, `npm run smoke:voice-events` 43/43, `npm run smoke:brain-ui`, and `npm run smoke:voice-events-client` 8/8.
+- Added backend `GET /voice/events/history` endpoint returning recent raw `voice_event` records plus Xiaozhi-style mapped events, with `limit` clamped to 1–100 and optional `type` filtering by raw or mapped type.
+- Added `event_history` protocol capability and `endpoints.history` metadata so UI, CLI, and device bridges can discover the history endpoint.
+- Extended `smoke:voice-mapping` to verify protocol history capability/endpoint metadata.
+- Extended `smoke:voice-events` to verify recent history contains published `tts:stop` and filtered history contains raw `asr:final` plus Xiaozhi final mapping.
+- Added Brain UI “最近语音事件” timeline inside the external voice clients panel, showing wake/asr/tts/interrupt events with timestamps, mapped state, round id, manual refresh, type filter, and auto-refresh alongside client diagnostics.
+- Brain UI protocol diagnostics now renders the history endpoint for device/debug visibility.
+- Extended `smoke:brain-ui` mock and assertions to cover `/voice/events/history` rendering and diagnostics.
+- Verification passed: syntax checks for voice bus, API, Brain UI app, and smoke scripts.
+- Verification passed: `npm run smoke:voice-mapping` 41/41, `npm run smoke:voice-events` 45/45, `npm run smoke:voice-events-client` 8/8, and `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.
+- This remains a v2.2.0 development checkpoint only: no tag and no GitHub Release per major-release cadence.

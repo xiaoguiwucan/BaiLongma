@@ -84,3 +84,11 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Update Brain UI to render backend health/advice.
 - [x] Extend mapping, voice-events, and brain-ui smoke coverage.
 - [x] Verify all relevant smoke suites.
+
+## Checkpoint 8: Voice event history endpoint and timeline
+- [x] Add `GET /voice/events/history` backend endpoint for recent raw + Xiaozhi-mapped voice events.
+- [x] Add `event_history` protocol capability and `endpoints.history` metadata.
+- [x] Support `limit` and `type` query params for focused debugging.
+- [x] Add Brain UI recent voice events timeline with type filter, manual refresh, and auto-refresh.
+- [x] Extend mapping, voice-events, and brain-ui smoke coverage for history endpoint/timeline.
+- [x] Verify all relevant smoke suites.

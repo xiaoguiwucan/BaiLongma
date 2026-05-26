@@ -378,6 +378,28 @@ const createSettingsModal = () => `
             <div id="voice-clients-list" class="voice-clients-list">
               <div class="voice-clients-empty">暂无外部客户端连接。可运行 <code>npm run voice:events -- listen --audio --client-id mac-debug</code> 测试。</div>
             </div>
+            <div class="voice-events-history-head">
+              <div>
+                <div class="voice-events-history-title">最近语音事件</div>
+                <p class="settings-hint">按时间倒序显示 /voice/events/history 的唤醒、识别、TTS 与中断事件，方便判断设备是否真的听到、识别到、播报到。</p>
+              </div>
+              <div class="voice-events-history-controls">
+                <select class="settings-select" id="voice-events-history-filter" aria-label="语音事件过滤">
+                  <option value="">全部</option>
+                  <option value="wake:accepted">唤醒成功</option>
+                  <option value="wake:rejected">唤醒拒绝</option>
+                  <option value="asr:partial">识别中</option>
+                  <option value="asr:final">识别完成</option>
+                  <option value="tts:start">TTS 开始</option>
+                  <option value="tts:stop">TTS 结束</option>
+                  <option value="interrupt">中断</option>
+                </select>
+                <button class="settings-save-btn" id="voice-events-history-refresh-btn" type="button">刷新事件</button>
+              </div>
+            </div>
+            <div id="voice-events-history-list" class="voice-events-history-list">
+              <div class="voice-clients-empty">暂无语音事件。触发一次唤醒/识别/TTS 后会显示在这里。</div>
+            </div>
           </div>
 
           <div class="settings-section">

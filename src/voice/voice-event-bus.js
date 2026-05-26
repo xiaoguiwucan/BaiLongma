@@ -1,5 +1,5 @@
 export const VOICE_EVENTS_PROTOCOL_VERSION = 3
-export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding'])
+export const VOICE_EVENTS_PROTOCOL_CAPABILITIES = Object.freeze(['json_events', 'tts_audio_chunks', 'tts_speak', 'protocol_errors', 'tts_speak_limits', 'client_identity', 'audio_negotiation', 'client_diagnostics', 'client_onboarding', 'event_history'])
 export const VOICE_EVENTS_TTS_SPEAK_LIMITS = Object.freeze({
   maxTextChars: 800,
   cooldownMs: 1200,
@@ -68,6 +68,7 @@ export function getVoiceEventsProtocolMetadata({ ttsSpeakLimits, auth = {} } = {
       websocket: '/voice/events',
       status: '/voice/events/status',
       clients: '/voice/events/clients',
+      history: '/voice/events/history',
       onboarding: '/voice/events/onboarding',
       protocol: '/voice/events/protocol',
       publish: '/voice/events/publish',
@@ -110,6 +111,19 @@ const clientOptions = new WeakMap()
 const clientIdentities = new WeakMap()
 let clientSerial = 0
 const history = []
+
+export function getVoiceEventHistory({ limit = 50, type = '' } = {}) {
+  const max = Math.max(1, Math.min(100, Math.round(Number(limit) || 50)))
+  const wantedType = String(type || '').trim()
+  const items = wantedType
+    ? history.filter(item => item.event?.type === wantedType || item.xiaozhi?.type === wantedType)
+    : history
+  return items.slice(-max).map(item => ({
+    type: item.type,
+    event: item.event,
+    xiaozhi: item.xiaozhi,
+  }))
+}
 
 export function sendVoiceEventClientJson(ws, payload) {
   safeSend(ws, payload)

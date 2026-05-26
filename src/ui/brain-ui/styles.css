@@ -4065,3 +4065,84 @@ body.person-card-mode .person-card-panel,
   border-radius: 4px;
   font-size: 9px;
 }
+
+.voice-events-history-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 16px 0 10px;
+  padding-top: 14px;
+  border-top: 1px solid var(--line);
+}
+.voice-events-history-title {
+  color: var(--ink);
+  font-weight: 700;
+  font-size: 13px;
+}
+.voice-events-history-controls {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.voice-events-history-controls .settings-select {
+  min-width: 130px;
+}
+.voice-events-history-list {
+  display: grid;
+  gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.voice-event-item {
+  display: grid;
+  grid-template-columns: 10px 1fr;
+  gap: 9px;
+  align-items: start;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px 10px;
+  background: rgba(255,255,255,0.018);
+}
+.voice-event-dot {
+  width: 8px;
+  height: 8px;
+  margin-top: 5px;
+  border-radius: 999px;
+  background: var(--cool);
+  box-shadow: 0 0 0 3px rgba(130,210,255,0.12);
+}
+.voice-event-item-wake .voice-event-dot { background: #8ff0b3; box-shadow: 0 0 0 3px rgba(143,240,179,0.12); }
+.voice-event-item-asr .voice-event-dot { background: #82d2ff; }
+.voice-event-item-tts .voice-event-dot { background: #d7b5ff; box-shadow: 0 0 0 3px rgba(215,181,255,0.12); }
+.voice-event-item-warn .voice-event-dot { background: var(--warm); box-shadow: 0 0 0 3px rgba(211,152,114,0.14); }
+.voice-event-main { min-width: 0; }
+.voice-event-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: baseline;
+}
+.voice-event-row strong {
+  color: var(--ink);
+  font-size: 11px;
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+.voice-event-row code {
+  flex: none;
+  color: var(--cool);
+  font-size: 9px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.voice-event-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+  color: var(--dim);
+  font-size: 9px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
