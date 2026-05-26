@@ -456,3 +456,12 @@ Checkpoint 2 complete; continue accumulating v2.2.0
 - [x] Sync controls and diagnostics after applying the readiness baseline.
 - [x] Verify syntax plus brain-ui and voice-events smoke suites.
 - [x] Push as a development checkpoint only, without tag/Release.
+
+## Checkpoint 46: Speaker gate safe readiness
+- [x] Add readiness step for speaker gate lockout safety.
+- [x] Prevent one-click readiness from enabling speaker verification without an enrolled runtime voiceprint.
+- [x] Add safe doctor fix to disable speaker gate and wake-speaker requirement together.
+- [x] Add Brain UI readiness contextual actions for enroll/test/disable-lockout.
+- [x] Extend smoke tests for safe speaker gate readiness behavior.
+- [x] Verify syntax plus brain-ui and voice-events smoke suites.
+- [ ] Push as a development checkpoint only, without tag/Release.

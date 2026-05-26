@@ -2901,7 +2901,46 @@ function initTTSSettings() {
     return helper + steps.map(item => `<div class="voice-readiness-step voice-readiness-step-${escapeFocusText(item.status || "pending")}">
       <span>${escapeFocusText(item.status || "pending")}</span>
       <div><strong>${escapeFocusText(item.label || item.id || "步骤")}</strong><em>${escapeFocusText(item.detail || item.action || "")}</em></div>
+      ${item.uiAction === "enroll_speaker" ? '<button class="voice-readiness-action" data-action="enroll_speaker" type="button">去录入</button>' : ""}
+      ${item.uiAction === "test_speaker" ? '<button class="voice-readiness-action" data-action="test_speaker" type="button">测试声纹</button>' : ""}
+      ${item.fixAction === "disable_speaker_gate" ? '<button class="voice-readiness-action" data-action="disable_speaker_gate" type="button">关闭防锁死</button>' : ""}
     </div>`).join("");
+  }
+
+  function bindVoiceReadinessActions() {
+    document.querySelectorAll(".voice-readiness-action").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const action = btn.dataset.action || "";
+        if (action === "enroll_speaker") {
+          document.getElementById("voice-enroll-speaker")?.click();
+          return;
+        }
+        if (action === "test_speaker") {
+          document.getElementById("voice-test-speaker")?.click();
+          return;
+        }
+        if (action === "disable_speaker_gate") {
+          btn.disabled = true;
+          btn.textContent = "处理中…";
+          try {
+            const resp = await fetch(`${API}/voice/local/doctor/fix`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ action: "disable_speaker_gate" }),
+            });
+            const data = await resp.json();
+            if (!resp.ok || !data?.ok) throw new Error(data?.error || "关闭失败");
+            if (data.voice) hydrateVoiceControlsFromConfig(data.voice);
+            await refreshVoiceReadinessWizard();
+            await refreshVoiceLocalDoctor();
+            await refreshSpeakerStatus();
+          } catch (err) {
+            btn.textContent = err?.message || "关闭失败";
+            setTimeout(() => { btn.textContent = "关闭防锁死"; btn.disabled = false; }, 2500);
+          }
+        }
+      });
+    });
   }
 
   async function refreshVoiceReadinessWizard() {
@@ -2915,6 +2954,7 @@ function initTTSSettings() {
       const data = await resp.json();
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "语音准备检查失败");
       list.innerHTML = renderVoiceReadinessWizard(data);
+      bindVoiceReadinessActions();
       const fb = document.getElementById("voice-readiness-feedback");
       if (fb) fb.textContent = data.level === "ok" ? "语音基础链路已准备好" : "建议点击一键准备补齐基础项";
     } catch (err) {
@@ -2937,7 +2977,7 @@ function initTTSSettings() {
       if (!resp.ok || !data?.ok) throw new Error(data?.error || "一键准备失败");
       if (data.voice) hydrateVoiceControlsFromConfig(data.voice);
       await refreshVoiceReadinessWizard();
-      showFeedback(fb, `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}`);
+      showFeedback(fb, data.speaker?.skipped ? `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}；声纹未录入，已保持关闭防锁死` : `已应用本地语音基线：${data.started?.engineLabel || data.started?.engine || "SenseVoice"}`);
       await refreshVoiceLocalDoctor();
       await refreshSpeakerStatus();
       await loadVoiceStabilityPresets();
@@ -3540,6 +3580,7 @@ function initTTSSettings() {
       showFeedback(fb, data.speaker?.backup ? "声纹已备份并清除，请重新录入" : "声纹已清除，请重新录入");
       await refreshSpeakerBackups();
       await refreshSpeakerStatus();
+      try { await refreshVoiceReadinessWizard(); } catch {}
       try { await refreshVoiceLocalDoctor(); } catch {}
     } catch (err) {
       showFeedback(fb, err?.message || "清除失败", true);
@@ -3583,6 +3624,7 @@ function initTTSSettings() {
       showFeedback(fb, `已恢复声纹备份${data.backup?.name ? `：${data.backup.name}` : ""}`);
       await refreshSpeakerBackups();
       await refreshSpeakerStatus();
+      try { await refreshVoiceReadinessWizard(); } catch {}
       try { await refreshVoiceLocalDoctor(); } catch {}
     } catch (err) {
       showFeedback(fb, err?.message || "恢复失败", true);

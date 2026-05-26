@@ -367,3 +367,11 @@
 - Reset smoke-mutated `config.json` back to tracked state.
 - Pushed development checkpoint `d5f20ae feat: add local voice readiness wizard` to `origin/main`.
 - Per user instruction, no tag/GitHub Release was created for this checkpoint; it will be included in the next large version milestone notes.
+- Continued the larger local-voice milestone by making the readiness wizard safer around speaker verification lockout.
+- `GET /voice/local/readiness` now includes a dedicated `speaker_gate_safe` step, warning when “只响应我的声音” is enabled but the runtime service has no enrolled voiceprint.
+- `POST /voice/local/readiness/apply` now checks runtime speaker status before enabling speaker verification; if voiceprint is missing, it keeps speaker verification disabled and reports that it skipped speaker gate to avoid locking out the user.
+- Added a safe doctor fix action `disable_speaker_gate` that turns off speaker verification and “wake requires speaker” together when voiceprint state is invalid.
+- Brain UI readiness steps now expose contextual actions for “去录入”, “测试声纹”, and “关闭防锁死”, wiring them to existing speaker actions or the new safe fix.
+- Extended backend and Brain UI smoke coverage for speaker gate safety, enrollment guidance, and the skipped-speaker feedback path.
+- Verification passed: syntax checks for API/config/Brain UI scripts, `python3 -m py_compile src/voice/sensevoice_server.py`, `npm run smoke:voice-events` 85/85, and `npm run smoke:brain-ui`.
+- Reset smoke-mutated `config.json` back to tracked state.

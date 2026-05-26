@@ -54,6 +54,7 @@ function createServer() {
   let localDoctorRollback = false
   let speakerBackupAvailable = false
   let readinessApplied = false
+  let speakerGateLocked = false
   const server = http.createServer((req, res) => {
     const url = new URL(req.url, 'http://127.0.0.1')
 
@@ -494,6 +495,12 @@ new WebSocket(url)`,
 
 
 
+    if (url.pathname === '/__smoke/speaker-gate-lock') {
+      speakerGateLocked = true
+      sendJson(res, { ok: true })
+      return
+    }
+
     if (url.pathname === '/voice/local/readiness') {
       sendJson(res, {
         ok: true,
@@ -501,16 +508,22 @@ new WebSocket(url)`,
         recommendedPreset: { id: 'balanced', label: '均衡推荐', reason: '建立稳定语音基线。' },
         speakerStatus: { reachable: readinessApplied, configured: localDoctorFixed, sampleCount: localDoctorFixed ? 3 : 0, detail: readinessApplied ? '本地服务可达。' : '本地服务未运行。' },
         local: { status: readinessApplied ? 'running' : 'stopped', engine: 'sensevoice', model: 'sensevoice-small' },
-        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', wakeWordEnabled: true },
-        steps: readinessApplied ? [
+        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', wakeWordEnabled: true, speakerVerificationEnabled: speakerGateLocked },
+        steps: speakerGateLocked ? [
+          { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
+          { id: 'speaker_voiceprint', label: '本人声纹', status: 'warn', detail: '还没有录入声纹。', uiAction: 'enroll_speaker' },
+          { id: 'speaker_gate_safe', label: '声纹门控安全', status: 'error', detail: '已开启“只响应我的声音”，但本地服务没有可用声纹；这会导致你也唤不醒。', fixAction: 'disable_speaker_gate' },
+        ] : readinessApplied ? [
           { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
           { id: 'local_process', label: '本地服务启动', status: 'ok', detail: '运行中：SenseVoice / sensevoice-small' },
           { id: 'wake_guard', label: '唤醒保护', status: 'ok', detail: '严格唤醒已开启。' },
+          { id: 'speaker_voiceprint', label: '本人声纹', status: 'warn', detail: '还没有录入声纹。', uiAction: 'enroll_speaker' },
         ] : [
           { id: 'local_provider', label: '本地中文识别', status: 'ok', detail: '已使用本地 SenseVoiceSmall。' },
           { id: 'local_process', label: '本地服务启动', status: 'warn', detail: '本地语音服务尚未运行。', fixAction: 'start_local_voice' },
           { id: 'video_guard', label: '视频抗干扰', status: 'warn', detail: '播放视频时建议开启保护。', fixAction: 'apply_video_guard' },
           { id: 'speaker_voiceprint', label: '本人声纹', status: 'pending', detail: '本地服务启动后才能确认声纹。' },
+          { id: 'speaker_gate_safe', label: '声纹门控安全', status: 'info', detail: '声纹门控未强制开启。' },
         ],
         nextActions: [],
       })
@@ -527,6 +540,7 @@ new WebSocket(url)`,
         record: localDoctorFixHistory[0],
         voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', wakeWordEnabled: true, wakeMode: 'strict', wakeRepeatSuppression: true, wakeConfidenceThreshold: 0.72, wakeMinCommandChars: 2, wakeCooldownMs: 1200, wakeRequireSpeakerWhenEnabled: true, speakerVerificationEnabled: false, speakerThreshold: 0.55, videoVoiceDuckEnabled: true, videoVoicePttEnabled: true, videoVoiceAecEnabled: true, videoVoiceDuckLevel: 0.10, videoVoiceDuckHoldMs: 2200, videoVoiceDuckSensitivity: 1.0, voiceLocalDoctorHistory: localDoctorFixHistory },
         readiness: { ok: true, level: 'ok' },
+        speaker: { skipped: true },
       })
       return
     }
@@ -582,14 +596,26 @@ new WebSocket(url)`,
     }
 
     if (url.pathname === '/voice/local/doctor/fix') {
-      localDoctorFixed = true
-      localDoctorFixHistory = [{ id: 'voice_doctor_smoke', at: Date.now(), action: 'start_local_voice', label: '启动本地语音服务', status: 'running', before: { localAsrModel: 'small' }, after: { localAsrModel: 'sensevoice-small' } }]
-      sendJson(res, {
-        ok: true,
-        action: 'start_local_voice',
-        record: localDoctorFixHistory[0],
-        voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
-        doctor: { ok: true, level: 'ok', speakerStatus: { ok: true, reachable: true, configured: true, sampleCount: 3, detail: '已录入 3 个声纹样本。' }, recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', () => {
+        let action = 'start_local_voice'
+        try { action = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}').action || action } catch {}
+        if (action === 'disable_speaker_gate') {
+          speakerGateLocked = false
+          localDoctorFixHistory = [{ id: 'voice_doctor_unlock', at: Date.now(), action: 'disable_speaker_gate', label: '关闭声纹门控防锁死', status: 'ok', before: { speakerVerificationEnabled: true }, after: { speakerVerificationEnabled: false } }]
+          sendJson(res, { ok: true, action, record: localDoctorFixHistory[0], voice: { speakerVerificationEnabled: false, wakeRequireSpeakerWhenEnabled: false, voiceLocalDoctorHistory: localDoctorFixHistory }, doctor: { ok: true, level: 'ok', recentFixes: localDoctorFixHistory, checks: [] } })
+          return
+        }
+        localDoctorFixed = true
+        localDoctorFixHistory = [{ id: 'voice_doctor_smoke', at: Date.now(), action: 'start_local_voice', label: '启动本地语音服务', status: 'running', before: { localAsrModel: 'small' }, after: { localAsrModel: 'sensevoice-small' } }]
+        sendJson(res, {
+          ok: true,
+          action: 'start_local_voice',
+          record: localDoctorFixHistory[0],
+          voice: { asrProvider: 'local', localAsrModel: 'sensevoice-small', asrProfile: 'balanced', voiceLocalDoctorHistory: localDoctorFixHistory },
+          doctor: { ok: true, level: 'ok', speakerStatus: { ok: true, reachable: true, configured: true, sampleCount: 3, detail: '已录入 3 个声纹样本。' }, recentFixes: localDoctorFixHistory, checks: [{ id: 'process', label: '本地 ASR 进程', status: 'ok', detail: '运行中：sensevoice / sensevoice-small / port 3723' }] },
+        })
       })
       return
     }
@@ -774,6 +800,12 @@ try {
     storedProvider: localStorage.getItem('bailongma-voice-provider'),
   }))
   if (readinessSnapshot.wakeMode !== 'strict' || readinessSnapshot.duck !== true || readinessSnapshot.aec !== true || readinessSnapshot.speakerVerify !== false) throw new Error(`voice readiness wizard did not sync controls: ${JSON.stringify(readinessSnapshot)}`)
+  await page.waitForFunction(() => document.querySelector('#voice-readiness-list')?.textContent.includes('去录入'))
+  const enrollActionVisible = await page.evaluate(() => Boolean(document.querySelector('.voice-readiness-action[data-action="enroll_speaker"]')))
+  if (!enrollActionVisible) throw new Error('voice readiness wizard did not expose enroll speaker action')
+  await fetch(`${baseUrl}/__smoke/speaker-gate-lock`, { method: 'POST' })
+  await page.click('#voice-readiness-apply')
+  await page.waitForFunction(() => document.querySelector('#voice-readiness-feedback')?.textContent.includes('声纹未录入，已保持关闭防锁死'))
   const localDoctorText = await page.textContent('#voice-local-doctor-list')
   if (!localDoctorText.includes('本地 ASR 进程') || !localDoctorText.includes('声纹服务')) throw new Error('local voice doctor did not render readiness checks')
   await page.evaluate(() => document.querySelector('.voice-local-doctor-rollback')?.click())

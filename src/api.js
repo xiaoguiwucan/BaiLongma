@@ -461,6 +461,19 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
       status: speakerStatus.reachable === false ? 'pending' : speakerStatus.configured ? 'ok' : 'warn',
       detail: speakerStatus.reachable === false ? '本地服务启动后才能确认声纹是否已录入。' : speakerStatus.configured ? `已录入 ${speakerStatus.sampleCount || 0} 个声纹样本。` : '还没有录入声纹；如果要“只响应我”，请录入后再开启声纹门控。',
       action: speakerStatus.reachable === false ? '先启动本地语音服务。' : speakerStatus.configured ? '可以测试声纹分数。' : '点击“录入/重录声纹”。',
+      uiAction: speakerStatus.reachable === false ? null : speakerStatus.configured ? 'test_speaker' : 'enroll_speaker',
+    },
+    {
+      id: 'speaker_gate_safe',
+      label: '声纹门控安全',
+      status: voice.speakerVerificationEnabled && speakerStatus.reachable && !speakerStatus.configured ? 'error' : voice.speakerVerificationEnabled && speakerStatus.configured ? 'ok' : 'info',
+      detail: voice.speakerVerificationEnabled && speakerStatus.reachable && !speakerStatus.configured
+        ? '已开启“只响应我的声音”，但本地服务没有可用声纹；这会导致你也唤不醒。'
+        : voice.speakerVerificationEnabled && speakerStatus.configured
+          ? '声纹门控已开启且本地声纹可用。'
+          : '声纹门控未强制开启；基础语音链路不会因为声纹缺失被锁死。',
+      action: voice.speakerVerificationEnabled && speakerStatus.reachable && !speakerStatus.configured ? '先关闭声纹门控，重新录入后再开启。' : '保持当前安全状态。',
+      fixAction: voice.speakerVerificationEnabled && speakerStatus.reachable && !speakerStatus.configured ? 'disable_speaker_gate' : null,
     },
   ]
   const blocking = steps.filter(item => item.status === 'warn' || item.status === 'error')
@@ -481,6 +494,8 @@ async function buildVoiceReadinessWizard({ windowMs = 60000 } = {}) {
 async function applyVoiceReadinessWizard({ enableSpeaker = false, presetId = 'balanced' } = {}) {
   const before = getVoiceConfig()
   const requestedPreset = getVoiceStabilityPreset(presetId) || getVoiceStabilityPreset('balanced')
+  const speakerBefore = await queryLocalSpeakerStatus().catch(err => ({ ok: false, configured: false, reachable: false, reason: 'speaker_status_error', detail: err?.message || '声纹状态查询失败。' }))
+  const canEnableSpeaker = Boolean(enableSpeaker && speakerBefore.reachable && speakerBefore.configured)
   const applied = {
     asrProvider: 'local',
     localAsrModel: 'sensevoice-small',
@@ -490,8 +505,8 @@ async function applyVoiceReadinessWizard({ enableSpeaker = false, presetId = 'ba
     wakeMode: 'strict',
     wakeRepeatSuppression: true,
     ...(requestedPreset?.patch || {}),
+    speakerVerificationEnabled: canEnableSpeaker ? true : false,
   }
-  if (enableSpeaker) applied.speakerVerificationEnabled = true
   setVoiceConfig(applied)
   const voice = getVoiceConfig()
   const started = startVoiceServer({ model: voice.localAsrModel || 'sensevoice-small', localAsrModel: voice.localAsrModel || 'sensevoice-small', profile: voice.asrProfile || 'balanced' })
@@ -502,9 +517,19 @@ async function applyVoiceReadinessWizard({ enableSpeaker = false, presetId = 'ba
     before,
     after: getVoiceConfig(),
     status: started?.status || 'ok',
+    speakerEnableSkipped: Boolean(enableSpeaker && !canEnableSpeaker),
   })
   const readiness = await buildVoiceReadinessWizard({ windowMs: 60000 })
-  return { ok: true, applied, preset: requestedPreset ? { id: requestedPreset.id, label: requestedPreset.label, description: requestedPreset.description, patch: { ...requestedPreset.patch } } : null, started, record, voice: getVoiceConfig(), readiness }
+  return {
+    ok: true,
+    applied,
+    preset: requestedPreset ? { id: requestedPreset.id, label: requestedPreset.label, description: requestedPreset.description, patch: { ...requestedPreset.patch } } : null,
+    started,
+    record,
+    voice: getVoiceConfig(),
+    readiness,
+    speaker: { before: speakerBefore, enableRequested: Boolean(enableSpeaker), enabled: canEnableSpeaker, skipped: Boolean(enableSpeaker && !canEnableSpeaker) },
+  }
 }
 
 function localDoctorFixLabel(action = '') {
@@ -513,6 +538,7 @@ function localDoctorFixLabel(action = '') {
     enable_wake_guard: '开启唤醒保护',
     apply_video_guard: '应用视频抗干扰预设',
     start_local_voice: '启动本地语音服务',
+    disable_speaker_gate: '关闭声纹门控防锁死',
   }
   return labels[action] || action
 }
@@ -539,6 +565,9 @@ function applyVoiceLocalDoctorFix(action = '') {
   } else if (id === 'apply_video_guard') {
     const preset = getVoiceStabilityPreset('video-guard')
     applied = preset ? { ...preset.patch } : {}
+    setVoiceConfig(applied)
+  } else if (id === 'disable_speaker_gate') {
+    applied = { speakerVerificationEnabled: false, wakeRequireSpeakerWhenEnabled: false }
     setVoiceConfig(applied)
   } else if (id === 'start_local_voice') {
     const current = getVoiceConfig()
