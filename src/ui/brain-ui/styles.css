@@ -1306,6 +1306,8 @@ body.hotspot-mode .hotspot-btn { color: #ffe7a0; border-color: rgba(255, 210, 90
 }
 .settings-save-btn:hover { background: var(--line); }
 .settings-save-btn:disabled { opacity: 0.45; cursor: default; }
+.settings-save-btn.danger { border-color: rgba(248, 113, 113, 0.55); color: #fecaca; background: rgba(127, 29, 29, 0.18); }
+.settings-save-btn.danger:hover { background: rgba(127, 29, 29, 0.32); }
 
 .settings-feedback {
   font-size: 11px;
@@ -3931,6 +3933,14 @@ body.person-card-mode .person-card-panel,
   background: rgba(255,255,255,0.055);
   border-color: var(--line);
 }
+.wechaty-room-item.stale {
+  opacity: 0.72;
+  border-color: rgba(251, 191, 36, 0.16);
+}
+.wechaty-room-item.stale .wechaty-room-badge {
+  color: #fbbf24;
+  border-color: rgba(251, 191, 36, 0.35);
+}
 .wechaty-room-checkbox { margin: 0; }
 .wechaty-room-main { min-width: 0; }
 .wechaty-room-name {
@@ -4056,4 +4066,12 @@ body.person-card-mode .person-card-panel,
   color: var(--ink2, #94a3b8);
   font-size: 12px;
   line-height: 1.5;
+}
+.wechaty-login-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex: 0 0 auto;
 }

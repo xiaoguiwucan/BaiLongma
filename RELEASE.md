@@ -2,7 +2,7 @@
 
 ## Current Version
 
-- `0.3.3`
+- `0.3.4`
 
 ## What This Release Includes
 
@@ -26,12 +26,12 @@ npm run build
 
 Installer output:
 
-- `D:\claude\BaiLongma\dist\Bailongma Setup 0.3.3.exe`
+- `D:\claude\BaiLongma\dist\Bailongma Setup 0.3.4.exe`
 - `D:\claude\BaiLongma\dist\latest.yml`
 
 ## Local Verification Checklist
 
-1. Install `Bailongma Setup 0.3.3.exe`.
+1. Install `Bailongma Setup 0.3.4.exe`.
 2. Launch the app and confirm the activation page appears on first run.
 3. Enter a valid API key and verify the app enters `brain-ui`.
 4. Uninstall the app.
@@ -53,9 +53,9 @@ npm run publish
 
 Published artifacts:
 
-- GitHub Release asset: `Bailongma Setup 0.3.3.exe`
+- GitHub Release asset: `Bailongma Setup 0.3.4.exe`
 - GitHub Release asset: `latest.yml`
-- GitHub Release asset: `Bailongma Setup 0.3.3.exe.blockmap`
+- GitHub Release asset: `Bailongma Setup 0.3.4.exe.blockmap`
 
 ## Notes On First Launch Of The Installer
 

@@ -1,7 +1,6 @@
 import qrcodeTerminal from 'qrcode-terminal'
 import { WechatyBuilder, ScanStatus } from 'wechaty'
 import { PuppetWechat4u } from 'wechaty-puppet-wechat4u'
-import { MemoryCard } from 'memory-card'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply } from './wechat-group-memory.js'
@@ -13,6 +12,8 @@ import fs from 'fs'
 const FALLBACK_GROUP_NAMES = ['值班群', 'PT站看片狂魔小群']
 const WECHATY_MEMORY_NAME = path.join(paths.userDir, 'wechaty-duty-group')
 const WECHATY_MEMORY_FILE = `${WECHATY_MEMORY_NAME}.memory-card.json`
+const ROOM_REFRESH_STALE_MS = 2 * 60 * 1000
+const MESSAGE_HEALTH_STALE_MS = 10 * 60 * 1000
 
 let bot = null
 let status = 'idle' // idle | starting | qr_ready | logged_in | connected | error
@@ -29,13 +30,43 @@ let emitEventRef = null
 let lastLoginUser = ''
 let roomSnapshot = []
 let lastRoomRefreshAt = ''
+let lastMessageAt = ''
 let activePuppetName = ''
 let reconnectTimer = null
 let reconnectAttempts = 0
+let suppressReconnectUntil = 0
 restoreRuntimeSnapshot()
 
 function isLoginActive() {
   return status === 'logged_in' || status === 'connected'
+}
+
+function isConnectedStatus() {
+  return status === 'connected'
+}
+
+function ageMs(iso = '') {
+  const ts = Date.parse(String(iso || ''))
+  if (!Number.isFinite(ts)) return Infinity
+  return Date.now() - ts
+}
+
+function isFreshRoomRefresh() {
+  return ageMs(lastRoomRefreshAt) <= ROOM_REFRESH_STALE_MS
+}
+
+function isMessageHealthy() {
+  return !!lastMessageAt && ageMs(lastMessageAt) <= MESSAGE_HEALTH_STALE_MS
+}
+
+function hasCurrentResolvedRooms() {
+  return !!targetRoomId && targetRooms.size > 0
+}
+
+function isTrulyOnline() {
+  // “在线”必须代表当前进程真的能接入群，而不是只保存了历史登录用户/历史群快照。
+  // connected + 当前 room 对象 + 最近刷新/收到消息，才允许 UI 显示为可用。
+  return !!bot && isConnectedStatus() && hasCurrentResolvedRooms() && (isFreshRoomRefresh() || isMessageHealthy())
 }
 
 function previousLoginUser() {
@@ -72,6 +103,22 @@ function textMentionsLoginUser(text = '') {
   return names.some(name => new RegExp(`[@＠]\\s*${escapeRegExp(name)}(?=$|[\\s\\u2005\\u2006\\u2007\\u2008\\u2009\\u200a,，:：、])`, 'iu').test(value))
 }
 
+function getConnectionHint({ online = isTrulyOnline(), rooms = roomSnapshot } = {}) {
+  if (online) return '已真实接入微信群，可以接收 @ 消息。'
+  if (status === 'qr_ready') return '等待扫码登录。'
+  if (status === 'starting') return '正在启动/恢复微信登录。'
+  if (status === 'connected' && !isFreshRoomRefresh() && !isMessageHealthy()) return '当前只保留了历史群列表，最近没有真实刷新/消息心跳；如果群里 @ 无回复，请强制重新扫码。'
+  if ((status === 'logged_in' || status === 'connected') && !hasCurrentResolvedRooms()) return '微信登录态可能存在，但当前进程没有真实接入目标群；请刷新真实群列表或强制重新扫码。'
+  if (status === 'rooms_stale') return '没有获取到真实群列表；下方仅为上次缓存，请强制重新扫码。'
+  if (status === 'group_lookup_error') return '查找微信群失败，请刷新群列表；如果持续失败请强制重新扫码。'
+  if (status === 'rooms_pending') return '已登录但还没有拿到真实群列表，请稍等或强制重新扫码。'
+  if (status === 'group_not_found') return '已登录但没有找到已勾选的群，请确认该微信在群里，或重新扫码。'
+  if (status === 'disconnected') return '微信连接已断开，请重新登录。'
+  if (status === 'error') return '微信连接异常，请强制重新扫码。'
+  if (rooms?.length) return '未连接；下方仅为上次缓存的群列表。'
+  return '未登录。'
+}
+
 export function getWechatyDutyGroupStatus() {
   const runtime = getWechatyDutyGroupConfig().runtime || {}
   const rooms = roomSnapshot.length
@@ -81,22 +128,39 @@ export function getWechatyDutyGroupStatus() {
   const roomIds = Object.keys(runtimeRoomIds).length
     ? runtimeRoomIds
     : Object.fromEntries([...targetRooms.entries()].map(([name, room]) => [name, room?.id || '']))
+  const online = isTrulyOnline()
+  const currentRoomIds = Object.fromEntries([...targetRooms.entries()].map(([name, room]) => [name, room?.id || '']))
+  const stale = !!rooms.length && !online
   return {
     status,
     enabled: wechatyGroupReplyEnabled,
     group_name: targetGroupNames[0] || '',
     group_names: [...targetGroupNames],
-    room_id: targetRoomId,
-    room_ids: roomIds,
+    room_id: online ? targetRoomId : '',
+    room_ids: online ? currentRoomIds : {},
+    cached_room_ids: roomIds,
     qr: lastQr,
     qr_ascii: lastQrAscii,
     error: lastError,
-    online: isLoginActive(),
+    online,
     login_user: isLoginActive() ? previousLoginUser() : '',
     last_login_user: previousLoginUser(),
-    room_count: rooms.length,
+    room_count: online ? rooms.length : 0,
+    cached_room_count: rooms.length,
     rooms,
+    rooms_stale: stale,
+    needs_relogin: !online && ['logged_in', 'connected', 'group_lookup_error', 'rooms_pending', 'group_not_found', 'error', 'disconnected'].includes(status),
+    hint: getConnectionHint({ online, rooms }),
     last_room_refresh_at: lastRoomRefreshAt || String(runtime.lastRoomRefreshAt || ''),
+    last_message_at: lastMessageAt || String(runtime.lastMessageAt || ''),
+    health: {
+      current_room_count: targetRooms.size,
+      has_current_room: hasCurrentResolvedRooms(),
+      room_refresh_fresh: isFreshRoomRefresh(),
+      message_healthy: isMessageHealthy(),
+      room_refresh_age_ms: Number.isFinite(ageMs(lastRoomRefreshAt)) ? ageMs(lastRoomRefreshAt) : null,
+      message_age_ms: Number.isFinite(ageMs(lastMessageAt)) ? ageMs(lastMessageAt) : null,
+    },
     puppet: activePuppetName || String(runtime.puppet || ''),
     login_memory: getWechatyMemoryState(),
   }
@@ -159,7 +223,7 @@ export async function listWechatyDutyGroupRooms() {
       : status === 'starting'
         ? 'wechaty-duty-group starting'
         : 'wechaty-duty-group not logged in'
-    return { ok: false, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, login_user: '', last_login_user: previousLoginUser(), last_room_refresh_at: lastRoomRefreshAt, error: reason }
+    return { ok: false, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, rooms_stale: roomSnapshot.length > 0, online: false, login_user: '', last_login_user: previousLoginUser(), last_room_refresh_at: lastRoomRefreshAt, error: reason, hint: getConnectionHint({ online: false, rooms: roomSnapshot }) }
   }
   try {
     const rooms = await bot.Room.findAll()
@@ -174,12 +238,19 @@ export async function listWechatyDutyGroupRooms() {
       lastRoomRefreshAt = new Date().toISOString()
       roomSnapshot.sort((a, b) => Number(b.selected) - Number(a.selected) || a.topic.localeCompare(b.topic, 'zh-Hans-CN'))
       persistRuntime(status)
-    } else if (roomSnapshot.length) {
-      console.warn('[Wechaty] 本次未获取到群列表，保留上次真实群列表，避免设置页误清空。')
+      return { ok: true, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, rooms_stale: false, online: isTrulyOnline(), login_user: previousLoginUser(), last_login_user: previousLoginUser(), last_room_refresh_at: lastRoomRefreshAt, fresh: true, hint: getConnectionHint({ online: isTrulyOnline(), rooms: roomSnapshot }) }
     }
-    return { ok: true, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, login_user: previousLoginUser(), last_login_user: previousLoginUser(), last_room_refresh_at: lastRoomRefreshAt, fresh: items.length > 0 }
+
+    // 关键：这里不能再 ok:true。旧 roomSnapshot 只能当“历史缓存”展示，不能叫“刷新成功”。
+    if (roomSnapshot.length) {
+      console.warn('[Wechaty] 本次未获取到群列表，仅返回上次缓存；当前连接不可确认。')
+    }
+    lastError = '未获取到真实群列表；当前只显示上次缓存，可能需要重新扫码。'
+    persistRuntime('rooms_stale')
+    return { ok: false, status: 'rooms_stale', enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, rooms_stale: true, online: false, login_user: isLoginActive() ? previousLoginUser() : '', last_login_user: previousLoginUser(), last_room_refresh_at: lastRoomRefreshAt, fresh: false, error: lastError, hint: getConnectionHint({ online: false, rooms: roomSnapshot }) }
   } catch (err) {
-    return { ok: false, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, login_user: isLoginActive() ? previousLoginUser() : '', last_login_user: previousLoginUser(), error: err?.message || String(err) }
+    lastError = err?.message || String(err)
+    return { ok: false, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, rooms_stale: roomSnapshot.length > 0, online: false, login_user: isLoginActive() ? previousLoginUser() : '', last_login_user: previousLoginUser(), error: lastError, hint: getConnectionHint({ online: false, rooms: roomSnapshot }) }
   }
 }
 
@@ -188,17 +259,36 @@ export async function restartWechatyDutyGroupConnector(opts = {}) {
   return startWechatyDutyGroupConnector(opts)
 }
 
-export async function stopWechatyDutyGroupConnector() {
+export async function forceReloginWechatyDutyGroupConnector(opts = {}) {
+  clearReconnectTimer()
+  await stopWechatyDutyGroupConnector({ preserveRuntime: true })
+  try { fs.rmSync(WECHATY_MEMORY_FILE, { force: true }) } catch {}
+  try { fs.writeFileSync(WECHATY_MEMORY_FILE, '{}') } catch {}
+  lastQr = ''
+  lastQrAscii = ''
+  lastError = '已清空微信登录态，请重新扫码。'
+  lastMessageAt = ''
+  targetRoomId = ''
+  targetRoom = null
+  targetRooms.clear()
+  status = 'idle'
+  persistRuntime('relogin_required')
+  return startWechatyDutyGroupConnector(opts)
+}
+
+export async function stopWechatyDutyGroupConnector(options = {}) {
+  suppressReconnect(8000)
   clearReconnectTimer()
   status = 'idle'
   lastQr = ''
   lastQrAscii = ''
+  lastMessageAt = ''
   targetRoomId = ''
   targetRoom = null
   targetRooms.clear()
   try { await bot?.stop?.() } catch {}
   bot = null
-  persistRuntime(status)
+  if (!options.preserveRuntime) persistRuntime(status)
   emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status: 'idle' })
 }
 
@@ -224,8 +314,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
 
   const puppet = createWechatyPuppet()
   bot = WechatyBuilder.build({
-    name: 'bailongma-duty-group',
-    memory: createWechatyMemoryCard(),
+    name: WECHATY_MEMORY_NAME,
     puppet,
   })
 
@@ -262,7 +351,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     console.log(`[Wechaty] 已断开/退出：${user?.name?.() || lastLoginUser || ''}`)
     persistRuntime(status)
     emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], login_user: lastLoginUser, rooms: roomSnapshot })
-    scheduleReconnect('logout')
+    if (!isReconnectSuppressed()) scheduleReconnect('logout')
   })
 
   bot.on('error', (err) => {
@@ -271,11 +360,18 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     // 如果已经登录并解析到目标群，不能因为这个暂态错误主动 stop/restart；
     // 否则会把刚扫码成功的会话踢回二维码状态，群里 @ 自然收不到。
     if (isWechat4uTransientError(lastError)) {
-      if (hasResolvedRooms()) {
+      if (hasResolvedRooms() && (isFreshRoomRefresh() || isMessageHealthy())) {
         status = targetRoomId ? 'connected' : 'logged_in'
-        console.warn(`[Wechaty] 忽略 wechat4u 暂态错误，保持在线：${lastError}`)
+        console.warn(`[Wechaty] 忽略 wechat4u 暂态错误，保持当前连接：${lastError}`)
         persistRuntime(status)
         emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], room_id: targetRoomId, warning: lastError, rooms: roomSnapshot })
+        return
+      }
+      if (hasResolvedRooms()) {
+        status = 'group_lookup_error'
+        console.warn(`[Wechaty] wechat4u 暂态错误但连接健康过期，标记为需确认/重登：${lastError}`)
+        persistRuntime(status)
+        emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], warning: lastError, rooms: roomSnapshot })
         return
       }
       if (status === 'qr_ready' || status === 'starting') {
@@ -329,7 +425,7 @@ async function resolveTargetRooms() {
       lastRoomRefreshAt = new Date().toISOString()
       persistRuntime(status)
     } else if (roomSnapshot.length) {
-      console.warn('[Wechaty] 群列表暂时为空，保留上次真实列表，避免把设置页清空。')
+      console.warn('[Wechaty] 群列表暂时为空，仅保留上次缓存；当前连接不可确认。')
     }
     for (const name of targetGroupNames) {
       let room = null
@@ -405,11 +501,13 @@ async function handleMessage(message) {
       targetRoomId = room.id
       targetRoom = room
       status = 'connected'
+      persistRuntime(status)
       emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], room_id: targetRoomId })
     }
 
     const text = String(message.text?.() || '').trim()
     if (!text) return
+    lastMessageAt = new Date().toISOString()
     const talker = message.talker?.()
     const senderName = isSelf ? '我' : (talker?.name?.() || talker?.id || '未知成员')
     const groupId = `wechaty:${room.id}`
@@ -500,17 +598,7 @@ function createWechatyPuppet() {
   // 用户看到的“网页版登录微信”就是那个 puppet 造成的。
   activePuppetName = 'wechaty-puppet-wechat4u'
   ensureWechatyMemoryFile()
-  return new BailongmaPuppetWechat4u({
-    memory: { name: WECHATY_MEMORY_NAME },
-  })
-}
-
-function createWechatyMemoryCard() {
-  ensureWechatyMemoryFile()
-  // Wechaty 会把自己的 root memory multiplex 给 puppet。
-  // 只在 PuppetWechat4u options 里传 memory 不够，因为 Wechaty 初始化时会覆盖 puppet memory。
-  // 因此 root memory 必须显式传给 WechatyBuilder，才能稳定写到 userData，而不是项目 cwd。
-  return new MemoryCard(WECHATY_MEMORY_NAME)
+  return new BailongmaPuppetWechat4u()
 }
 
 function ensureWechatyMemoryFile() {
@@ -549,6 +637,7 @@ function persistRuntime(runtimeStatus = status) {
       rooms: roomSnapshot,
       roomIds: Object.fromEntries([...targetRooms.entries()].map(([name, room]) => [name, room?.id || ''])),
       lastRoomRefreshAt,
+      lastMessageAt,
       lastError: lastError ? `${lastError}${activePuppetName ? ` [${activePuppetName}]` : ''}` : '',
       puppet: activePuppetName,
     })
@@ -563,6 +652,7 @@ function restoreRuntimeSnapshot() {
     lastLoginUser = String(runtime.loginUser || '')
     roomSnapshot = Array.isArray(runtime.rooms) ? markSelectedRooms(runtime.rooms) : []
     lastRoomRefreshAt = String(runtime.lastRoomRefreshAt || '')
+    lastMessageAt = String(runtime.lastMessageAt || '')
     lastError = String(runtime.lastError || '')
     activePuppetName = String(runtime.puppet || activePuppetName || '')
   } catch {}
@@ -573,8 +663,16 @@ function clearReconnectTimer() {
   reconnectTimer = null
 }
 
+function suppressReconnect(ms = 5000) {
+  suppressReconnectUntil = Date.now() + ms
+}
+
+function isReconnectSuppressed() {
+  return Date.now() < suppressReconnectUntil
+}
+
 function scheduleReconnect(reason = '') {
-  if (!wechatyGroupReplyEnabled) return
+  if (!wechatyGroupReplyEnabled || isReconnectSuppressed()) return
   if (reconnectTimer) return
   reconnectAttempts += 1
   const delay = Math.min(120000, 15000 * reconnectAttempts)

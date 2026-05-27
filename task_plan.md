@@ -1,26 +1,20 @@
-# 任务计划：排查 Wechaty 群助手从稳定变成网页版/掉线的前后差异
+# Task Plan: WeChat Group Assistant False Online / Re-login Fix
 
-## 目标
-找出“之前 Wechaty 稳定可用”到“加入知识库/登录页面后变成网页版登录且不稳定”的具体代码、依赖和运行逻辑差异，并给出/实施修复方向。
+## Goal
+修复设置页显示“已登录/群列表已刷新”，但群里 @ 无回复且没有重新生成二维码入口的问题。要求状态必须真实、可操作、可强制重新扫码登录。
 
-## 阶段
-1. **基线梳理**：确认当前 Git 状态、最近提交、未提交改动范围。状态：in_progress
-2. **Wechaty 前后差异对比**：重点对比 `src/social/*wechat*`、`src/social/index.js`、`src/api.js`、`src/config.js`、`package.json`。状态：pending
-3. **运行链路排查**：检查当前服务是否运行、Wechaty 状态接口、日志、是否有异常退出/被保存动作重启。状态：pending
-4. **根因归纳**：明确是 puppet 切换、保存重启、运行时状态覆盖、Honcho 初始化还是 UI 误导导致。状态：pending
-5. **修复/回滚最小方案**：恢复稳定群聊通道，保留知识库和设置页但不破坏登录。状态：pending
-6. **验证**：启动应用、检查 API、确认 UI 状态与实际 Wechaty 状态一致。状态：pending
+## Phases
+1. [complete] 检查真实运行状态、端口、日志、Wechaty 状态接口。
+2. [complete] 定位 UI 状态来源和后端状态误判逻辑。
+3. [complete] 实现修复：真实状态展示、强制重新登录/清空登录态、二维码刷新入口、错误可见。
+4. [complete] 运行语法/接口验证。
+5. [in_progress] 按版本规则更新文档、提交、tag、推送 GitHub Release。
 
-## 错误记录
-| 时间 | 错误/现象 | 处理 |
-|---|---|---|
-| 2026-05-27 | 用户反馈加入知识库/登录页后 Wechaty 变成网页版登录且不稳定 | 开始基于 Git diff 和日志深挖 |
+## Key Findings
+- 旧状态把历史登录用户和历史群列表快照误当成在线证据。
+- `/rooms` 在没有真实获取群列表时仍返回 `ok:true`，导致 UI 写“群列表已刷新”。
+- 当前 Wechaty 版本不消费 `memory` 选项，必须通过 `name` 绑定 MemoryCard；否则空登录态会报 `no payload`，无法生成二维码。
 
-## 当前阶段推进
-- 阶段 1 基线梳理：complete
-- 阶段 2 Wechaty 前后差异对比：in_progress
-- 阶段 3 运行链路排查：in_progress
-- 阶段 3 运行链路排查：complete
-- 阶段 4 根因归纳：complete
-- 阶段 5 修复/回滚最小方案：complete
-- 阶段 6 验证：partial（已验证 API/二维码/后台稳定；待用户扫码后验证群列表与 @ 回复）
+## Validation
+- `node --check` 通过：Wechaty connector、API、config、Brain UI JS。
+- 状态接口验证：当前可进入 `qr_ready` 且返回二维码，同时 `online:false`，不再假在线。

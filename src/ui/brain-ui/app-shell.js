@@ -354,7 +354,10 @@ const createSettingsModal = () => `
                 <div class="wechaty-login-title">微信登录状态</div>
                 <div class="wechaty-login-sub" id="wechaty-login-sub">未登录。点击“登录/恢复微信”后，如本机没有登录态会显示二维码。</div>
               </div>
-              <button class="settings-save-btn" id="wechaty-start-btn" type="button">登录/恢复微信</button>
+              <div class="wechaty-login-actions">
+                <button class="settings-save-btn" id="wechaty-start-btn" type="button">登录/恢复微信</button>
+                <button class="settings-save-btn danger" id="wechaty-relogin-btn" type="button">强制重新扫码</button>
+              </div>
             </div>
             <div class="wechaty-toolbar">
               <label class="wechaty-master-toggle">
@@ -365,7 +368,7 @@ const createSettingsModal = () => `
             </div>
             <div class="wechaty-qr-area" id="wechaty-qr-area" style="display:none;">
               <img id="wechaty-qr-img" src="" alt="Wechaty 微信登录二维码">
-              <div>用要接入群聊的微信扫码登录；登录成功后会自动获取群列表。</div>
+              <div>用要接入群聊的微信扫码登录；登录成功后会自动获取群列表。二维码如果过期，请点“强制重新扫码”。</div>
             </div>
             <div class="wechaty-room-tools">
               <input class="settings-input" id="wechaty-room-filter" type="search" placeholder="搜索群名…">
@@ -747,6 +750,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.3.4</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群助手真实状态修复：不再假在线，新增强制重新扫码入口。</p>
+                <ul class="release-note-points">
+                  <li>旧群列表只显示为缓存，不再当成当前在线证据。</li>
+                  <li>没有真实刷新群列表时不会再提示“群列表已刷新”。</li>
+                  <li>新增“强制重新扫码”，清空坏登录态并重新生成二维码。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.3.3</span>

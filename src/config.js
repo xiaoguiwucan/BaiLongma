@@ -670,6 +670,7 @@ export function setWechatyDutyGroupRuntime(runtime = {}) {
     })).filter(room => room.id && room.topic) : (Array.isArray(current.runtime?.rooms) ? current.runtime.rooms : []),
     roomIds: runtime.roomIds && typeof runtime.roomIds === 'object' && Object.keys(runtime.roomIds).length ? runtime.roomIds : (current.runtime?.roomIds || {}),
     lastRoomRefreshAt: String(runtime.lastRoomRefreshAt || current.runtime?.lastRoomRefreshAt || '').trim(),
+    lastMessageAt: String(runtime.lastMessageAt || current.runtime?.lastMessageAt || '').trim(),
     updatedAt: new Date().toISOString(),
     lastError: String(runtime.lastError || '').trim(),
     puppet: String(runtime.puppet || current.runtime?.puppet || '').trim(),

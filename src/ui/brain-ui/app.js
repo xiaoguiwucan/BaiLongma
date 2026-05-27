@@ -2034,6 +2034,7 @@ function initTTSSettings() {
   const wechatyDutyStatus = document.getElementById("wechaty-duty-status");
   const wechatyDutyEnabled = document.getElementById("wechaty-duty-enabled");
   const wechatyStartBtn = document.getElementById("wechaty-start-btn");
+  const wechatyReloginBtn = document.getElementById("wechaty-relogin-btn");
   const wechatyRefreshRoomsBtn = document.getElementById("wechaty-refresh-rooms-btn");
   const wechatySaveGroupsBtn = document.getElementById("wechaty-save-groups-btn");
   const wechatyRoomList = document.getElementById("wechaty-room-list");
@@ -2204,7 +2205,23 @@ function initTTSSettings() {
   let wechatyRoomsCache = [];
   let wechatySelectedGroupNames = new Set();
   let wechatyConfiguredGroupNames = new Set();
+  let wechatyRoomsAreStale = false;
   let wechatyStatusPollTimer = null;
+
+  function formatWechatyTime(value) {
+    if (!value) return '';
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value).slice(0, 16);
+    return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function describeWechatyCachedSuffix(status = {}) {
+    const parts = [];
+    if (status.rooms_stale || wechatyRoomsAreStale) parts.push('下方是上次缓存，不代表当前在线');
+    if (status.last_room_refresh_at) parts.push(`上次真实刷新 ${formatWechatyTime(status.last_room_refresh_at)}`);
+    if (status.error) parts.push(`错误：${status.error}`);
+    return parts.length ? `（${parts.join('；')}）` : '';
+  }
   function escapeHtml(value) {
     return String(value ?? "")
       .replace(/&/g, "&amp;")
@@ -2251,31 +2268,37 @@ function initTTSSettings() {
   function applyWechatyDutyConfig(config = {}, status = {}) {
     if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
     wechatyConfiguredGroupNames = new Set((config.groupNames || status.group_names || []).map(v => String(v || '').trim()).filter(Boolean));
+    wechatyRoomsAreStale = !!status.rooms_stale || (!!status.rooms?.length && status.online === false);
     if (Array.isArray(status.rooms) && status.rooms.length) {
       wechatyRoomsCache = status.rooms;
       wechatySelectedGroupNames = new Set(status.rooms.filter(r => r.selected).map(r => r.topic));
     } else if (wechatyRoomsCache.length) {
+      wechatyRoomsAreStale = true;
       wechatySelectedGroupNames = new Set(wechatyRoomsCache.filter(r => wechatyConfiguredGroupNames.has(r.topic) || r.selected).map(r => r.topic));
     } else {
       wechatySelectedGroupNames = new Set(wechatyConfiguredGroupNames);
     }
-    const connected = status.status === "connected";
-    const matchedCount = Object.keys(status.room_ids || {}).filter(k => status.room_ids[k]).length || wechatyRoomsCache.filter(r => r.selected).length;
+    const connected = status.online === true && status.status === "connected";
+    const matchedCount = Object.keys(status.room_ids || {}).filter(k => status.room_ids[k]).length;
     if (wechatyQrArea) wechatyQrArea.style.display = status.qr ? "flex" : "none";
     if (wechatyQrImg && status.qr) wechatyQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(status.qr)}`;
     if (wechatyLoginSub) {
+      const user = status.login_user || status.last_login_user || '';
+      const suffix = describeWechatyCachedSuffix(status);
       if (status.status === "qr_ready") wechatyLoginSub.textContent = "等待扫码登录。请用要接入群聊的微信扫描下方二维码。";
       else if (status.status === "starting") wechatyLoginSub.textContent = "正在恢复微信登录态；如果失效会出现二维码。";
-      else if (status.status === "logged_in") wechatyLoginSub.textContent = status.login_user ? `已登录：${status.login_user}，正在获取真实群列表…` : "已登录，正在获取真实群列表…";
-      else if (status.login_user && connected) wechatyLoginSub.textContent = `已登录：${status.login_user}。群列表会自动保持并刷新。`;
-      else if (status.status === "disconnected" || status.status === "error") wechatyLoginSub.textContent = `${status.login_user ? `上次登录：${status.login_user}。` : ''}当前微信连接已断开，系统会自动尝试恢复；也可以点击“登录/恢复微信”重新扫码。`;
-      else wechatyLoginSub.textContent = "未登录。点击“登录/恢复微信”后，如本机没有登录态会显示二维码。";
+      else if (connected) wechatyLoginSub.textContent = `${user ? `已真实在线：${user}。` : '已真实在线。'}已接入 ${matchedCount} 个群，可接收 @ 消息。`;
+      else if (status.needs_relogin || status.rooms_stale || ["logged_in", "connected", "rooms_stale", "group_lookup_error", "rooms_pending", "group_not_found"].includes(status.status)) wechatyLoginSub.textContent = `${user ? `检测到历史登录：${user}。` : ''}当前不能确认微信群消息通道可用，请点“强制重新扫码”。${suffix}`;
+      else if (status.status === "disconnected" || status.status === "error") wechatyLoginSub.textContent = `${user ? `上次登录：${user}。` : ''}当前微信连接已断开，请点“强制重新扫码”。${suffix}`;
+      else wechatyLoginSub.textContent = "未登录。点击“登录/恢复微信”；如果没有出现二维码，请点“强制重新扫码”。";
     }
-    if (connected) setWechatyStatus(`已连接 · 真实接入 ${matchedCount} 个群`, true);
-    else if (status.status === "qr_ready") setWechatyStatus(wechatyRoomsCache.length ? `等待扫码登录 · 保留上次 ${wechatyRoomsCache.length} 个群` : "等待扫码登录", false);
-    else if (status.status === "starting" || status.status === "logged_in") setWechatyStatus("正在登录/获取真实群列表", false);
-    else if (status.status === "disconnected") setWechatyStatus(`已断线 · 保留上次 ${wechatyRoomsCache.length} 个群 · 自动恢复中`, false);
-    else if (status.status === "error") setWechatyStatus(`连接异常 · 保留上次 ${wechatyRoomsCache.length} 个群`, false);
+    if (connected) setWechatyStatus(`已真实连接 · 接入 ${matchedCount} 个群`, true);
+    else if (status.status === "qr_ready") setWechatyStatus(wechatyRoomsCache.length ? `等待扫码登录 · 下方保留上次 ${wechatyRoomsCache.length} 个群` : "等待扫码登录", false);
+    else if (status.status === "starting") setWechatyStatus("正在登录/恢复微信", false);
+    else if (status.rooms_stale || status.status === "rooms_stale") setWechatyStatus(`未确认在线 · 仅显示上次缓存 ${wechatyRoomsCache.length} 个群`, false);
+    else if (status.status === "logged_in" || status.status === "connected") setWechatyStatus("登录态存在但群消息通道不可确认", false);
+    else if (status.status === "disconnected") setWechatyStatus(`已断线 · 请强制重新扫码`, false);
+    else if (status.status === "error" || status.status === "group_lookup_error") setWechatyStatus(`连接异常 · 请强制重新扫码`, false);
     else setWechatyStatus(config.enabled === false ? "已关闭" : "未登录", false);
     renderWechatyRooms();
   }
@@ -2294,10 +2317,11 @@ function initTTSSettings() {
         const topic = escapeHtml(String(room.topic || "未命名群"));
         const id = escapeHtml(String(room.id || ""));
         const checked = selected.has(room.topic) ? " checked" : "";
-        return `<label class="wechaty-room-item" title="${id}">
+        const badge = wechatyRoomsAreStale ? "缓存" : "@ 回复";
+        return `<label class="wechaty-room-item${wechatyRoomsAreStale ? ' stale' : ''}" title="${id}">
           <input class="wechaty-room-checkbox" type="checkbox" value="${topic}" data-topic="${topic}"${checked}>
           <span class="wechaty-room-main"><span class="wechaty-room-name">${topic}</span><span class="wechaty-room-id">${id}</span></span>
-          <span class="wechaty-room-badge">@ 回复</span>
+          <span class="wechaty-room-badge">${badge}</span>
         </label>`;
       }).join("");
     }
@@ -2312,7 +2336,7 @@ function initTTSSettings() {
       return;
     }
     const realSelected = wechatyRoomsCache.filter(room => wechatySelectedGroupNames.has(room.topic)).length;
-    wechatySelectedCount.textContent = `真实已选 ${realSelected} / ${wechatyRoomsCache.length} 个群`;
+    wechatySelectedCount.textContent = `${wechatyRoomsAreStale ? '缓存已选' : '真实已选'} ${realSelected} / ${wechatyRoomsCache.length} 个群`;
   }
 
   function collectWechatySelectedRooms() {
@@ -2333,27 +2357,26 @@ function initTTSSettings() {
         res = await fetch(`${API}/social/wechaty-duty-group/rooms`);
       }
       const data = await res.json();
-      if (data.ok) {
+      if (data.ok && data.fresh !== false && !data.rooms_stale) {
         wechatyRoomsCache = data.rooms || [];
+        wechatyRoomsAreStale = false;
         wechatyConfiguredGroupNames = new Set((data.group_names || []).map(v => String(v || '').trim()).filter(Boolean));
         wechatySelectedGroupNames = new Set(wechatyRoomsCache.filter(r => r.selected).map(r => r.topic));
         if (wechatyDutyEnabled) wechatyDutyEnabled.checked = data.enabled !== false;
         if (wechatyQrArea) wechatyQrArea.style.display = "none";
-        if (wechatyLoginSub) wechatyLoginSub.textContent = data.login_user ? `已登录：${data.login_user}。群列表已刷新。` : '已连接，群列表已刷新。';
-        const online = data.status === "connected" || data.status === "logged_in";
-        setWechatyStatus(`${online ? "已连接" : "正在连接"} · 真实群列表 ${wechatyRoomsCache.length} 个，已接入 ${wechatySelectedGroupNames.size} 个`, online);
+        if (wechatyLoginSub) wechatyLoginSub.textContent = data.online ? `已真实在线：${data.login_user || data.last_login_user || "微信"}。群列表已真实刷新。` : (data.hint || '群列表已刷新，但连接仍在确认中。');
+        setWechatyStatus(`${data.online ? "已真实连接" : "正在连接"} · 真实群列表 ${wechatyRoomsCache.length} 个，已接入 ${wechatySelectedGroupNames.size} 个`, data.online === true);
         renderWechatyRooms();
       } else {
         if (Array.isArray(data.rooms) && data.rooms.length) {
           wechatyRoomsCache = data.rooms;
+          wechatyRoomsAreStale = true;
           wechatySelectedGroupNames = new Set(wechatyRoomsCache.filter(r => r.selected).map(r => r.topic));
         }
-        if (data.login_user && (data.status === "connected" || data.status === "logged_in")) {
-          setWechatyStatus("已登录但群列表刷新失败", false);
-        } else {
-          setWechatyStatus(data.status === "qr_ready" ? "等待扫码登录" : "未登录", false);
-        }
-        if (!silent) showFeedback(wechatyDutyFeedback, data.error || "群列表获取失败，请先登录/恢复微信", true);
+        if (wechatyLoginSub) wechatyLoginSub.textContent = data.hint || data.error || '没有获取到真实群列表；下方如有群只是上次缓存。';
+        if (data.status === "qr_ready") setWechatyStatus("等待扫码登录", false);
+        else setWechatyStatus(wechatyRoomsCache.length ? `未确认在线 · 仅显示上次缓存 ${wechatyRoomsCache.length} 个群` : "未登录/未获取真实群列表", false);
+        if (!silent) showFeedback(wechatyDutyFeedback, data.error || data.hint || "群列表未真实刷新，请强制重新扫码", true);
         renderWechatyRooms();
       }
     } catch {
@@ -2377,12 +2400,37 @@ function initTTSSettings() {
     setWechatyStatus("正在连接/恢复微信…", false);
     try {
       await fetch(`${API}/social/wechaty-duty-group/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
-      showFeedback(wechatyDutyFeedback, "已发起登录/恢复，请留意二维码或稍等自动恢复");
+      showFeedback(wechatyDutyFeedback, "已发起登录/恢复；如果仍显示缓存状态，请点强制重新扫码");
       setTimeout(() => pollWechatyStatus({ refreshRooms: true }), 1200);
     } catch {
       showFeedback(wechatyDutyFeedback, "连接失败", true);
     } finally {
       wechatyStartBtn.disabled = false;
+    }
+  });
+  wechatyReloginBtn?.addEventListener("click", async () => {
+    if (!confirm("确定要清空当前微信登录态并重新生成二维码吗？这会让微信群助手重新扫码登录。")) return;
+    wechatyReloginBtn.disabled = true;
+    if (wechatyStartBtn) wechatyStartBtn.disabled = true;
+    setWechatyStatus("正在清空登录态并生成二维码…", false);
+    try {
+      const groupNames = collectWechatySelectedRooms();
+      const res = await fetch(`${API}/social/wechaty-duty-group/relogin`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !!wechatyDutyEnabled?.checked, group_names: groupNames.length ? groupNames : [...wechatyConfiguredGroupNames] }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(wechatyDutyFeedback, "已清空登录态，请扫描新二维码");
+        applyWechatyDutyConfig({ enabled: data.enabled, groupNames: data.group_names }, data);
+        setTimeout(() => pollWechatyStatus({ refreshRooms: false }), 1200);
+      } else showFeedback(wechatyDutyFeedback, data.error || "重新扫码失败", true);
+    } catch {
+      showFeedback(wechatyDutyFeedback, "重新扫码请求失败", true);
+    } finally {
+      wechatyReloginBtn.disabled = false;
+      if (wechatyStartBtn) wechatyStartBtn.disabled = false;
     }
   });
   wechatyRefreshRoomsBtn?.addEventListener("click", () => refreshWechatyRooms({ autoStart: true }));
@@ -2391,7 +2439,7 @@ function initTTSSettings() {
     try {
       const data = await fetch(`${API}/social/wechaty-duty-group/status`).then(r => r.json());
       if (data.ok) applyWechatyDutyConfig({ enabled: data.enabled, groupNames: data.group_names }, data);
-      if (refreshRooms && ["connected", "logged_in"].includes(data.status)) {
+      if (refreshRooms && data.online === true && data.status === "connected") {
         await refreshWechatyRooms({ autoStart: false, silent: true });
       }
     } catch {}

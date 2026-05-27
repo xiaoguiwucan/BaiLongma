@@ -20,7 +20,7 @@ import { persistAppState } from './capabilities/executor.js'
 import { MinimaxProvider } from './providers/minimax.js'
 import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
-import { configureWechatyDutyGroup, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
+import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
 import { getWeChatGroupMemoryStatus, listWeChatGroupMemory } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
@@ -260,13 +260,35 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         const enabled = body.enabled ?? saved.enabled
         configureWechatyDutyGroup({ groupNames, enabled })
         const before = getWechatyDutyGroupStatus()
-        if (!['idle', 'error', 'disconnected'].includes(before.status)) {
+        if (before.online) {
           return jsonResponse(res, 200, { ok: true, already_running: true, ...before })
         }
-        startWechatyDutyGroupConnector({ pushMessage, emitEvent, groupNames, enabled }).catch(err =>
-          console.warn('[social] wechaty-duty-group start failed:', err.message)
+        if (['qr_ready', 'starting'].includes(before.status)) {
+          return jsonResponse(res, 200, { ok: true, already_running: true, ...before })
+        }
+        const starter = ['idle', 'error', 'disconnected'].includes(before.status)
+          ? startWechatyDutyGroupConnector
+          : restartWechatyDutyGroupConnector
+        starter({ pushMessage, emitEvent, groupNames, enabled }).catch(err =>
+          console.warn('[social] wechaty-duty-group start/restart failed:', err.message)
         )
         jsonResponse(res, 200, { ok: true, ...getWechatyDutyGroupStatus() })
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
+    }
+
+    // POST /social/wechaty-duty-group/relogin — 清空 Wechaty 登录态并强制重新生成二维码
+    if (req.method === 'POST' && url.pathname === '/social/wechaty-duty-group/relogin') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        const saved = getWechatyDutyGroupConfig()
+        const groupNames = body.group_names || body.groupNames || body.groups || body.group_name || body.groupName || saved.groupNames
+        const enabled = body.enabled ?? saved.enabled
+        configureWechatyDutyGroup({ groupNames, enabled })
+        forceReloginWechatyDutyGroupConnector({ pushMessage, emitEvent, groupNames, enabled }).catch(err =>
+          console.warn('[social] wechaty-duty-group force relogin failed:', err.message)
+        )
+        jsonResponse(res, 200, { ok: true, relogin: true, ...getWechatyDutyGroupStatus() })
       }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
       return
     }
