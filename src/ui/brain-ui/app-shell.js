@@ -749,6 +749,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.3.3</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">关闭行为修复：点击主窗口关闭按钮会彻底退出，不再只是隐藏到菜单栏。</p>
+                <ul class="release-note-points">
+                  <li>主窗口 close 不再拦截为 hide，避免用户以为关闭了但后台仍运行。</li>
+                  <li>关闭最后一个窗口后调用 app.quit，菜单栏图标和后台服务会一起退出。</li>
+                  <li>菜单栏“显示主界面 / 退出”仍保留，运行时可继续手动操作。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.3.2</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

@@ -101,6 +101,7 @@ let mainWindow = null
 let backendPort = 0
 let tray = null
 let focusBannerWindow = null
+app.isQuiting = false
 
 // 后端通过 global.focusBannerBridge 控制横幅窗口
 const focusBannerBridge = new EventEmitter()
@@ -240,17 +241,25 @@ async function createWindow() {
   })
 
   await mainWindow.loadURL(`http://127.0.0.1:${backendPort}/`)
-  // 关闭主窗口时最小化到托盘，不退出
-  mainWindow.on('close', (e) => {
+  // 用户点击窗口关闭按钮时彻底退出应用。
+  // 之前这里会拦截 close 并隐藏到菜单栏，导致用户以为已经关闭，实际后台仍在运行。
+  mainWindow.on('close', () => {
     if (!app.isQuiting) {
-      e.preventDefault()
-      mainWindow.hide()
+      app.isQuiting = true
+      app.quit()
     }
   })
 
   mainWindow.on('closed', () => {
     mainWindow = null
   })
+}
+
+
+function destroyTray() {
+  if (!tray) return
+  try { tray.destroy() } catch {}
+  tray = null
 }
 
 function setupTray() {
@@ -510,9 +519,14 @@ app.on('activate', () => {
   showMainWindow()
 })
 
+app.on('before-quit', () => {
+  app.isQuiting = true
+  destroyTray()
+})
+
 app.on('window-all-closed', () => {
-  // 主窗口关闭后保持后台运行（Focus Banner 等桌面功能继续工作）
-  // 只有托盘菜单「退出」才真正退出
+  // 关闭最后一个窗口后也彻底退出，避免 macOS 菜单栏图标继续常驻。
+  app.quit()
 })
 
 app.whenReady().then(async () => {
