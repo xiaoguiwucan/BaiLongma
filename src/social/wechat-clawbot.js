@@ -1,6 +1,8 @@
 import { WeChatClient } from 'wechat-ilink-client'
 import { getClawbotCredentials, setClawbotCredentials, clearClawbotCredentials } from '../config.js'
 import { upsertClawbotToken, getAllClawbotTokens } from '../db.js'
+import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, shouldWakeInWeChatGroup, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
+import { recordWeChatGroupMessage } from './wechat-group-memory.js'
 
 let client = null
 let currentQrUrl = null   // set during login, cleared after scan
@@ -12,7 +14,13 @@ export async function sendClawbotMessage(userId, content) {
     return { ok: false, reason: 'wechat-clawbot not connected' }
   }
   try {
-    await client.sendText(userId, content)
+    const rawUserId = String(userId || '')
+    if (rawUserId.startsWith('group:')) {
+      const [groupId, contextToken = ''] = rawUserId.slice('group:'.length).split(':ctx:')
+      await client.sendText(groupId, content, contextToken || undefined)
+      return { ok: true, platform: 'wechat-clawbot', group: true }
+    }
+    await client.sendText(rawUserId, content)
     return { ok: true, platform: 'wechat-clawbot' }
   } catch (err) {
     console.error(`[ClawBot] sendText 失败: ${err.message}`)
@@ -95,14 +103,54 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
     console.warn(`[ClawBot] 恢复 context_token 失败（不致命，继续启动）: ${err.message}`)
   }
 
-  client.on('message', (msg) => {
+  client.on('message', async (msg) => {
     // 每条入站消息都带新鲜的 context_token —— 库已经在内部 set 到 Map 了，
     // 这里只是同步落盘一份，让下次重启能继承当前会话。
     if (msg?.context_token && msg?.from_user_id) {
       try { upsertClawbotToken(msg.from_user_id, msg.context_token) } catch {}
     }
-    const text = WeChatClient.extractText?.(msg) ?? extractText(msg)
+    const text = (WeChatClient.extractText?.(msg) ?? extractText(msg)).trim()
     if (!text) return
+
+    const groupId = String(msg?.group_id || '').trim()
+    if (groupId) {
+      const senderId = String(msg?.from_user_id || '').trim()
+      const groupExternalId = makeWeChatGroupExternalId(groupId)
+      const contextToken = String(msg?.context_token || '').trim()
+      // 群聊的 context_token 也按 group_id 保存一份；部分 iLink 后端回群需要按群会话 token 投递。
+      if (contextToken) {
+        try { upsertClawbotToken(groupId, contextToken) } catch {}
+        try { if (client.contextTokens instanceof Map) client.contextTokens.set(groupId, contextToken) } catch {}
+      }
+
+      const archived = archiveWeChatGroupMessage({ groupId, senderId, text })
+      recordWeChatGroupMessage({ groupId, senderId, senderName: senderId, text, mentionedSelf: shouldWakeInWeChatGroup(text), source: 'clawbot' }).catch(err => console.warn(`[Honcho] 写入群记忆失败：${err?.message || err}`))
+      console.log(`[ClawBot] 群消息已归档 group=${groupId} sender=${senderId} text=${text.slice(0, 80)}`)
+      emitEvent?.('message_in', {
+        from_id: archived?.groupExternalId || groupExternalId,
+        content: formatGroupLine(senderId, text),
+        channel: WECHAT_GROUP_CHANNEL,
+        external_party_id: groupExternalId,
+        social: { platform: 'wechat-clawbot', group_id: groupId, sender_id: senderId },
+        timestamp: new Date().toISOString(),
+      })
+
+      const woke = shouldWakeInWeChatGroup(text)
+      if (!woke) return
+      console.log(`[ClawBot] 群 @/唤醒已命中，调用大模型 group=${groupId} sender=${senderId} text=${text.slice(0, 120)}`)
+      const prompt = await buildWeChatGroupCommandPrompt({ groupId, senderId, senderName: senderId, text })
+      // 无 token 时仍可入队让本地窗口显示/处理；出站回群可能失败并在日志中提示。
+      const outboundId = contextToken
+        ? `wechat:clawbot:group:${groupId}:ctx:${encodeURIComponent(contextToken)}`
+        : `wechat:clawbot:group:${groupId}`
+      pushMessage(groupExternalId, prompt, WECHAT_GROUP_CHANNEL, {
+        noPersist: true,
+        externalPartyIdOverride: outboundId,
+        social: { platform: 'wechat-clawbot', group_id: groupId, sender_id: senderId, context_token: contextToken },
+      })
+      return
+    }
+
     const fromId = `wechat:clawbot:${msg.from_user_id}`
     pushMessage(fromId, text, 'WECHAT_CLAWBOT', {
       social: { platform: 'wechat-clawbot', user_id: msg.from_user_id },

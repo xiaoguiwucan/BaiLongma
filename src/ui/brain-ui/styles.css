@@ -1112,6 +1112,27 @@ body {
 .voice-btn:hover  { color: var(--ink); background: var(--line); }
 .voice-btn.active { color: var(--cool); border-color: var(--cool); background: rgba(143,182,216,0.08); }
 
+/* ── Hotspot mode button ── */
+.hotspot-btn {
+  display: flex;
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid var(--line-strong);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--dim);
+  font-size: 12px;
+  font-weight: 800;
+  cursor: pointer;
+  transition: color 0.18s ease, background 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+.hotspot-btn:hover  { color: var(--ink); background: var(--line); }
+.hotspot-btn.active,
+body.hotspot-mode .hotspot-btn { color: #ffe7a0; border-color: rgba(255, 210, 90, 0.65); background: rgba(255, 190, 70, 0.10); box-shadow: 0 0 18px rgba(255, 190, 70, 0.22); }
+
 /* ── Video mode button ── */
 .video-btn {
   display: flex;
@@ -3848,4 +3869,191 @@ body.person-card-mode .person-card-panel,
   color: var(--text-muted);
   margin-bottom: 6px;
   font-family: var(--mono);
+}
+
+/* WeChat group assistant settings */
+.wechaty-group-settings {
+  background: linear-gradient(135deg, rgba(87, 214, 255, 0.055), rgba(255, 184, 108, 0.035));
+}
+.wechaty-toolbar,
+.wechaty-room-tools {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+.wechaty-master-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--line-strong);
+  border-radius: 999px;
+  color: var(--ink);
+  font-size: 11px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.03);
+}
+.wechaty-master-toggle input { margin: 0; }
+.wechaty-room-tools .settings-input {
+  flex: 1 1 220px;
+  width: auto;
+}
+.wechaty-selected-count {
+  color: var(--ink2);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  white-space: nowrap;
+}
+.wechaty-room-list {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.12);
+  padding: 6px;
+  margin: 8px 0 10px;
+}
+.wechaty-room-item {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 9px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+  border: 1px solid transparent;
+}
+.wechaty-room-item:hover {
+  background: rgba(255,255,255,0.055);
+  border-color: var(--line);
+}
+.wechaty-room-checkbox { margin: 0; }
+.wechaty-room-main { min-width: 0; }
+.wechaty-room-name {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wechaty-room-id {
+  display: block;
+  color: var(--dim);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 9px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  margin-top: 2px;
+}
+.wechaty-room-badge {
+  color: var(--cool);
+  border: 1px solid rgba(87, 214, 255, 0.35);
+  border-radius: 999px;
+  padding: 2px 7px;
+  font-size: 10px;
+  white-space: nowrap;
+}
+.wechaty-empty {
+  color: var(--dim);
+  font-size: 11px;
+  text-align: center;
+  padding: 22px 8px;
+}
+.settings-modal {
+  width: min(860px, calc(100vw - 40px));
+  height: min(720px, calc(100vh - 64px));
+}
+.wechaty-qr-area {
+  align-items: center;
+  gap: 12px;
+  border: 1px dashed rgba(87, 214, 255, 0.45);
+  border-radius: 12px;
+  padding: 10px;
+  margin: 6px 0 12px;
+  color: var(--ink2);
+  font-size: 11px;
+  line-height: 1.5;
+  background: rgba(87, 214, 255, 0.045);
+}
+.wechaty-qr-area img {
+  width: 132px;
+  height: 132px;
+  border-radius: 10px;
+  background: white;
+  padding: 6px;
+}
+.wechaty-memory-preview {
+  max-height: 220px;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 9px;
+  margin-top: 8px;
+  background: rgba(0,0,0,0.16);
+}
+.wechaty-memory-title {
+  color: var(--warm);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
+  margin-bottom: 8px;
+}
+.wechaty-memory-item {
+  color: var(--ink2);
+  font-size: 11px;
+  line-height: 1.55;
+  padding: 6px 0;
+  border-top: 1px solid rgba(255,255,255,0.05);
+}
+.wechaty-memory-item:first-of-type { border-top: none; }
+.wechaty-memory-item b { color: var(--cool); font-weight: 600; }
+.wechaty-memory-item span { display:block; color: var(--dim); font-size: 10px; margin-top: 2px; }
+.wechaty-guard-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 8px;
+}
+.wechaty-guard-item {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 8px 9px;
+  background: rgba(255,255,255,0.035);
+  color: var(--ink2);
+  font-size: 11px;
+}
+.wechaty-guard-item code {
+  color: var(--warm);
+  font-size: 10px;
+}
+
+.wechaty-login-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 14px 16px;
+  margin: 12px 0 14px;
+  border: 1px solid rgba(148, 163, 184, 0.18);
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.10), rgba(15, 23, 42, 0.35));
+}
+.wechaty-login-title {
+  color: var(--ink, #e5edf8);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: .04em;
+}
+.wechaty-login-sub {
+  margin-top: 6px;
+  color: var(--ink2, #94a3b8);
+  font-size: 12px;
+  line-height: 1.5;
 }

@@ -14,6 +14,7 @@ const EXTERNAL_PREFIX_REGEX = /^(wechat|discord|feishu|wecom):/i
 
 const CHANNEL_NORMALIZE = {
   WECHAT_CLAWBOT: 'WECHAT',
+  WECHAT_CLAWBOT_GROUP: 'WECHAT',
   WECHAT_OFFICIAL: 'WECHAT',
   WECHAT: 'WECHAT',
   WECOM: 'WECOM',
@@ -47,7 +48,7 @@ export function isExternalChannel(channel) {
 function expandChannelToConcrete(channel) {
   const norm = normalizeChannel(channel)
   switch (norm) {
-    case 'WECHAT': return ['WECHAT_CLAWBOT', 'WECHAT_OFFICIAL']
+    case 'WECHAT': return ['WECHAT_CLAWBOT', 'WECHAT_CLAWBOT_GROUP', 'WECHAT_OFFICIAL']
     case 'WECOM':  return ['WECOM']
     case 'DISCORD': return ['DISCORD']
     case 'FEISHU': return ['FEISHU']
@@ -65,6 +66,8 @@ export function resolveCanonicalUserId({ rawFromId, channel } = {}) {
   if (/^ID:\d+$/i.test(normalized)) return normalized
 
   if (SINGLE_USER_MODE) {
+    // 微信群聊必须保持独立会话 ID，否则群消息会和个人私聊混在一起。
+    if (/^wechat:clawbot-group:/i.test(normalized) || channel === 'WECHAT_CLAWBOT_GROUP') return normalized
     if (EXTERNAL_PREFIX_REGEX.test(normalized)) return PRIMARY_USER_ID
     if (isExternalChannel(channel)) return PRIMARY_USER_ID
     return normalized

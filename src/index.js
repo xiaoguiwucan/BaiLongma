@@ -362,7 +362,7 @@ function deliverFallbackReply(msg, content, timestamp) {
     external_party_id: externalPartyId,
   })
   if (externalPartyId) {
-    dispatchSocialMessage(externalPartyId, content).catch(err => console.warn('[social] fallback send failed:', err.message))
+    dispatchSocialMessage(externalPartyId, content, { social: msg.social || null }).catch(err => console.warn('[social] fallback send failed:', err.message))
   }
   insertConversation({
     role: 'jarvis',
@@ -402,6 +402,7 @@ function buildToolContextForProcess(msg, injection) {
     // 当前 turn 的渠道信息：execSendMessage 在 AUTO 模式下优先用这里，确保"在哪儿收的消息就回到哪儿"
     currentChannel: msg?.channel || null,
     currentExternalPartyId: msg?.externalPartyId || null,
+    currentSocial: msg?.social || null,
 
     onSetTask: (description, steps) => {
       state.task = description
@@ -657,41 +658,13 @@ function isVoiceChannel(channel) {
 }
 
 function createVoiceSentenceEmitter(msg) {
+  // 稳定音色优先：不再边生成边分段触发 TTS。
+  // 语音回复只在最终 send_message/fallback 文本确定后整段合成，避免分段导致语调变化和卡顿。
   if (!isVoiceChannel(msg?.channel)) return null
-  const voiceTurnId = msg?.voiceTurnId || null
-  let buffer = ''
-  let spoken = ''
-  const boundary = /[。！？!?；;]|[，,]/
-  const flush = (force = false) => {
-    const clean = trimAssistantFluff(buffer).replace(/\s+/g, ' ').trim()
-    if (!clean) { buffer = ''; return }
-    const shouldSpeak = force || clean.length >= 18 || /[。！？!?；;]$/.test(clean)
-    if (!shouldSpeak) return
-    buffer = ''
-    spoken += clean
-    autoSpeakForVoiceReply(clean, { voiceTurnId })
-  }
   return {
-    push(text = '') {
-      const chunk = String(text || '')
-      if (!chunk) return
-      buffer += chunk
-      let guard = 0
-      while (buffer && guard++ < 20) {
-        const idx = buffer.search(boundary)
-        if (idx < 0) break
-        const part = buffer.slice(0, idx + 1)
-        buffer = buffer.slice(idx + 1)
-        const clean = trimAssistantFluff(part).replace(/\s+/g, ' ').trim()
-        if (clean && (clean.length >= 6 || /[。！？!?；;]$/.test(clean))) {
-          spoken += clean
-          autoSpeakForVoiceReply(clean, { voiceTurnId })
-        }
-      }
-      flush(false)
-    },
-    end() { flush(true); return spoken.trim() },
-    spoke() { return spoken.trim().length > 0 },
+    push() {},
+    end() { return '' },
+    spoke() { return false },
   }
 }
 

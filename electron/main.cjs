@@ -29,6 +29,20 @@ const LOG_FILE = path.join(LOG_DIR, 'bailongma.log')
 const LOG_FILE_OLD = path.join(LOG_DIR, 'bailongma.old.log')
 const LOG_MAX_BYTES = 5 * 1024 * 1024
 try { fs.mkdirSync(LOG_DIR, { recursive: true }) } catch {}
+let stdioBroken = false
+function isBrokenPipeError(err) {
+  return err && (err.code === 'EPIPE' || /write EPIPE/i.test(String(err?.message || err)))
+}
+function markStdioBroken(err) {
+  if (!isBrokenPipeError(err)) return false
+  stdioBroken = true
+  return true
+}
+for (const stream of [process.stdout, process.stderr]) {
+  try {
+    stream?.on?.('error', err => { markStdioBroken(err) })
+  } catch {}
+}
 function rotateLogIfNeeded() {
   try {
     const stat = fs.statSync(LOG_FILE)
@@ -58,7 +72,9 @@ function writeLog(level, args) {
   for (const level of levels) {
     const original = console[level]?.bind(console) || (() => {})
     console[level] = (...args) => {
-      try { original(...args) } catch {}
+      if (!stdioBroken) {
+        try { original(...args) } catch (err) { markStdioBroken(err) }
+      }
       try {
         rotateLogIfNeeded()
         writeLog(level, args)
@@ -70,6 +86,13 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', reason instanceof Error ? (reason.stack || reason.message) : String(reason))
 })
 process.on('uncaughtException', (err) => {
+  if (markStdioBroken(err)) {
+    try {
+      rotateLogIfNeeded()
+      writeLog('warn', ['[stdio] stdout/stderr closed; disabling console mirror to terminal'])
+    } catch {}
+    return
+  }
   console.error('[uncaughtException]', err?.stack || err?.message || String(err))
 })
 console.log(`[main] Bailongma ${app.getVersion()} starting, logs → ${LOG_FILE}`)
@@ -239,10 +262,7 @@ function setupTray() {
     {
       label: '显示主界面',
       click: () => {
-        if (mainWindow) {
-          mainWindow.show()
-          mainWindow.focus()
-        }
+        showMainWindow()
       },
     },
     { type: 'separator' },
@@ -257,10 +277,7 @@ function setupTray() {
 
   tray.setContextMenu(contextMenu)
   tray.on('double-click', () => {
-    if (mainWindow) {
-      mainWindow.show()
-      mainWindow.focus()
-    }
+    showMainWindow()
   })
 }
 
@@ -413,6 +430,43 @@ function setupAutoUpdater() {
   }
 }
 
+
+function showMainWindow() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    createWindow().catch(err => console.error('[main] failed to recreate main window', err?.stack || err?.message || String(err)))
+    return
+  }
+
+  try {
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.setSkipTaskbar(false)
+    mainWindow.show()
+    mainWindow.moveTop()
+    mainWindow.focus()
+
+    // 防止窗口因为外接屏变化/坐标缓存等原因跑到屏幕外。
+    const { screen } = require('electron')
+    const display = screen.getDisplayMatching(mainWindow.getBounds()) || screen.getPrimaryDisplay()
+    const work = display.workArea
+    const bounds = mainWindow.getBounds()
+    const visible = bounds.x < work.x + work.width && bounds.x + bounds.width > work.x && bounds.y < work.y + work.height && bounds.y + bounds.height > work.y
+    if (!visible) {
+      const w = Math.min(Math.max(bounds.width || 1280, 900), work.width)
+      const h = Math.min(Math.max(bounds.height || 840, 600), work.height)
+      mainWindow.setBounds({
+        x: Math.round(work.x + (work.width - w) / 2),
+        y: Math.round(work.y + (work.height - h) / 2),
+        width: w,
+        height: h,
+      })
+      mainWindow.show()
+      mainWindow.focus()
+    }
+  } catch (err) {
+    console.warn('[main] showMainWindow failed', err?.message || String(err))
+  }
+}
+
 ipcMain.handle('app:get-version', () => app.getVersion())
 
 ipcMain.handle('updater:check-for-updates', async () => {
@@ -447,10 +501,13 @@ ipcMain.handle('updater:quit-and-install', () => {
 })
 
 app.on('second-instance', () => {
-  if (!mainWindow) return
-  if (mainWindow.isMinimized()) mainWindow.restore()
-  if (!mainWindow.isVisible()) mainWindow.show()
-  mainWindow.focus()
+  showMainWindow()
+})
+
+// macOS: 点击 Dock 图标时 Electron 只会激活应用，不一定自动 show 已隐藏窗口。
+// 用户之前关闭窗口后我们会 hide 到后台，所以这里必须显式把主界面拉出来。
+app.on('activate', () => {
+  showMainWindow()
 })
 
 app.on('window-all-closed', () => {

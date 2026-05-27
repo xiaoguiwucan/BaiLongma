@@ -48,7 +48,7 @@ const STATE_CFG = {
 };
 
 // ─── 打断检测参数 ───
-const BARGEIN_WARMUP_MS  = 600  // TTS 开始后前 600ms 不检测（等 AEC 适应）
+const BARGEIN_WARMUP_MS  = 350  // TTS 开始后前 600ms 不检测（等 AEC 适应）
 const BARGEIN_FRAMES     = 8    // 需要连续 8 帧高振幅（约 130ms）才触发
 const BARGEIN_THRESHOLD  = 0.09 // 振幅阈值（高于环境噪声和 AEC 残留）
 // 4096 samples @ 16kHz = 256ms/块；保留 1500ms ≈ 6 块
@@ -57,15 +57,21 @@ const BARGEIN_MAX_CHUNKS      = Math.ceil(BARGEIN_PRE_BUFFER_MS * 16000 / 1000 /
 
 // ─── Duck 模式参数（两阶段检测：先压制音量再判断是否打断） ───
 // 检测到高振幅先 duck（降音量），持续高振幅才真正打断；冲击噪音消退后直接恢复音量
-const DUCK_TRIGGER_FRAMES  = 3    // 连续 3 帧高振幅 → 进入 duck 模式（≈50ms）
-const DUCK_SUSTAIN_FRAMES  = 10   // duck 中再持续 10 帧高振幅 → 判定为语音，触发真正打断
+const DUCK_TRIGGER_FRAMES  = 2    // 连续 3 帧高振幅 → 进入 duck 模式（≈50ms）
+const DUCK_SUSTAIN_FRAMES  = 3   // duck 中再持续 10 帧高振幅 → 判定为语音，触发真正打断
 const DUCK_DECAY_FRAMES    = 6    // duck 中连续 6 帧低振幅（≈100ms）→ 判定为噪音，恢复音量
-const DUCK_MAX_MS          = 1500 // duck 最长持续时间，超时自动恢复
+const DUCK_MAX_MS          = 2600 // duck 最长持续时间，超时自动恢复
 
 // ─── 快速非语音检测参数（真正打断后仍保留，用于误打断的快速恢复） ───
 const BARGEIN_FAST_WINDOW_MS    = 500
 const BARGEIN_FAST_SILENT_THR   = BARGEIN_THRESHOLD * 0.65
 const BARGEIN_FAST_SILENT_NEED  = 7
+
+// ─── TTS 防自激参数 ───
+// 唤醒词关闭时，AI 自己的播报最容易被麦克风重新识别。默认在 TTS 期间关闭 ASR 上行，
+// 只保留本地音量检测；疑似用户插话时先压低 TTS，再短暂打开 ASR 窗口。
+const TTS_SELF_ECHO_GUARD_KEY = 'bailongma-tts-self-echo-guard'
+const TTS_SELF_ECHO_GUARD_DEFAULT = true
 
 // ─── 声音事件图标映射 ───
 const SOUND_EVENT_ICONS = {
@@ -100,6 +106,7 @@ function getVoiceThreshold() {
 
 // 派生阈值（ambient = near/2.67，和原始比例保持一致）
 function getAmbientThreshold() { return getVoiceThreshold() * 0.375; }
+function getBargeinThreshold() { return Math.max(0.045, getVoiceThreshold() * 7); }
 
 export function initVoicePanel({
   btnId, panelId, canvasId, statusId, transcriptId,
@@ -184,14 +191,15 @@ export function initVoicePanel({
         if (aecReady) {
           if (!duckActive) {
             // 阶段一：等待触发 duck
-            if (vol > BARGEIN_THRESHOLD) {
+            if (vol > getBargeinThreshold()) {
               if (++bargeinFrames >= DUCK_TRIGGER_FRAMES) {
                 bargeinFrames = 0;
                 duckActive = true;
                 duckStartTime = Date.now();
                 duckHighFrames = 0;
                 duckLowFrames = 0;
-                window.duckTTS?.();
+                // 先给用户声音让路：检测到疑似插话就立刻大幅降低 TTS。
+                window.duckTTS?.({ strong: true });
               }
             } else {
               bargeinFrames = 0;
@@ -199,15 +207,17 @@ export function initVoicePanel({
           } else {
             // 阶段二：duck 中判断是语音还是冲击噪音
             const duckElapsed = Date.now() - duckStartTime;
-            if (vol > BARGEIN_THRESHOLD) {
+            if (vol > getBargeinThreshold()) {
               duckHighFrames++;
               duckLowFrames = 0;
               if (duckHighFrames >= DUCK_SUSTAIN_FRAMES) {
-                // 声音持续高振幅 → 语音 → 真正打断
+                // 声音持续高振幅 → 用户插话概率高。先停 TTS，让 ASR 捕获完整指令。
                 duckActive = false;
                 duckHighFrames = 0;
+                console.warn('[Voice] barge-in fast stop, opening ASR window', { vol, threshold: getBargeinThreshold(), duckElapsed });
                 abortSpeaking('user_speech');
-                resumeVoiceInputFromMedia(true);
+                // ASR 已保持在线，这里不重连，只保留误触发恢复窗口。
+                startBargeinNoSpeechTimer();
                 bargeinFastCheckActive = true;
                 bargeinFastCheckStart = Date.now();
                 bargeinFastSilentFrames = 0;
@@ -315,6 +325,7 @@ export function initVoicePanel({
   let mediaStartedMic = false;
   let lastMediaVoiceActivityAt = 0;
   let ttsStartTime = 0;
+  let ttsSpeakingActive = false;
   let bargeinFrames = 0;
   let nearFieldGate = {
     noiseFloor: getAmbientThreshold(),
@@ -384,8 +395,14 @@ export function initVoicePanel({
     return !!turnId && !!voiceSession.activeTurnId && turnId === voiceSession.activeTurnId;
   }
 
+  function isTtsSelfEchoGuardEnabled() {
+    return localStorage.getItem(TTS_SELF_ECHO_GUARD_KEY) !== 'false' && TTS_SELF_ECHO_GUARD_DEFAULT;
+  }
+
   function abortSpeaking(reason = 'user_speech') {
     setVoiceSessionState('interrupted', { reason });
+    ttsSpeakingActive = false;
+    bargeinBuffering = false;
     window.stopTTS?.({ reason, voiceTurnId: voiceSession.activeTurnId || null });
   }
 
@@ -396,7 +413,8 @@ export function initVoicePanel({
         audio: {
           echoCancellation: useAec,
           noiseSuppression: true,
-          autoGainControl: false,
+          // 云端 ASR 对输入音量更敏感，开启系统自动增益，避免 Mac 麦克风采集过低导致火山/豆包一直返回空文本。
+          autoGainControl: true,
           channelCount: 1,
         },
       });
@@ -457,11 +475,11 @@ export function initVoicePanel({
 
   function getWakeConfig() {
     const enabled = localStorage.getItem(VOICE_WAKE_ENABLED_KEY) !== 'false';
-    const words = (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || '小龙马，龙马，白龙马')
+    const words = (localStorage.getItem(VOICE_WAKE_WORDS_KEY) || '贾维斯，Jarvis，小龙马，龙马，白龙马')
       .split(/[,，、\s]+/)
       .map(w => w.trim())
       .filter(Boolean);
-    return { enabled, words: words.length ? words : ['小龙马', '龙马', '白龙马'] };
+    return { enabled, words: words.length ? words : ['贾维斯', 'Jarvis', '小龙马', '龙马', '白龙马'] };
   }
 
   function normalizeWakeText(text = '') {
@@ -527,7 +545,7 @@ export function initVoicePanel({
 
   function getAsrProvider() {
     const provider = localStorage.getItem(VOICE_PROVIDER_KEY) || 'local';
-    return ['local', 'aliyun', 'tencent', 'xunfei'].includes(provider) ? provider : 'local';
+    return ['local', 'aliyun', 'tencent', 'xunfei', 'volcengine'].includes(provider) ? provider : 'local';
   }
 
   async function ensureLocalAsrServer() {
@@ -551,6 +569,8 @@ export function initVoicePanel({
       await ensureLocalAsrServer();
       return { ws: new WebSocket(LOCAL_WS_URL), provider };
     }
+    setStatus('recognizing');
+    if (transcript) transcript.textContent = `正在连接${provider === 'volcengine' ? '火山引擎/豆包' : provider}语音识别…`;
     return { ws: new WebSocket(CLOUD_WS_URL), provider };
   }
 
@@ -572,7 +592,7 @@ export function initVoicePanel({
       const msg = JSON.parse(ev.data);
       if (msg.type === 'config_ok') {
         setStatus('listening');
-        if (transcript && transcript.textContent === '正在启动本地语音模型…') transcript.textContent = '';
+        if (transcript && /^正在(启动本地语音模型|连接.+语音识别)/.test(transcript.textContent || '')) transcript.textContent = '';
         return;
       }
       if (msg.type === 'transcript') {
@@ -593,6 +613,10 @@ export function initVoicePanel({
           }
           const acceptedText = gated.text;
           if (!acceptedText || looksLikeAsrHallucination(acceptedText)) return;
+          if (ttsSpeakingActive) {
+            console.warn('[Voice] wake/input recognized during TTS, aborting speech', { acceptedText });
+            abortSpeaking('voice_input_during_tts');
+          }
           lastFinalTranscript = acceptedText;
           accumulatedText = accumulatedText ? accumulatedText + '，' + acceptedText : acceptedText;
           lastTranscriptText = accumulatedText;
@@ -635,6 +659,14 @@ export function initVoicePanel({
       if (cloudWs !== ws) return;
       sendRecognitionConfig(ws, provider);
       setStatus('listening');
+      if (transcript && /^正在(启动本地语音模型|连接.+语音识别)/.test(transcript.textContent || '')) transcript.textContent = '';
+      // 如果本地服务已连接但 config_ok 因旧连接/竞态未回来，也不要让界面一直卡在启动文案。
+      setTimeout(() => {
+        if (cloudWs === ws && micActive && transcript && /^正在(启动本地语音模型|连接.+语音识别)/.test(transcript.textContent || '')) {
+          transcript.textContent = '';
+          setStatus('listening');
+        }
+      }, 900);
       // 注意：此处不重置 accumulatedText，由调用方在首次启动时负责清空
     };
 
@@ -681,14 +713,19 @@ export function initVoicePanel({
     cloudProcessor.onaudioprocess = (e) => {
       const f32 = e.inputBuffer.getChannelData(0);
       const i16 = new Int16Array(f32.length);
+      const provider = getAsrProvider();
+      // 火山/豆包对近场音量要求更明显。Mac 默认输入有时非常低，导致服务端持续返回空 result.text。
+      // 仅对云端 ASR 做温和软件增益，本地模型保持原始音量，避免改变本地 VAD 行为。
+      const inputGain = provider === 'volcengine' ? 6 : 1;
       for (let i = 0; i < f32.length; i++) {
-        i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768));
+        i16[i] = Math.max(-32768, Math.min(32767, f32[i] * 32768 * inputGain));
       }
       if (bargeinBuffering) {
-        // TTS 播放中：写入环形缓冲而非发送，供打断时回放
+        // TTS 播报期间防自激：默认不把麦克风音频送给 ASR，避免 AI 自己说的话被识别成用户输入。
+        // 仍保留近端音频环形缓冲；只有检测到用户插话并停止 TTS 后，才短暂打开 ASR 窗口。
         bargeinBuffer.push(i16);
         if (bargeinBuffer.length > BARGEIN_MAX_CHUNKS) bargeinBuffer.shift();
-        return;
+        if (isTtsSelfEchoGuardEnabled()) return;
       }
       if (!cloudWs || cloudWs.readyState !== WebSocket.OPEN) return;
       cloudWs.send(i16.buffer);
@@ -941,8 +978,8 @@ export function initVoicePanel({
       suspendedByMedia = true;
       stopVoiceInput({ keepIntent: true, reason: '视频模式中，语音已暂停', endTurn: false });
     },
-    // TTS 模式：只停云端 ASR WebSocket，保持 mic 硬件 + ScriptProcessor
-    // 开启预缓冲：打断时可回放最近 1.5s 的音频，避免开头几个字丢失
+    // TTS 模式：保持麦克风硬件和本地音量检测，但默认阻断 ASR 上行，防止 AI 播报被自己识别。
+    // 如检测到用户插话，会先停止/压低 TTS，再打开 ASR 窗口捕获用户指令。
     suspendForTTS: (turnId = null) => {
       if (turnId && voiceSession.activeTurnId && turnId !== voiceSession.activeTurnId) return;
       if (turnId && !voiceSession.activeTurnId) voiceSession.activeTurnId = turnId;
@@ -955,12 +992,20 @@ export function initVoicePanel({
       duckLowFrames = 0;
       bargeinBuffer = [];
       bargeinBuffering = true;
-      stopCloudStream({ preserveProcessor: true }); // 保留 Processor，只断 WS
+      ttsSpeakingActive = true;
+      if (isTtsSelfEchoGuardEnabled()) {
+        // 直接关掉 ASR WebSocket，避免服务端收到 TTS 回放造成转写/自循环。
+        // preserveProcessor=true：不释放麦克风处理器，仍可做本地打断检测。
+        stopCloudStream({ preserveProcessor: true });
+      }
       setStatus('speaking');
     },
     resumeAfterMedia: () => {
       clearBargeinNoSpeechTimer(); // TTS 正常结束，不需要续播
-      resumeVoiceInputFromMedia(false);
+      ttsSpeakingActive = false;
+      bargeinBuffering = false;
+      if (suspendedByMedia) resumeVoiceInputFromMedia(false);
+      else if (micActive) setStatus('listening');
     },
     abortSpeaking,
     syncTurn: (turnId, state = 'event') => {

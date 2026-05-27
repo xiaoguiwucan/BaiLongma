@@ -20,6 +20,27 @@ function getClient() {
   return client
 }
 
+
+function sanitizeUnicodeString(value = '') {
+  // Remove invalid lone surrogate code units. Some ASR/Wechat emoji fragments can
+  // produce strings that JSON.stringify emits as \udxxx, which several OpenAI-
+  // compatible gateways reject with "lone leading surrogate".
+  return String(value)
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '�')
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '�')
+}
+
+function sanitizeForProviderJson(value) {
+  if (typeof value === 'string') return sanitizeUnicodeString(value)
+  if (Array.isArray(value)) return value.map(sanitizeForProviderJson)
+  if (value && typeof value === 'object') {
+    const out = {}
+    for (const [k, v] of Object.entries(value)) out[k] = sanitizeForProviderJson(v)
+    return out
+  }
+  return value
+}
+
 function shouldEnableDeepSeekThinking(thinking) {
   if (!thinking) return false
   if (config.model === 'deepseek-chat') return false
@@ -31,7 +52,7 @@ async function streamOnce({ messages, toolSchemas, temperature, topP, maxTokens,
   const requestParams = {
     model: config.model,
     temperature,
-    messages,
+    messages: sanitizeForProviderJson(messages),
     stream: true,
     stream_options: { include_usage: true },
   }

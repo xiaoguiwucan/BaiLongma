@@ -16,6 +16,7 @@ const createPrimaryPanel = () => `
       <div class="brand-title" id="agent-brand-name">Longma AI Agent</div>
     </div>
     <button class="voice-btn" id="voice-btn" title="麦克风 开/关" type="button">🎤</button>
+    <button class="hotspot-btn" id="hotspot-btn" title="实时舆情/热点平台 (H)" type="button">热</button>
     <button class="video-btn" id="video-btn" title="视频模式 (V)" type="button">⊞</button>
     <button class="music-btn" id="music-btn" title="音乐模式 (M)" type="button" hidden>♪</button>
     <button class="settings-btn" id="settings-btn" title="设置" type="button">⚙</button>
@@ -156,6 +157,7 @@ const createSettingsModal = () => `
         <button class="settings-nav-item" data-tab="llm" type="button">LLM 模型</button>
         <button class="settings-nav-item" data-tab="media" type="button">媒体能力</button>
         <button class="settings-nav-item" data-tab="social" type="button">社交媒体</button>
+        <button class="settings-nav-item" data-tab="wechat-groups" type="button">微信群助手</button>
         <button class="settings-nav-item" data-tab="voice" type="button">语音识别</button>
         <button class="settings-nav-item" data-tab="web-search" type="button">上网搜索</button>
         <button class="settings-nav-item" data-tab="security" type="button">安全沙箱</button>
@@ -340,6 +342,89 @@ const createSettingsModal = () => `
           </div>
         </div>
 
+
+        <!-- ── 微信群助手 tab ── -->
+        <div class="settings-tab" data-tab="wechat-groups">
+          <div class="settings-section wechaty-group-settings">
+            <div class="settings-section-label">微信群助手（@ 回复）</div>
+            <div class="settings-platform-status" id="wechaty-duty-status">○ 未连接</div>
+            <p class="settings-hint">先登录微信，再从真实获取到的群列表里勾选允许小白龙响应的群。开启后，只有在被 @ 当前扫码登录微信号时才会调用大模型回复；没有 @ 的群消息只归档，不打扰。</p>
+            <div class="wechaty-login-card">
+              <div>
+                <div class="wechaty-login-title">微信登录状态</div>
+                <div class="wechaty-login-sub" id="wechaty-login-sub">未登录。点击“登录/恢复微信”后，如本机没有登录态会显示二维码。</div>
+              </div>
+              <button class="settings-save-btn" id="wechaty-start-btn" type="button">登录/恢复微信</button>
+            </div>
+            <div class="wechaty-toolbar">
+              <label class="wechaty-master-toggle">
+                <input id="wechaty-duty-enabled" type="checkbox" checked>
+                <span>启用微信群 @ 回复</span>
+              </label>
+              <button class="settings-save-btn" id="wechaty-refresh-rooms-btn" type="button">刷新真实群列表</button>
+            </div>
+            <div class="wechaty-qr-area" id="wechaty-qr-area" style="display:none;">
+              <img id="wechaty-qr-img" src="" alt="Wechaty 微信登录二维码">
+              <div>用要接入群聊的微信扫码登录；登录成功后会自动获取群列表。</div>
+            </div>
+            <div class="wechaty-room-tools">
+              <input class="settings-input" id="wechaty-room-filter" type="search" placeholder="搜索群名…">
+              <span class="wechaty-selected-count" id="wechaty-selected-count">未获取群列表</span>
+            </div>
+            <div class="wechaty-room-list" id="wechaty-room-list">
+              <div class="wechaty-empty">点击“连接/恢复微信”后刷新群列表</div>
+            </div>
+            <div class="settings-row-action">
+              <button class="settings-save-btn" id="wechaty-save-groups-btn" type="button">保存并生效</button>
+              <button class="settings-save-btn" id="wechaty-view-memory-btn" type="button">查看群记忆</button>
+              <span class="settings-feedback" id="wechaty-duty-feedback"></span>
+            </div>
+            <div class="wechaty-memory-preview" id="wechaty-memory-preview" hidden></div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-label">Honcho 群知识库</div>
+            <div class="settings-platform-status" id="wechaty-honcho-status">○ 未启用</div>
+            <p class="settings-hint">我已经按本机部署给你预填好了：本地地址 http://127.0.0.1:8018，知识库 bailongma-wechat-memory。群记忆只使用 Honcho，不启用本地兜底；每个微信群独立 session，群之间严格隔离。</p>
+            <div class="settings-row">
+              <label class="settings-label" for="honcho-enabled">启用 Honcho</label>
+              <input id="honcho-enabled" type="checkbox" style="width:auto;flex:none;">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="honcho-environment">环境</label>
+              <select class="settings-select" id="honcho-environment">
+                <option value="local">local · 本地 Honcho</option>
+                <option value="demo">demo · 官方测试</option>
+                <option value="production">production · 官方生产</option>
+              </select>
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="honcho-baseurl">Base URL</label>
+              <input class="settings-input" id="honcho-baseurl" type="text" placeholder="http://127.0.0.1:8018">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="honcho-apikey">API Key</label>
+              <input class="settings-input" id="honcho-apikey" type="password" placeholder="已默认使用 bailongma-local-honcho；留空保持不变">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="honcho-appid">知识库 ID</label>
+              <input class="settings-input" id="honcho-appid" type="text" placeholder="bailongma-wechat-memory">
+            </div>
+            <div class="settings-row">
+              <label class="settings-label" for="honcho-appname">App 名称</label>
+              <input class="settings-input" id="honcho-appname" type="text" placeholder="BaiLongma WeChat Memory">
+            </div>
+            <div class="settings-row-action">
+              <button class="settings-save-btn" id="honcho-save-btn" type="button">一键启用/保存群知识库</button>
+              <span class="settings-feedback" id="honcho-feedback"></span>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-label">安全黑名单</div>
+            <p class="settings-hint">微信群入口默认禁止让大模型执行危险电脑操作。命中后会直接拒绝，只允许解释风险或给安全手动步骤。不包含逆向和成人内容过滤。</p>
+            <div class="wechaty-guard-list" id="wechaty-guard-list"></div>
+          </div>
+        </div>
+
         <!-- ── 语音 tab ── -->
         <div class="settings-tab" data-tab="voice">
           <div class="settings-section">
@@ -351,6 +436,7 @@ const createSettingsModal = () => `
                 <option value="aliyun">阿里云百炼（推荐）</option>
                 <option value="tencent">腾讯云 ASR</option>
                 <option value="xunfei">科大讯飞 RTASR</option>
+                <option value="volcengine">火山引擎/豆包 ASR</option>
               </select>
             </div>
             <div id="voice-cred-local">
@@ -396,6 +482,21 @@ const createSettingsModal = () => `
                 <input class="settings-input" type="password" id="voice-xunfei-apikey" placeholder="留空则不修改">
               </div>
             </div>
+            <div id="voice-cred-volcengine" style="display:none;">
+              <p class="settings-hint">火山引擎/豆包流式语音识别。按控制台“服务接口认证信息”填写：APP ID 填到 APP ID，Access Token 填到 Access Token；Secret Key 当前不用填。</p>
+              <div class="settings-row">
+                <label class="settings-label" for="voice-volcengine-appkey">APP ID</label>
+                <input class="settings-input" type="password" id="voice-volcengine-appkey" placeholder="控制台里的 APP ID">
+              </div>
+              <div class="settings-row">
+                <label class="settings-label" for="voice-volcengine-accesskey">Access Token</label>
+                <input class="settings-input" type="password" id="voice-volcengine-accesskey" placeholder="控制台里的 Access Token，留空则不修改">
+              </div>
+              <div class="settings-row">
+                <label class="settings-label" for="voice-volcengine-resourceid">Resource ID</label>
+                <input class="settings-input" type="text" id="voice-volcengine-resourceid" placeholder="默认 volc.bigasr.sauc.duration">
+              </div>
+            </div>
           </div>
 
           <div class="settings-section">
@@ -425,9 +526,9 @@ const createSettingsModal = () => `
             </div>
             <div class="settings-row">
               <label class="settings-label" for="voice-wake-words">唤醒词</label>
-              <input class="settings-input" type="text" id="voice-wake-words" placeholder="小龙马，龙马，白龙马">
+              <input class="settings-input" type="text" id="voice-wake-words" placeholder="贾维斯，Jarvis，小龙马，龙马，白龙马">
             </div>
-            <p class="settings-hint">启用后，普通说话/视频声音会被忽略；只有识别到唤醒词才会把指令发送给助手。可以说“龙马，帮我查天气”，或只说“龙马”后 8 秒内继续说指令。</p>
+            <p class="settings-hint">启用后，普通说话/视频声音会被忽略；只有识别到唤醒词才会把指令发送给助手。可以说“贾维斯，关闭视频”或“龙马，帮我查天气”；只说唤醒词后 8 秒内继续说指令也可以。</p>
           </div>
 
 
@@ -646,6 +747,20 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.3.0</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群助手里程碑版：扫码登录、多群勾选、群里 @ 后调用大模型回复，并加入 Honcho 群知识库入口。</p>
+                <ul class="release-note-points">
+                  <li>新增独立“微信群助手”设置页，登录状态、群列表和已选群组都显示真实运行状态。</li>
+                  <li>修复保存群组后 Wechaty 掉线、@ 后无响应、以及测试话术硬编码回复的问题。</li>
+                  <li>群消息 @ 登录账号后会进入 LLM，并 @ 原提问人回复，避免暴露内部 ID。</li>
+                  <li>新增 Honcho 群知识库配置和预览入口，每个微信群独立 session，避免记忆串群。</li>
+                  <li>新增微信群高危指令黑名单，默认拒绝删除文件、外传密钥、执行命令、支付转账等危险请求。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.2.0</span>

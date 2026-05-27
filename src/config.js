@@ -566,6 +566,54 @@ export function setMinimaxKey(key) {
   }
 }
 
+
+// ── Honcho memory config for WeChat groups ──
+export const DEFAULT_HONCHO_CONFIG = {
+  enabled: true,
+  apiKey: 'bailongma-local-honcho',
+  environment: 'local',
+  baseURL: 'http://127.0.0.1:8018',
+  appId: 'bailongma-wechat-memory',
+  appName: 'BaiLongma WeChat Memory',
+}
+
+export function getHonchoConfig() {
+  let stored = {}
+  try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.honcho || {} } catch {}
+  const env = stored.environment || globalThis.process?.env?.HONCHO_ENVIRONMENT || DEFAULT_HONCHO_CONFIG.environment
+  return {
+    enabled: stored.enabled === true,
+    apiKey: stored.apiKey || globalThis.process?.env?.HONCHO_API_KEY || (env === 'local' ? DEFAULT_HONCHO_CONFIG.apiKey : ''),
+    environment: env,
+    baseURL: stored.baseURL || globalThis.process?.env?.HONCHO_BASE_URL || (env === 'local' ? DEFAULT_HONCHO_CONFIG.baseURL : ''),
+    appId: stored.appId || globalThis.process?.env?.HONCHO_APP_ID || DEFAULT_HONCHO_CONFIG.appId,
+    appName: stored.appName || DEFAULT_HONCHO_CONFIG.appName,
+  }
+}
+
+export function setHonchoConfig(updates = {}) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.honcho || {}
+  const next = { ...current }
+  if (Object.prototype.hasOwnProperty.call(updates, 'enabled')) next.enabled = updates.enabled === true
+  for (const key of ['apiKey', 'environment', 'baseURL', 'appId', 'appName']) {
+    if (!Object.prototype.hasOwnProperty.call(updates, key)) continue
+    const val = String(updates[key] || '').trim()
+    if (val) next[key] = val
+    else if (updates[`clear_${key}`] === true) delete next[key]
+  }
+  if (!next.environment) next.environment = DEFAULT_HONCHO_CONFIG.environment
+  if (next.environment === 'local') {
+    if (!next.apiKey) next.apiKey = DEFAULT_HONCHO_CONFIG.apiKey
+    if (!next.baseURL) next.baseURL = DEFAULT_HONCHO_CONFIG.baseURL
+    if (!next.appId) next.appId = DEFAULT_HONCHO_CONFIG.appId
+  }
+  if (!next.appName) next.appName = DEFAULT_HONCHO_CONFIG.appName
+  writeStoredConfig({ ...existing, honcho: next })
+  return getHonchoConfig()
+}
+
 // ── Social media platform config ──
 
 const SOCIAL_ENV_KEYS = [
@@ -574,6 +622,65 @@ const SOCIAL_ENV_KEYS = [
   'WECHAT_OFFICIAL_APP_ID', 'WECHAT_OFFICIAL_APP_SECRET', 'WECHAT_OFFICIAL_TOKEN',
   'WECOM_BOT_KEY', 'WECOM_INCOMING_TOKEN',
 ]
+
+
+const DEFAULT_WECHATY_DUTY_GROUP_NAMES = ['值班群', 'PT站看片狂魔小群']
+
+export function getWechatyDutyGroupConfig() {
+  let stored = {}
+  try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social?.wechatyDutyGroup || {} } catch {}
+  const rawNames = Array.isArray(stored.groupNames) ? stored.groupNames : DEFAULT_WECHATY_DUTY_GROUP_NAMES
+  const groupNames = [...new Set(rawNames.map(v => String(v || '').trim()).filter(Boolean))]
+  return {
+    enabled: stored.enabled !== false,
+    groupNames: groupNames.length ? groupNames : DEFAULT_WECHATY_DUTY_GROUP_NAMES,
+    runtime: stored.runtime && typeof stored.runtime === 'object' ? stored.runtime : {},
+  }
+}
+
+export function setWechatyDutyGroupConfig(updates = {}) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.social?.wechatyDutyGroup || {}
+  const next = { ...current }
+  if (Object.prototype.hasOwnProperty.call(updates, 'enabled')) next.enabled = updates.enabled !== false
+  const rawNames = updates.groupNames ?? updates.group_names ?? updates.groups
+  if (rawNames !== undefined) {
+    const names = (Array.isArray(rawNames) ? rawNames : String(rawNames || '').split(/[，,;；\n]+/))
+      .map(v => String(v || '').trim())
+      .filter(Boolean)
+    next.groupNames = [...new Set(names)]
+  }
+  const social = { ...(existing.social || {}), wechatyDutyGroup: next }
+  writeStoredConfig({ ...existing, social })
+  return getWechatyDutyGroupConfig()
+}
+
+export function setWechatyDutyGroupRuntime(runtime = {}) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.social?.wechatyDutyGroup || {}
+  const safeRuntime = {
+    status: String(runtime.status || current.runtime?.status || '').trim(),
+    loginUser: String(runtime.loginUser || current.runtime?.loginUser || '').trim(),
+    rooms: Array.isArray(runtime.rooms) && runtime.rooms.length ? runtime.rooms.map(room => ({
+      id: String(room?.id || '').trim(),
+      topic: String(room?.topic || '').trim(),
+      selected: room?.selected === true,
+    })).filter(room => room.id && room.topic) : (Array.isArray(current.runtime?.rooms) ? current.runtime.rooms : []),
+    roomIds: runtime.roomIds && typeof runtime.roomIds === 'object' && Object.keys(runtime.roomIds).length ? runtime.roomIds : (current.runtime?.roomIds || {}),
+    lastRoomRefreshAt: String(runtime.lastRoomRefreshAt || current.runtime?.lastRoomRefreshAt || '').trim(),
+    updatedAt: new Date().toISOString(),
+    lastError: String(runtime.lastError || '').trim(),
+    puppet: String(runtime.puppet || current.runtime?.puppet || '').trim(),
+  }
+  const social = {
+    ...(existing.social || {}),
+    wechatyDutyGroup: { ...current, runtime: safeRuntime },
+  }
+  writeStoredConfig({ ...existing, social })
+  return getWechatyDutyGroupConfig()
+}
 
 // ── WeChat ClawBot credentials (written automatically after QR scan, not exposed in SOCIAL_ENV_KEYS) ──
 
@@ -628,9 +735,9 @@ export function setSocialConfig(updates) {
   writeStoredConfig({ ...existing, social: next })
 }
 
-const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret']
+const VOICE_SECRET_KEYS = ['aliyunApiKey', 'tencentSecretId', 'tencentSecretKey', 'tencentAppId', 'xunfeiAppId', 'xunfeiApiKey', 'xunfeiApiSecret', 'volcengineAppKey', 'volcengineAccessKey', 'volcengineResourceId']
 const VOICE_CONFIG_KEYS = ['asrProvider', 'whisperModel', 'localAsrModel', 'wakeWordEnabled', 'wakeWords', 'speakerVerificationEnabled', ...VOICE_SECRET_KEYS]
-const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei'])
+const ASR_PROVIDERS = new Set(['local', 'aliyun', 'tencent', 'xunfei', 'volcengine'])
 const WHISPER_MODELS = new Set(['tiny', 'tiny.en', 'base', 'base.en', 'small', 'small.en', 'medium', 'medium.en', 'large', 'large-v2', 'large-v3', 'turbo'])
 const LOCAL_ASR_MODELS = new Set(['sensevoice-small', ...WHISPER_MODELS])
 

@@ -153,3 +153,6 @@ __pycache__/
 *.pyc
 
 models/SenseVoiceSmall/
+# Local browser/session/runtime scratch
+.playwright-mcp/
+bailongma-duty-group.memory-card.json

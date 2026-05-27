@@ -11,7 +11,7 @@ import { getQuotaStatus } from './quota.js'
 import { isRunning, stopLoop, startLoop } from './control.js'
 import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
-import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
+import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
@@ -20,6 +20,10 @@ import { persistAppState } from './capabilities/executor.js'
 import { MinimaxProvider } from './providers/minimax.js'
 import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
+import { configureWechatyDutyGroup, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
+import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
+import { getWeChatGroupMemoryStatus, listWeChatGroupMemory } from './social/wechat-group-memory.js'
+import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
@@ -230,6 +234,85 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       logoutClawbot()
       emitEvent('social_status', { platform: 'wechat-clawbot', status: 'idle' })
       return jsonResponse(res, 200, { ok: true })
+    }
+
+
+
+    // GET /social/wechaty-duty-group/status — 查看 Wechaty 值班群连接/扫码状态
+    if (req.method === 'GET' && url.pathname === '/social/wechaty-duty-group/status') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      return jsonResponse(res, 200, { ok: true, ...getWechatyDutyGroupStatus() })
+    }
+
+    // GET /social/wechaty-duty-group/rooms — 获取当前微信号加入的群列表，用于设置页多选
+    if (req.method === 'GET' && url.pathname === '/social/wechaty-duty-group/rooms') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const result = await listWechatyDutyGroupRooms()
+      return jsonResponse(res, result.ok ? 200 : 409, result)
+    }
+
+    // POST /social/wechaty-duty-group/start — 启动 Wechaty 扫码，可接入多个群；默认“值班群”和“PT站看片狂魔小群”
+    if (req.method === 'POST' && url.pathname === '/social/wechaty-duty-group/start') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        const saved = getWechatyDutyGroupConfig()
+        const groupNames = body.group_names || body.groupNames || body.groups || body.group_name || body.groupName || saved.groupNames
+        const enabled = body.enabled ?? saved.enabled
+        configureWechatyDutyGroup({ groupNames, enabled })
+        const before = getWechatyDutyGroupStatus()
+        if (!['idle', 'error', 'disconnected'].includes(before.status)) {
+          return jsonResponse(res, 200, { ok: true, already_running: true, ...before })
+        }
+        startWechatyDutyGroupConnector({ pushMessage, emitEvent, groupNames, enabled }).catch(err =>
+          console.warn('[social] wechaty-duty-group start failed:', err.message)
+        )
+        jsonResponse(res, 200, { ok: true, ...getWechatyDutyGroupStatus() })
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
+    }
+
+    // POST /social/wechaty-duty-group/stop — 停止 Wechaty 值班群连接
+    if (req.method === 'POST' && url.pathname === '/social/wechaty-duty-group/stop') {
+      if (!requireLocalOrToken(req, res, url)) return
+      stopWechatyDutyGroupConnector().then(() => jsonResponse(res, 200, { ok: true, ...getWechatyDutyGroupStatus() }))
+        .catch(err => jsonResponse(res, 500, { ok: false, error: err.message }))
+      return
+    }
+
+    // GET /social/wechat-groups — 最近活跃微信群列表
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups') {
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 100)
+      const hours = Math.min(parseInt(url.searchParams.get('hours') || '72'), 24 * 30)
+      return jsonResponse(res, 200, { ok: true, groups: listRecentWeChatGroups({ limit, hours }) })
+    }
+
+    // GET /social/wechat-groups/memory?group_id=xxx&category=task
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/memory') {
+      const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
+      if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
+      const category = url.searchParams.get('category') || ''
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '80'), 300)
+      const result = await listWeChatGroupMemory({ groupId: rawGroupId, category, limit })
+      return jsonResponse(res, 200, { ok: true, group_id: rawGroupId, ...result })
+    }
+
+    // GET /social/wechat-groups/summary?group_id=xxx&limit=100&hours=24
+    // 本地抽取式总结：不额外调用大模型，适合作为自检/快速查看。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/summary') {
+      const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
+      const groupExternalId = rawGroupId.startsWith('wechat:clawbot-group:') ? rawGroupId : makeWeChatGroupExternalId(rawGroupId)
+      if (!groupExternalId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '100'), 300)
+      const hours = Math.min(parseInt(url.searchParams.get('hours') || '24'), 24 * 30)
+      const messages = getRecentWeChatGroupMessages(groupExternalId, { limit, hours })
+      return jsonResponse(res, 200, {
+        ok: true,
+        group_id: groupExternalId,
+        channel: WECHAT_GROUP_CHANNEL,
+        count: messages.length,
+        summary: buildWeChatGroupSummary(messages),
+        messages,
+      })
     }
 
     if (isSocialWebhookPath(url.pathname)) {
@@ -794,7 +877,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /settings/social — read per-platform configuration status (plaintext keys not returned)
     if (req.method === 'GET' && url.pathname === '/settings/social') {
-      jsonResponse(res, 200, { ok: true, social: getSocialConfig() })
+      jsonResponse(res, 200, { ok: true, social: getSocialConfig(), wechatyDutyGroup: getWechatyDutyGroupConfig(), wechatyDutyGroupStatus: getWechatyDutyGroupStatus(), honcho: getHonchoConfig(), honchoStatus: getWeChatGroupMemoryStatus(), guardRules: getWeChatCommandGuardRules() })
       return
     }
 
@@ -828,6 +911,57 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           jsonResponse(res, 400, { ok: false, error: err.message })
         }
       })
+      return
+    }
+
+    // POST /settings/wechat-groups/honcho — 保存 Honcho 群知识库配置
+    if (req.method === 'POST' && url.pathname === '/settings/wechat-groups/honcho') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        try {
+          const honcho = setHonchoConfig({
+            enabled: body.enabled,
+            apiKey: body.apiKey,
+            environment: body.environment,
+            baseURL: body.baseURL,
+            appId: body.appId,
+            appName: body.appName,
+          })
+          jsonResponse(res, 200, { ok: true, honcho, honchoStatus: getWeChatGroupMemoryStatus() })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
+    }
+
+    // POST /settings/social/wechaty-duty-group — 保存微信群助手开关和多选群组，并按需热重启
+    if (req.method === 'POST' && url.pathname === '/settings/social/wechaty-duty-group') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(async body => {
+        try {
+          const cfg = setWechatyDutyGroupConfig({
+            enabled: body.enabled,
+            groupNames: body.group_names || body.groupNames || body.groups,
+          })
+          if (cfg.enabled) {
+            // 保存群选择不能重启 Wechaty。重启会破坏刚扫码成功的 Web 微信会话，导致用户保存后立刻掉线。
+            configureWechatyDutyGroup({ groupNames: cfg.groupNames, enabled: true })
+            const current = getWechatyDutyGroupStatus()
+            if (['idle', 'error'].includes(current.status)) {
+              await startWechatyDutyGroupConnector({ pushMessage, emitEvent, groupNames: cfg.groupNames, enabled: true })
+            } else {
+              await syncWechatyDutyGroupRooms().catch(err => console.warn('[social] wechaty-duty-group sync rooms failed:', err.message))
+            }
+          } else {
+            configureWechatyDutyGroup({ groupNames: cfg.groupNames, enabled: false })
+            await stopWechatyDutyGroupConnector()
+          }
+          jsonResponse(res, 200, { ok: true, wechatyDutyGroup: cfg, status: getWechatyDutyGroupStatus() })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
       return
     }
 
@@ -1369,6 +1503,84 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
   cloudWss.on('connection', (ws) => {
     let session = null
     let configured = false
+    let lastConfig = null
+    let reconnectingVolc = false
+    let audioFrameCount = 0
+    let lastAudioStatAt = 0
+    let cloudAsrProvider = 'aliyun'
+    let volcHadSpeech = false
+    let volcLastSpeechAt = 0
+    let volcFlushTimer = null
+    let volcFlushing = false
+
+    function reconnectVolcSession() {
+      if (cloudAsrProvider !== 'volcengine' || !lastConfig || ws.readyState !== 1 || reconnectingVolc) return
+      reconnectingVolc = true
+      setTimeout(() => {
+        reconnectingVolc = false
+        if (cloudAsrProvider !== 'volcengine' || !lastConfig || ws.readyState !== 1) return
+        console.log('[CloudASR][volcengine] reconnect session')
+        try { session?.close() } catch {}
+        session = createCloudASRSession(
+          lastConfig,
+          (text, isFinal) => { try { ws.send(JSON.stringify({ type: 'transcript', text, is_final: isFinal })) } catch {} },
+          (errMsg) => { console.warn('[CloudASR]', errMsg); try { ws.send(JSON.stringify({ type: 'error', message: errMsg })) } catch {} },
+          () => {}
+        )
+      }, 180)
+    }
+
+    function resetVolcVad() {
+      volcHadSpeech = false
+      volcLastSpeechAt = 0
+      volcFlushing = false
+      if (volcFlushTimer) { clearTimeout(volcFlushTimer); volcFlushTimer = null }
+    }
+
+    function maybeFlushVolcAfterSilence(rms) {
+      if (cloudAsrProvider !== 'volcengine' || !session) return
+      const now = Date.now()
+      // 火山/豆包大模型流式接口需要明确结束一段音频后才稳定返回文本。
+      // 这里用后端 RMS 做轻量 VAD：检测到说话后，停顿约 900ms 自动 flush。
+      if (rms >= 0.018) {
+        volcHadSpeech = true
+        volcLastSpeechAt = now
+        if (volcFlushTimer) { clearTimeout(volcFlushTimer); volcFlushTimer = null }
+        return
+      }
+      if (!volcHadSpeech || !volcLastSpeechAt || volcFlushTimer) return
+      const wait = Math.max(180, 1400 - (now - volcLastSpeechAt))
+      volcFlushTimer = setTimeout(() => {
+        volcFlushTimer = null
+        if (!session || !volcHadSpeech) return
+        console.log('[CloudASR][volcengine] auto flush after silence')
+        volcFlushing = true
+        try { session.flush() } catch {}
+        resetVolcVad()
+        reconnectVolcSession()
+      }, wait)
+    }
+
+    function logPcmStat(raw) {
+      audioFrameCount++
+      const now = Date.now()
+      const buf = Buffer.isBuffer(raw) ? raw : Buffer.from(raw)
+      let sum = 0
+      let peak = 0
+      const samples = Math.floor(buf.length / 2)
+      for (let i = 0; i < samples; i++) {
+        const v = buf.readInt16LE(i * 2)
+        const a = Math.abs(v)
+        peak = Math.max(peak, a)
+        sum += v * v
+      }
+      const rms = samples ? Math.sqrt(sum / samples) / 32768 : 0
+      if (audioFrameCount <= 5 || now - lastAudioStatAt >= 1500) {
+        lastAudioStatAt = now
+        console.log('[CloudASR] pcm', { n: audioFrameCount, bytes: buf.length, rms: Number(rms.toFixed(5)), peak })
+      }
+      return rms
+    }
 
     ws.on('message', (raw) => {
       // First frame must be a JSON config frame
@@ -1379,12 +1591,18 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           // Read raw credentials from config.json
           let rawCfg = {}
           try { rawCfg = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.voice || {} } catch {}
+          const provider = rawCfg.asrProvider || msg.provider || 'aliyun'
+          cloudAsrProvider = provider
+          resetVolcVad()
+          console.log('[CloudASR] config', { provider, lang: msg.lang || 'zh' })
+          lastConfig = { provider, lang: msg.lang || 'zh', ...rawCfg }
           session = createCloudASRSession(
-            { provider: msg.provider || 'aliyun', lang: msg.lang || 'zh', ...rawCfg },
+            lastConfig,
             (text, isFinal) => {
               try { ws.send(JSON.stringify({ type: 'transcript', text, is_final: isFinal })) } catch {}
             },
             (errMsg) => {
+              console.warn('[CloudASR]', errMsg)
               try { ws.send(JSON.stringify({ type: 'error', message: errMsg })) } catch {}
             },
             () => { try { ws.close() } catch {} }
@@ -1395,7 +1613,9 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       }
       // Subsequent frames are PCM binary
       if (raw instanceof Buffer) {
-        session?.sendAudio(raw)
+        const rms = logPcmStat(raw)
+        maybeFlushVolcAfterSilence(typeof rms === 'number' ? rms : 0)
+        if (!(cloudAsrProvider === 'volcengine' && volcFlushing)) session?.sendAudio(raw)
       } else {
         try {
           const msg = JSON.parse(raw.toString())
@@ -1404,8 +1624,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       }
     })
 
-    ws.on('close', () => { session?.close(); session = null })
-    ws.on('error', () => { session?.close(); session = null })
+    ws.on('close', () => { resetVolcVad(); session?.close(); session = null })
+    ws.on('error', () => { resetVolcVad(); session?.close(); session = null })
   })
 
   // ACUI WebSocket channel: bidirectional control + perception

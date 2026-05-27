@@ -1406,8 +1406,10 @@ let ttsPlaying = false;
 let ttsQueueGeneration = 0;
 let ttsAbortController = null;
 let ttsActiveUrl = '';
+let ttsPrefetch = null;
+let ttsPrefetchAbortController = null;
 const VOICE_FAST_MODE_STORAGE_KEY = 'bailongma-voice-fast-mode';
-const TTS_SENTENCE_BOUNDARY_RE = /[^。！？!?；;\n]{6,}[。！？!?；;]|[^\n]{18,}[，,]/g;
+const TTS_SENTENCE_BOUNDARY_RE = /[^。！？!?；;\n]{8,}[。！？!?；;]/g;
 const ttsFastState = { state: 'idle', updatedAt: 0 };
 let ttsActiveVoiceTurnId = null;
 let ttsQueueVoiceTurnId = null;
@@ -1423,8 +1425,11 @@ function setFastVoiceState(state, detail = {}) {
 }
 
 function isCurrentTtsVoiceTurn(voiceTurnId) {
+  // TTS 不能因为前端 voice session 状态不同步就被丢弃；turnId 只用于清理旧队列/打断，
+  // 当前收到的语音回复必须能播出来，否则会出现“文字回复了但没声音”。
   if (!voiceTurnId) return true;
-  return !!window.bailongmaVoice?.isCurrentTurn?.(voiceTurnId);
+  if (!window.bailongmaVoice?.isCurrentTurn) return true;
+  return window.bailongmaVoice.isCurrentTurn(voiceTurnId) || !ttsPlaying;
 }
 
 function normalizeTTSPlainText(text) {
@@ -1439,22 +1444,42 @@ function normalizeTTSPlainText(text) {
     .trim();
 }
 
+function splitLongTtsSegment(segment) {
+  const text = String(segment || '').trim();
+  if (!text || text.length <= 140) return text ? [text] : [];
+  const parts = [];
+  let rest = text;
+  while (rest.length > 140) {
+    const windowText = rest.slice(0, 140);
+    // 稳定优先：超长句才兜底切分；优先分号，最后才按逗号，避免碎片化请求。
+    let cut = Math.max(windowText.lastIndexOf('；'), windowText.lastIndexOf(';'));
+    if (cut < 70) cut = Math.max(windowText.lastIndexOf('，'), windowText.lastIndexOf(','));
+    if (cut < 70 || rest.length - cut - 1 < 16) cut = 110;
+    const part = rest.slice(0, cut + 1).trim();
+    if (part) parts.push(part);
+    rest = rest.slice(cut + 1).trim();
+  }
+  if (rest) parts.push(rest);
+  return parts;
+}
+
 function splitTtsSentences(text) {
   const plain = normalizeTTSPlainText(text);
   if (!plain) return [];
-  const parts = [];
+  const rawParts = [];
   let last = 0;
   let match;
   TTS_SENTENCE_BOUNDARY_RE.lastIndex = 0;
   while ((match = TTS_SENTENCE_BOUNDARY_RE.exec(plain)) !== null) {
     const end = match.index + match[0].length;
     const part = plain.slice(last, end).trim();
-    if (part) parts.push(part);
+    if (part) rawParts.push(part);
     last = end;
   }
   const tail = plain.slice(last).trim();
-  if (tail) parts.push(tail);
-  return parts.length ? parts : [plain];
+  if (tail) rawParts.push(tail);
+  const safeParts = rawParts.flatMap(splitLongTtsSegment);
+  return safeParts.length ? safeParts : [plain];
 }
 
 function clearTtsQueue() {
@@ -1465,6 +1490,12 @@ function clearTtsQueue() {
     try { ttsAbortController.abort(); } catch {}
     ttsAbortController = null;
   }
+  if (ttsPrefetchAbortController) {
+    try { ttsPrefetchAbortController.abort(); } catch {}
+    ttsPrefetchAbortController = null;
+  }
+  if (ttsPrefetch?.url) { try { URL.revokeObjectURL(ttsPrefetch.url); } catch {} }
+  ttsPrefetch = null;
 }
 
 // Estimate spoken char count from audio progress, snapping to a sentence boundary
@@ -1552,9 +1583,9 @@ window.stopTTS = (detail = {}) => {
 };
 
 // Called by voice-panel on impact noise: duck TTS volume without stopping
-window.duckTTS = () => {
-  if (ttsAudioEl) ttsAudioEl.volume = 0.15;
-  setFastVoiceState('ducking');
+window.duckTTS = (detail = {}) => {
+  if (ttsAudioEl) ttsAudioEl.volume = detail.strong ? 0.03 : 0.15;
+  setFastVoiceState('ducking', { strong: !!detail.strong });
 };
 
 // Called by voice-panel after confirming noise: restore original volume
@@ -1579,9 +1610,47 @@ window.resumeTTSIfNoSpeech = () => {
   playTTSReply(text, { voiceTurnId });
 };
 
+async function fetchTtsAudioUrl(item, generation) {
+  const text = typeof item === 'string' ? item : item.text;
+  const voiceTurnId = typeof item === 'string' ? ttsQueueVoiceTurnId : item.voiceTurnId;
+  if (!text || generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return null;
+  const controller = new AbortController();
+  ttsPrefetchAbortController = controller;
+  const resp = await fetch(`${API}/tts/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ text }),
+    signal: controller.signal,
+  });
+  if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return null;
+  if (!resp.ok) {
+    let errMsg = `HTTP ${resp.status}`;
+    try { const j = await resp.json(); errMsg = j.error || errMsg; } catch {}
+    throw new Error(errMsg);
+  }
+  const blob = await resp.blob();
+  if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return null;
+  const url = URL.createObjectURL(blob);
+  return { text, voiceTurnId, url };
+}
+
+function prefetchNextTtsSegment(generation) {
+  if (ttsPrefetch || ttsPrefetchAbortController || generation !== ttsQueueGeneration) return;
+  const next = ttsQueue[0];
+  if (!next) return;
+  ttsPrefetch = { pending: true, promise: fetchTtsAudioUrl(next, generation)
+    .then(result => { ttsPrefetch = result; return result; })
+    .catch(err => {
+      if (err?.name !== 'AbortError') console.warn('[TTS prefetch]', err?.message || err);
+      ttsPrefetch = null;
+      return null;
+    })
+    .finally(() => { ttsPrefetchAbortController = null; }) };
+}
+
 async function playNextTtsSegment(generation) {
   if (ttsPlaying || generation !== ttsQueueGeneration) return;
-  const item = ttsQueue.shift();
+  let item = ttsQueue.shift();
   if (!item) {
     ttsCurrentText = '';
     ttsActiveVoiceTurnId = null;
@@ -1590,39 +1659,53 @@ async function playNextTtsSegment(generation) {
     window.bailongmaVoice?.resumeAfterMedia?.();
     return;
   }
+
   const text = typeof item === 'string' ? item : item.text;
   const voiceTurnId = typeof item === 'string' ? ttsQueueVoiceTurnId : item.voiceTurnId;
   if (!isCurrentTtsVoiceTurn(voiceTurnId)) {
     playNextTtsSegment(generation);
     return;
   }
+
   ttsPlaying = true;
   ttsActiveVoiceTurnId = voiceTurnId || null;
   ttsCurrentText = text;
-  ttsAbortController = new AbortController();
   setFastVoiceState('tts_fetch', { text });
   try {
-    const resp = await fetch(`${API}/tts/stream`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ text }),
-      signal: ttsAbortController.signal,
-    });
-    if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return;
-    if (!resp.ok) {
-      let errMsg = `HTTP ${resp.status}`;
-      try { const j = await resp.json(); errMsg = j.error || errMsg; } catch {}
-      throw new Error(errMsg);
+    let audio = null;
+    if (ttsPrefetch?.pending) audio = await ttsPrefetch.promise;
+    else if (ttsPrefetch && ttsPrefetch.text === text && ttsPrefetch.voiceTurnId === voiceTurnId) audio = ttsPrefetch;
+    ttsPrefetch = null;
+
+    if (!audio) {
+      ttsAbortController = new AbortController();
+      const resp = await fetch(`${API}/tts/stream`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text }),
+        signal: ttsAbortController.signal,
+      });
+      if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return;
+      if (!resp.ok) {
+        let errMsg = `HTTP ${resp.status}`;
+        try { const j = await resp.json(); errMsg = j.error || errMsg; } catch {}
+        throw new Error(errMsg);
+      }
+      const blob = await resp.blob();
+      if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return;
+      audio = { text, voiceTurnId, url: URL.createObjectURL(blob) };
     }
-    const blob = await resp.blob();
-    if (generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return;
-    const url = URL.createObjectURL(blob);
+
+    if (!audio?.url || generation !== ttsQueueGeneration || !isCurrentTtsVoiceTurn(voiceTurnId)) return;
+    const url = audio.url;
     ttsActiveUrl = url;
     if (ttsAudioEl) { ttsAudioEl.pause(); try { URL.revokeObjectURL(ttsAudioEl.src); } catch {} }
     ttsAudioEl = new Audio(url);
+    ttsAudioEl.preload = 'auto';
     ttsAudioEl.volume = 1.0;
     window.bailongmaVoice?.suspendForTTS?.(voiceTurnId || null);
     setFastVoiceState('speaking', { text });
+    prefetchNextTtsSegment(generation);
     ttsAudioEl.onended = () => {
       try { URL.revokeObjectURL(url); } catch {}
       if (ttsActiveUrl === url) ttsActiveUrl = '';
@@ -1641,7 +1724,7 @@ async function playNextTtsSegment(generation) {
     };
     await ttsAudioEl.play();
   } catch (err) {
-    if (err?.name !== 'AbortError') console.warn('[TTS fast]', err?.message || err);
+    if (err?.name !== 'AbortError') console.warn('[TTS stable]', err?.message || err);
     ttsPlaying = false;
     ttsAudioEl = null;
     ttsActiveVoiceTurnId = null;
@@ -1654,22 +1737,16 @@ async function playNextTtsSegment(generation) {
 
 async function playTTSReply(text, options = {}) {
   const voiceTurnId = options.voiceTurnId || null;
-  if (!isCurrentTtsVoiceTurn(voiceTurnId)) return;
-  const fastMode = isFastVoiceModeEnabled();
-  const segments = fastMode ? splitTtsSentences(text) : [normalizeTTSPlainText(text)].filter(Boolean);
-  if (!segments.length) return;
-  const items = segments.map(segment => ({ text: segment, voiceTurnId }));
-
-  // 极速模式下，后端会边生成边分句推送 tts_reply。这里必须追加队列，
-  // 不能每收到一句就 clear，否则会把正在播的上一句打断，听感会变成卡顿/丢字。
-  if (fastMode && (ttsPlaying || ttsQueue.length) && (!voiceTurnId || !ttsActiveVoiceTurnId || voiceTurnId === ttsActiveVoiceTurnId)) {
-    ttsQueue.push(...items);
-    ttsQueueVoiceTurnId = voiceTurnId || ttsQueueVoiceTurnId;
-    setFastVoiceState('queued', { count: ttsQueue.length, voiceTurnId });
-    playNextTtsSegment(ttsQueueGeneration);
+  if (voiceTurnId) window.bailongmaVoice?.syncTurn?.(voiceTurnId, 'speaking_pending');
+  if (!isCurrentTtsVoiceTurn(voiceTurnId)) {
+    console.warn('[TTS stable] dropped stale tts_reply', { voiceTurnId, active: window.bailongmaVoice?.getTurnId?.() });
     return;
   }
+  const plain = normalizeTTSPlainText(text);
+  if (!plain) return;
+  const items = [{ text: plain, voiceTurnId }];
 
+  // 用户要求：语音合成不要分段。每次回复整段一次性合成播放，保持语调连续。
   clearTtsQueue();
   ttsInterruptedRemaining = '';
   ttsInterruptionApplied = false;
@@ -1677,7 +1754,7 @@ async function playTTSReply(text, options = {}) {
   ttsQueue = items;
   ttsQueueVoiceTurnId = voiceTurnId || null;
   const generation = ttsQueueGeneration;
-  setFastVoiceState('queued', { count: segments.length, voiceTurnId });
+  setFastVoiceState('queued', { count: 1, voiceTurnId });
   playNextTtsSegment(generation);
 }
 
@@ -1742,16 +1819,22 @@ chat = initChat({
   getAgentName: () => agentName,
   defaultInputPlaceholder,
   onUserMessage: (text) => {
+    if (document.body.classList.contains('video-mode') && /(?:关闭|退出|关掉|隐藏|停止).{0,6}(?:视频|影片|播放)|(?:视频|影片).{0,6}(?:关闭|退出|关掉|停止)/.test(text)) {
+      window.dispatchEvent(new CustomEvent('bailongma:media', { detail: { mode: 'video', action: 'close' } }));
+      return false;
+    }
     if (document.body.classList.contains('hotspot-mode') && /关闭|退出|关掉|隐藏/.test(text)) {
       toggleHotspot();
-      return;
+      return false;
     }
     if (document.body.classList.contains('person-card-mode') && /关闭|退出|关掉|隐藏/.test(text)) {
       setPersonCardMode(false, { source: 'chat_input' });
       return;
     }
-    if (/热点|热搜/.test(text) && !document.body.classList.contains('hotspot-mode')) {
-      toggleHotspot();
+    // 本地直达：实时舆情/热点平台是内置面板，不应该交给大模型联网搜索。
+    if (/(?:实时)?舆情(?:监测|平台|界面)?|热点(?:平台|面板|模式)?|热搜/.test(text)) {
+      if (!document.body.classList.contains('hotspot-mode')) toggleHotspot('local_command');
+      return false;
     }
     const personQuery = extractPersonCardQuery(text);
     if (personQuery) {
@@ -1948,6 +2031,30 @@ function initTTSSettings() {
   const voiceFeedback   = document.getElementById("settings-voice-feedback");
   const voiceThreshSlider = document.getElementById("settings-voice-threshold");
   const voiceThreshVal    = document.getElementById("settings-voice-threshold-val");
+  const wechatyDutyStatus = document.getElementById("wechaty-duty-status");
+  const wechatyDutyEnabled = document.getElementById("wechaty-duty-enabled");
+  const wechatyStartBtn = document.getElementById("wechaty-start-btn");
+  const wechatyRefreshRoomsBtn = document.getElementById("wechaty-refresh-rooms-btn");
+  const wechatySaveGroupsBtn = document.getElementById("wechaty-save-groups-btn");
+  const wechatyRoomList = document.getElementById("wechaty-room-list");
+  const wechatyRoomFilter = document.getElementById("wechaty-room-filter");
+  const wechatySelectedCount = document.getElementById("wechaty-selected-count");
+  const wechatyDutyFeedback = document.getElementById("wechaty-duty-feedback");
+  const wechatyLoginSub = document.getElementById("wechaty-login-sub");
+  const wechatyViewMemoryBtn = document.getElementById("wechaty-view-memory-btn");
+  const wechatyMemoryPreview = document.getElementById("wechaty-memory-preview");
+  const wechatyQrArea = document.getElementById("wechaty-qr-area");
+  const wechatyQrImg = document.getElementById("wechaty-qr-img");
+  const honchoEnabled = document.getElementById("honcho-enabled");
+  const honchoEnvironment = document.getElementById("honcho-environment");
+  const honchoBaseUrl = document.getElementById("honcho-baseurl");
+  const honchoApiKey = document.getElementById("honcho-apikey");
+  const honchoAppId = document.getElementById("honcho-appid");
+  const honchoAppName = document.getElementById("honcho-appname");
+  const honchoSaveBtn = document.getElementById("honcho-save-btn");
+  const honchoFeedback = document.getElementById("honcho-feedback");
+  const honchoStatus = document.getElementById("wechaty-honcho-status");
+  const guardList = document.getElementById("wechaty-guard-list");
 
   if (!settingsBtn || !overlay) return;
 
@@ -1960,7 +2067,7 @@ function initTTSSettings() {
       btn.classList.add("active");
       const tab = btn.dataset.tab;
       overlay.querySelector(`.settings-tab[data-tab="${tab}"]`)?.classList.add("active");
-      if (tab === "social") loadSocialSettings();
+      if (tab === "social" || tab === "wechat-groups") loadSocialSettings();
       if (tab === "security") loadSecuritySettings();
       if (tab === "web-search") loadWebSearchSettings();
       if (tab === "update") loadUpdateSettings();
@@ -2066,7 +2173,16 @@ function initTTSSettings() {
 
   async function loadSocialSettings() {
     try {
-      const { social } = await fetch(`${API}/settings/social`).then(r => r.json());
+      const { social, wechatyDutyGroup, wechatyDutyGroupStatus, honcho, honchoStatus: honchoRuntime, guardRules } = await fetch(`${API}/settings/social`).then(r => r.json());
+      applyWechatyDutyConfig(wechatyDutyGroup, wechatyDutyGroupStatus);
+      applyHonchoConfig(honcho, honchoRuntime);
+      renderGuardRules(guardRules || []);
+      if (Array.isArray(wechatyDutyGroupStatus?.rooms) && wechatyDutyGroupStatus.rooms.length) {
+        wechatyRoomsCache = wechatyDutyGroupStatus.rooms;
+      }
+      if (["connected", "logged_in", "starting"].includes(wechatyDutyGroupStatus?.status)) {
+        setTimeout(() => refreshWechatyRooms({ autoStart: false, silent: true }), 0);
+      }
       for (const [statusId, keys] of Object.entries(SOCIAL_PLATFORM_STATUS)) {
         const el = document.getElementById(statusId);
         if (!el) continue;
@@ -2084,6 +2200,288 @@ function initTTSSettings() {
       }
     } catch {}
   }
+
+  let wechatyRoomsCache = [];
+  let wechatySelectedGroupNames = new Set();
+  let wechatyConfiguredGroupNames = new Set();
+  let wechatyStatusPollTimer = null;
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+
+  function setWechatyStatus(text, ok = false) {
+    if (!wechatyDutyStatus) return;
+    wechatyDutyStatus.textContent = `${ok ? "●" : "○"} ${text}`;
+    wechatyDutyStatus.className = `settings-platform-status ${ok ? "ok" : "miss"}`;
+  }
+
+  function applyHonchoConfig(config = {}, runtime = {}) {
+    const next = {
+      enabled: config.enabled === true,
+      environment: config.environment || 'local',
+      baseURL: config.baseURL || 'http://127.0.0.1:8018',
+      appId: config.appId || runtime.workspaceId || 'bailongma-wechat-memory',
+      appName: config.appName || 'BaiLongma WeChat Memory',
+    };
+    if (honchoEnabled) honchoEnabled.checked = next.enabled;
+    if (honchoEnvironment) honchoEnvironment.value = next.environment;
+    if (honchoBaseUrl) honchoBaseUrl.value = next.baseURL;
+    if (honchoAppId) honchoAppId.value = next.appId;
+    if (honchoAppName) honchoAppName.value = next.appName;
+    if (honchoStatus) {
+      const ok = !!runtime?.enabled && !!runtime?.configured;
+      honchoStatus.textContent = ok ? `● 已接通 · ${runtime.baseURL || next.baseURL} · ${runtime.workspaceId || next.appId}` : '○ 未启用；点击“一键启用/保存群知识库”';
+      honchoStatus.className = `settings-platform-status ${ok ? 'ok' : 'miss'}`;
+    }
+  }
+
+  function renderGuardRules(rules = []) {
+    if (!guardList) return;
+    guardList.innerHTML = rules.length
+      ? rules.map(rule => `<div class="wechaty-guard-item"><span>${escapeHtml(rule.label)}</span><code>${escapeHtml(rule.id)}</code></div>`).join('')
+      : '<div class="wechaty-empty">暂无黑名单规则</div>';
+  }
+
+  function applyWechatyDutyConfig(config = {}, status = {}) {
+    if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
+    wechatyConfiguredGroupNames = new Set((config.groupNames || status.group_names || []).map(v => String(v || '').trim()).filter(Boolean));
+    if (Array.isArray(status.rooms) && status.rooms.length) {
+      wechatyRoomsCache = status.rooms;
+      wechatySelectedGroupNames = new Set(status.rooms.filter(r => r.selected).map(r => r.topic));
+    } else if (wechatyRoomsCache.length) {
+      wechatySelectedGroupNames = new Set(wechatyRoomsCache.filter(r => wechatyConfiguredGroupNames.has(r.topic) || r.selected).map(r => r.topic));
+    } else {
+      wechatySelectedGroupNames = new Set(wechatyConfiguredGroupNames);
+    }
+    const connected = status.status === "connected";
+    const matchedCount = Object.keys(status.room_ids || {}).filter(k => status.room_ids[k]).length || wechatyRoomsCache.filter(r => r.selected).length;
+    if (wechatyQrArea) wechatyQrArea.style.display = status.qr ? "flex" : "none";
+    if (wechatyQrImg && status.qr) wechatyQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(status.qr)}`;
+    if (wechatyLoginSub) {
+      if (status.status === "qr_ready") wechatyLoginSub.textContent = "等待扫码登录。请用要接入群聊的微信扫描下方二维码。";
+      else if (status.status === "starting") wechatyLoginSub.textContent = "正在恢复微信登录态；如果失效会出现二维码。";
+      else if (status.status === "logged_in") wechatyLoginSub.textContent = status.login_user ? `已登录：${status.login_user}，正在获取真实群列表…` : "已登录，正在获取真实群列表…";
+      else if (status.login_user && connected) wechatyLoginSub.textContent = `已登录：${status.login_user}。群列表会自动保持并刷新。`;
+      else if (status.status === "disconnected" || status.status === "error") wechatyLoginSub.textContent = `${status.login_user ? `上次登录：${status.login_user}。` : ''}当前微信连接已断开，系统会自动尝试恢复；也可以点击“登录/恢复微信”重新扫码。`;
+      else wechatyLoginSub.textContent = "未登录。点击“登录/恢复微信”后，如本机没有登录态会显示二维码。";
+    }
+    if (connected) setWechatyStatus(`已连接 · 真实接入 ${matchedCount} 个群`, true);
+    else if (status.status === "qr_ready") setWechatyStatus(wechatyRoomsCache.length ? `等待扫码登录 · 保留上次 ${wechatyRoomsCache.length} 个群` : "等待扫码登录", false);
+    else if (status.status === "starting" || status.status === "logged_in") setWechatyStatus("正在登录/获取真实群列表", false);
+    else if (status.status === "disconnected") setWechatyStatus(`已断线 · 保留上次 ${wechatyRoomsCache.length} 个群 · 自动恢复中`, false);
+    else if (status.status === "error") setWechatyStatus(`连接异常 · 保留上次 ${wechatyRoomsCache.length} 个群`, false);
+    else setWechatyStatus(config.enabled === false ? "已关闭" : "未登录", false);
+    renderWechatyRooms();
+  }
+
+  function renderWechatyRooms() {
+    if (!wechatyRoomList) return;
+    const keyword = String(wechatyRoomFilter?.value || "").trim().toLowerCase();
+    const selected = wechatySelectedGroupNames;
+    const rooms = wechatyRoomsCache
+      .filter(room => !keyword || String(room.topic || "").toLowerCase().includes(keyword))
+      .sort((a, b) => Number(selected.has(b.topic)) - Number(selected.has(a.topic)) || String(a.topic).localeCompare(String(b.topic), 'zh-Hans-CN'));
+    if (!rooms.length) {
+      wechatyRoomList.innerHTML = `<div class="wechaty-empty">${wechatyRoomsCache.length ? "没有匹配的群" : "暂无真实群列表。请先点击“登录/恢复微信”，扫码或恢复成功后会自动获取。"}</div>`;
+    } else {
+      wechatyRoomList.innerHTML = rooms.map(room => {
+        const topic = escapeHtml(String(room.topic || "未命名群"));
+        const id = escapeHtml(String(room.id || ""));
+        const checked = selected.has(room.topic) ? " checked" : "";
+        return `<label class="wechaty-room-item" title="${id}">
+          <input class="wechaty-room-checkbox" type="checkbox" value="${topic}" data-topic="${topic}"${checked}>
+          <span class="wechaty-room-main"><span class="wechaty-room-name">${topic}</span><span class="wechaty-room-id">${id}</span></span>
+          <span class="wechaty-room-badge">@ 回复</span>
+        </label>`;
+      }).join("");
+    }
+    updateWechatySelectedCount();
+  }
+
+  function updateWechatySelectedCount() {
+    if (!wechatySelectedCount) return;
+    if (!wechatyRoomsCache.length) {
+      const configured = wechatyConfiguredGroupNames.size;
+      wechatySelectedCount.textContent = configured ? `已配置 ${configured} 个群名，等待真实群列表匹配` : '未获取群列表';
+      return;
+    }
+    const realSelected = wechatyRoomsCache.filter(room => wechatySelectedGroupNames.has(room.topic)).length;
+    wechatySelectedCount.textContent = `真实已选 ${realSelected} / ${wechatyRoomsCache.length} 个群`;
+  }
+
+  function collectWechatySelectedRooms() {
+    const checked = [...document.querySelectorAll(".wechaty-room-checkbox:checked")]
+      .map(cb => cb.dataset.topic || cb.value)
+      .filter(Boolean);
+    wechatySelectedGroupNames = new Set(checked);
+    return checked;
+  }
+
+  async function refreshWechatyRooms({ autoStart = false, silent = false } = {}) {
+    if (wechatyRefreshRoomsBtn) wechatyRefreshRoomsBtn.disabled = true;
+    try {
+      let res = await fetch(`${API}/social/wechaty-duty-group/rooms`);
+      if (!res.ok && autoStart) {
+        await fetch(`${API}/social/wechaty-duty-group/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+        await new Promise(resolve => setTimeout(resolve, 1500));
+        res = await fetch(`${API}/social/wechaty-duty-group/rooms`);
+      }
+      const data = await res.json();
+      if (data.ok) {
+        wechatyRoomsCache = data.rooms || [];
+        wechatyConfiguredGroupNames = new Set((data.group_names || []).map(v => String(v || '').trim()).filter(Boolean));
+        wechatySelectedGroupNames = new Set(wechatyRoomsCache.filter(r => r.selected).map(r => r.topic));
+        if (wechatyDutyEnabled) wechatyDutyEnabled.checked = data.enabled !== false;
+        if (wechatyQrArea) wechatyQrArea.style.display = "none";
+        if (wechatyLoginSub) wechatyLoginSub.textContent = data.login_user ? `已登录：${data.login_user}。群列表已刷新。` : '已连接，群列表已刷新。';
+        const online = data.status === "connected" || data.status === "logged_in";
+        setWechatyStatus(`${online ? "已连接" : "正在连接"} · 真实群列表 ${wechatyRoomsCache.length} 个，已接入 ${wechatySelectedGroupNames.size} 个`, online);
+        renderWechatyRooms();
+      } else {
+        if (Array.isArray(data.rooms) && data.rooms.length) {
+          wechatyRoomsCache = data.rooms;
+          wechatySelectedGroupNames = new Set(wechatyRoomsCache.filter(r => r.selected).map(r => r.topic));
+        }
+        if (data.login_user && (data.status === "connected" || data.status === "logged_in")) {
+          setWechatyStatus("已登录但群列表刷新失败", false);
+        } else {
+          setWechatyStatus(data.status === "qr_ready" ? "等待扫码登录" : "未登录", false);
+        }
+        if (!silent) showFeedback(wechatyDutyFeedback, data.error || "群列表获取失败，请先登录/恢复微信", true);
+        renderWechatyRooms();
+      }
+    } catch {
+      if (!silent) showFeedback(wechatyDutyFeedback, "群列表获取失败", true);
+    } finally {
+      if (wechatyRefreshRoomsBtn) wechatyRefreshRoomsBtn.disabled = false;
+    }
+  }
+
+  wechatyRoomList?.addEventListener("change", (event) => {
+    const cb = event.target?.closest?.(".wechaty-room-checkbox");
+    if (!cb) return;
+    const topic = cb.dataset.topic || cb.value;
+    if (cb.checked) wechatySelectedGroupNames.add(topic);
+    else wechatySelectedGroupNames.delete(topic);
+    updateWechatySelectedCount();
+  });
+  wechatyRoomFilter?.addEventListener("input", renderWechatyRooms);
+  wechatyStartBtn?.addEventListener("click", async () => {
+    wechatyStartBtn.disabled = true;
+    setWechatyStatus("正在连接/恢复微信…", false);
+    try {
+      await fetch(`${API}/social/wechaty-duty-group/start`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({}) });
+      showFeedback(wechatyDutyFeedback, "已发起登录/恢复，请留意二维码或稍等自动恢复");
+      setTimeout(() => pollWechatyStatus({ refreshRooms: true }), 1200);
+    } catch {
+      showFeedback(wechatyDutyFeedback, "连接失败", true);
+    } finally {
+      wechatyStartBtn.disabled = false;
+    }
+  });
+  wechatyRefreshRoomsBtn?.addEventListener("click", () => refreshWechatyRooms({ autoStart: true }));
+
+  async function pollWechatyStatus({ refreshRooms = false } = {}) {
+    try {
+      const data = await fetch(`${API}/social/wechaty-duty-group/status`).then(r => r.json());
+      if (data.ok) applyWechatyDutyConfig({ enabled: data.enabled, groupNames: data.group_names }, data);
+      if (refreshRooms && ["connected", "logged_in"].includes(data.status)) {
+        await refreshWechatyRooms({ autoStart: false, silent: true });
+      }
+    } catch {}
+  }
+
+  function startWechatyStatusPolling() {
+    if (wechatyStatusPollTimer) return;
+    wechatyStatusPollTimer = setInterval(() => pollWechatyStatus({ refreshRooms: true }), 5000);
+  }
+
+  startWechatyStatusPolling();
+  honchoSaveBtn?.addEventListener("click", async () => {
+    honchoSaveBtn.disabled = true;
+    try {
+      const body = {
+        enabled: true,
+        environment: honchoEnvironment?.value || 'local',
+        baseURL: honchoBaseUrl?.value?.trim() || 'http://127.0.0.1:8018',
+        apiKey: honchoApiKey?.value?.trim() || '',
+        appId: honchoAppId?.value?.trim() || 'bailongma-wechat-memory',
+        appName: honchoAppName?.value?.trim() || 'BaiLongma WeChat Memory',
+      };
+      const res = await fetch(`${API}/settings/wechat-groups/honcho`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (honchoApiKey) honchoApiKey.value = '';
+        applyHonchoConfig(data.honcho, data.honchoStatus);
+        showFeedback(honchoFeedback, '群知识库已启用并保存');
+      } else showFeedback(honchoFeedback, data.error || '保存失败', true);
+    } catch {
+      showFeedback(honchoFeedback, '请求失败', true);
+    } finally {
+      honchoSaveBtn.disabled = false;
+    }
+  });
+
+  wechatyViewMemoryBtn?.addEventListener("click", async () => {
+    const groupNames = collectWechatySelectedRooms();
+    const firstName = groupNames[0] || wechatyRoomsCache.find(r => wechatySelectedGroupNames.has(r.topic))?.topic || wechatyRoomsCache[0]?.topic;
+    const room = wechatyRoomsCache.find(r => r.topic === firstName);
+    const groupId = room?.id || firstName;
+    if (!groupId) {
+      showFeedback(wechatyDutyFeedback, "请先选择一个群", true);
+      return;
+    }
+    wechatyViewMemoryBtn.disabled = true;
+    try {
+      const data = await fetch(`${API}/social/wechat-groups/memory?group_id=${encodeURIComponent(`wechaty:${groupId}`)}&limit=30`).then(r => r.json());
+      const items = data.items || [];
+      if (wechatyMemoryPreview) {
+        wechatyMemoryPreview.hidden = false;
+        wechatyMemoryPreview.innerHTML = `<div class="wechaty-memory-title">${escapeHtml(firstName || groupId)} · 群记忆 ${items.length} 条</div>` +
+          (items.length ? items.slice(0, 30).map(item => `<div class="wechaty-memory-item"><b>[${escapeHtml(item.metadata?.type || 'message')}]</b> ${escapeHtml(item.metadata?.sender_name || item.metadata?.target_member_name || '群组')}：${escapeHtml(item.content)}<span>${escapeHtml(String(item.createdAt || item.created_at || '').slice(0, 16))}</span></div>`).join('') : '<div class="wechaty-empty">暂无可展示记忆。群里 @ 助手或出现任务/决定/偏好/事实后会自动沉淀。</div>');
+      }
+    } catch {
+      showFeedback(wechatyDutyFeedback, "读取群记忆失败", true);
+    } finally {
+      wechatyViewMemoryBtn.disabled = false;
+    }
+  });
+
+  wechatySaveGroupsBtn?.addEventListener("click", async () => {
+    const groupNames = collectWechatySelectedRooms();
+    if (wechatyDutyEnabled?.checked && groupNames.length === 0) {
+      showFeedback(wechatyDutyFeedback, "请至少选择一个群", true);
+      return;
+    }
+    wechatySaveGroupsBtn.disabled = true;
+    try {
+      const res = await fetch(`${API}/settings/social/wechaty-duty-group`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ enabled: !!wechatyDutyEnabled?.checked, group_names: groupNames }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        applyWechatyDutyConfig(data.wechatyDutyGroup, data.status);
+        showFeedback(wechatyDutyFeedback, data.wechatyDutyGroup?.enabled === false ? "已关闭" : "已保存并生效");
+        setTimeout(() => refreshWechatyRooms({ autoStart: false }), 1200);
+      } else {
+        showFeedback(wechatyDutyFeedback, data.error || "保存失败", true);
+      }
+    } catch {
+      showFeedback(wechatyDutyFeedback, "请求失败", true);
+    } finally {
+      wechatySaveGroupsBtn.disabled = false;
+    }
+  });
 
   const fileSandboxToggle = document.getElementById("security-file-sandbox");
   const execSandboxToggle = document.getElementById("security-exec-sandbox");
@@ -2270,7 +2668,7 @@ function initTTSSettings() {
   const VOICE_LOCAL_DEFAULT_MIGRATION_KEY = "bailongma-voice-local-default-v1";
 
   function applyVoiceProviderUI(provider) {
-    const panels = { local: "voice-cred-local", aliyun: "voice-cred-aliyun", tencent: "voice-cred-tencent", xunfei: "voice-cred-xunfei" };
+    const panels = { local: "voice-cred-local", aliyun: "voice-cred-aliyun", tencent: "voice-cred-tencent", xunfei: "voice-cred-xunfei", volcengine: "voice-cred-volcengine" };
     for (const [key, id] of Object.entries(panels)) {
       const el = document.getElementById(id);
       if (el) el.style.display = key === provider ? "" : "none";
@@ -2302,12 +2700,13 @@ function initTTSSettings() {
     if (voiceThreshSlider) voiceThreshSlider.value = String(savedThresh);
     if (voiceThreshVal)    voiceThreshVal.textContent = savedThresh.toFixed(3);
 
+    // 以后端保存的语音服务商为准，避免前端旧 localStorage 继续连错误的云端 ASR。
     if (!localStorage.getItem(VOICE_LOCAL_DEFAULT_MIGRATION_KEY)) {
       localStorage.setItem(VOICE_PROVIDER_KEY, "local");
       localStorage.setItem(VOICE_LOCAL_DEFAULT_MIGRATION_KEY, "1");
     }
-    let savedProvider = serverVoice?.asrProvider || localStorage.getItem(VOICE_PROVIDER_KEY) || "local";
-    if (!["local", "aliyun", "tencent", "xunfei"].includes(savedProvider)) savedProvider = "local";
+    let savedProvider = serverVoice?.asrProvider || "local";
+    if (!["local", "aliyun", "tencent", "xunfei", "volcengine"].includes(savedProvider)) savedProvider = "local";
     if (voiceProviderSelect) voiceProviderSelect.value = savedProvider;
     const localAsrModelSelect = document.getElementById("voice-local-asr-model");
     const savedLocalModel = serverVoice?.localAsrModel || localStorage.getItem(VOICE_LOCAL_ASR_MODEL_KEY) || "sensevoice-small";
@@ -2392,6 +2791,12 @@ function initTTSSettings() {
       if (xunfeiAppid) body.xunfeiAppId = xunfeiAppid;
       const xunfeiApikey = document.getElementById("voice-xunfei-apikey")?.value?.trim();
       if (xunfeiApikey) body.xunfeiApiKey = xunfeiApikey;
+      const volcengineAppKey = document.getElementById("voice-volcengine-appkey")?.value?.trim();
+      if (volcengineAppKey) body.volcengineAppKey = volcengineAppKey;
+      const volcengineAccessKey = document.getElementById("voice-volcengine-accesskey")?.value?.trim();
+      if (volcengineAccessKey) body.volcengineAccessKey = volcengineAccessKey;
+      const volcengineResourceId = document.getElementById("voice-volcengine-resourceid")?.value?.trim();
+      if (volcengineResourceId) body.volcengineResourceId = volcengineResourceId;
 
       if (Object.keys(body).length > 0) {
         try {
@@ -2402,7 +2807,7 @@ function initTTSSettings() {
             body: JSON.stringify(body),
           });
           if (!resp.ok) throw new Error("保存失败");
-          ["voice-aliyun-key","voice-tencent-sid","voice-tencent-skey","voice-xunfei-apikey"].forEach(id => {
+          ["voice-aliyun-key","voice-tencent-sid","voice-tencent-skey","voice-xunfei-apikey","voice-volcengine-appkey","voice-volcengine-accesskey"].forEach(id => {
             const el = document.getElementById(id);
             if (el) el.value = "";
           });
@@ -2828,6 +3233,7 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
 
 // ── Media modes (video / image) ──
 (function initMediaModes() {
+  const hotspotBtn    = document.getElementById("hotspot-btn");
   const videoBtn      = document.getElementById("video-btn");
   const videoExitBtn  = document.getElementById("video-exit-btn");
   const videoFeed     = document.getElementById("video-feed");
@@ -2943,6 +3349,7 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
     videoActive = Boolean(visible);
     document.body.classList.toggle("video-mode", videoActive);
     videoBtn?.classList.toggle("active", videoActive);
+    hotspotBtn?.classList.toggle("active", document.body.classList.contains("hotspot-mode"));
     if (videoActive) moveVoicePanelToBody();
     else restoreVoicePanel();
     window.dispatchEvent(new CustomEvent("bailongma:video-mode", {
@@ -3534,6 +3941,10 @@ initHotspot().catch((err) => console.warn('[Hotspot] init failed:', err));
     });
   })();
 
+  hotspotBtn?.addEventListener("click", () => {
+    toggleHotspot('manual_button');
+    hotspotBtn.classList.toggle("active", document.body.classList.contains("hotspot-mode"));
+  });
   videoBtn?.addEventListener("click", toggleVideoPanelVisibility);
   videoExitBtn?.addEventListener("click", closeAndDestroyVideo);
   imageExitBtn?.addEventListener("click", () => setImageModeActive(false));

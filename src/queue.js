@@ -44,10 +44,18 @@ function pruneSupersededUserMessages(entry) {
   }
 }
 
+
+function sanitizeIncomingText(value = '') {
+  return String(value || '')
+    .replace(/[\uD800-\uDBFF](?![\uDC00-\uDFFF])/g, '�')
+    .replace(/(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g, '�')
+}
+
 export function pushMessage(rawFromId, content, channel = 'TUI', meta = {}) {
+  content = sanitizeIncomingText(content)
   const normalizedRaw = normalizeConversationPartyId(rawFromId)
   const canonicalId = resolveCanonicalUserId({ rawFromId: normalizedRaw, channel })
-  const externalPartyId = canonicalId !== normalizedRaw ? normalizedRaw : ''
+  const externalPartyId = meta.externalPartyIdOverride || (canonicalId !== normalizedRaw ? normalizedRaw : '')
   const timestamp = nowTimestamp()
   const priority = resolvePriority(canonicalId, channel, meta)
   const queueName = resolveQueueName(priority, meta)
@@ -55,14 +63,16 @@ export function pushMessage(rawFromId, content, channel = 'TUI', meta = {}) {
   // 消息一到就写入聊天记录（微信式：打开即可见所有未处理消息）。
   // 若随后 LLM 处理被新消息打断，本条仍然保留在 conversations 表中，
   // 下一轮处理最新消息时通过 conversationWindow 自动作为上下文可见。
-  insertConversation({
-    role: 'user',
-    from_id: canonicalId,
-    content,
-    timestamp,
-    channel: channel || '',
-    external_party_id: externalPartyId,
-  })
+  if (!meta.noPersist) {
+    insertConversation({
+      role: 'user',
+      from_id: canonicalId,
+      content,
+      timestamp,
+      channel: channel || '',
+      external_party_id: externalPartyId,
+    })
+  }
   const entry = {
     raw: `[${canonicalId}${externalPartyId ? ` via ${externalPartyId}` : ''}] ${timestamp} [${channel}] ${content}`,
     fromId: canonicalId,

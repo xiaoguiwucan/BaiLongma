@@ -15,6 +15,15 @@ export function parseSocialTarget(targetId = '') {
   if (raw.startsWith('wecom:webhook:')) {
     return { platform: 'wecom-webhook', key: raw.slice('wecom:webhook:'.length), raw }
   }
+  if (raw.startsWith('wechaty:room:')) {
+    return { platform: 'wechaty-duty-group', roomId: raw.slice('wechaty:room:'.length), raw }
+  }
+  if (raw.startsWith('wechat:clawbot:group:')) {
+    const rest = raw.slice('wechat:clawbot:group:'.length)
+    const [groupId, encodedContextToken = ''] = rest.split(':ctx:')
+    const contextToken = encodedContextToken ? decodeURIComponent(encodedContextToken) : ''
+    return { platform: 'wechat-clawbot', userId: `group:${groupId}${contextToken ? `:ctx:${contextToken}` : ''}`, groupId, contextToken, raw }
+  }
   if (raw.startsWith('wechat:clawbot:')) {
     return { platform: 'wechat-clawbot', userId: raw.slice('wechat:clawbot:'.length), raw }
   }

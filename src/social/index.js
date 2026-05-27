@@ -1,5 +1,7 @@
 import { startDiscordConnector } from './discord.js'
 import { startClawbotConnector } from './wechat-clawbot.js'
+import { startWechatyDutyGroupConnector } from './wechaty-duty-group.js'
+import { getWechatyDutyGroupConfig } from '../config.js'
 
 const running = new Map() // platform → connector
 
@@ -7,6 +9,8 @@ export async function startSocialConnectors({ pushMessage, emitEvent } = {}) {
   const starters = [
     { platform: 'discord', start: () => startDiscordConnector({ pushMessage, emitEvent }) },
     { platform: 'wechat-clawbot', start: () => startClawbotConnector({ pushMessage, emitEvent }) },
+    // 群聊必须走 Wechaty；ClawBot/iLink 只保留为私聊通道，不能因为 ClawBot 有凭证就跳过微信群助手。
+    ...(getWechatyDutyGroupConfig().enabled ? [{ platform: 'wechaty-duty-group', start: () => startWechatyDutyGroupConnector({ pushMessage, emitEvent }) }] : []),
   ]
 
   for (const { platform, start } of starters) {
@@ -36,6 +40,7 @@ export async function restartConnector(platform, { pushMessage, emitEvent } = {}
   const starters = {
     discord: () => startDiscordConnector({ pushMessage, emitEvent }),
     'wechat-clawbot': () => startClawbotConnector({ pushMessage, emitEvent }),
+    'wechaty-duty-group': () => startWechatyDutyGroupConnector({ pushMessage, emitEvent }),
   }
 
   const start = starters[platform]

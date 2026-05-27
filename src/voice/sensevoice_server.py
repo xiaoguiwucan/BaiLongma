@@ -15,6 +15,7 @@ import os
 import re
 import sys
 import math
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -42,12 +43,12 @@ SAMPLE_RATE = 16000
 CHUNK_SAMPLES = SAMPLE_RATE // 4
 
 # SenseVoice 对静音幻觉比 Whisper 少，但仍先用能量门控过滤视频/环境音。
-SILENCE_RMS_THRESHOLD = 0.0065
-NEAR_SPEECH_RMS_THRESHOLD = 0.014
-MIN_UTTERANCE_PEAK_RMS = 0.020
-MIN_UTTERANCE_VOICED_CHUNKS = 2
-MIN_UTTERANCE_SECONDS = 0.45
-SILENCE_CHUNKS_TO_FLUSH = 5
+SILENCE_RMS_THRESHOLD = 0.0035
+NEAR_SPEECH_RMS_THRESHOLD = 0.0075
+MIN_UTTERANCE_PEAK_RMS = 0.010
+MIN_UTTERANCE_VOICED_CHUNKS = 1
+MIN_UTTERANCE_SECONDS = 0.28
+SILENCE_CHUNKS_TO_FLUSH = 4
 MAX_BUFFER_SECONDS = 20
 SPEAKER_VERIFY_THRESHOLD = 0.55
 PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", ".."))
@@ -228,6 +229,8 @@ class SenseVoiceServer:
         speaker_threshold = SPEAKER_VERIFY_THRESHOLD
         enrolling = False
         enroll_buf = np.array([], dtype=np.int16)
+        chunk_count = 0
+        last_stat_ts = time.time()
 
         try:
             async for raw in websocket:
@@ -288,6 +291,12 @@ class SenseVoiceServer:
                     enroll_buf = np.append(enroll_buf, chunk)
                     continue
                 rms = float(np.sqrt(np.mean(chunk.astype(np.float32) ** 2))) / 32768.0
+                chunk_count += 1
+                now_ts = time.time()
+                if chunk_count <= 5 or now_ts - last_stat_ts >= 2.0:
+                    last_stat_ts = now_ts
+                    peak = float(np.max(np.abs(chunk.astype(np.int32))) / 32768.0) if len(chunk) else 0.0
+                    print(f"[语音] 输入音量 rms={rms:.5f} peak={peak:.5f} buf={len(buf)/SAMPLE_RATE:.2f}s", flush=True)
                 is_near_speech = rms >= NEAR_SPEECH_RMS_THRESHOLD
                 is_silent = rms < SILENCE_RMS_THRESHOLD
 
@@ -308,6 +317,7 @@ class SenseVoiceServer:
                 should_flush_max = buf_seconds >= MAX_BUFFER_SECONDS
                 if should_flush_speech or should_flush_max:
                     if self._should_transcribe(buf, voiced_chunks, utterance_peak_rms):
+                        print(f"[语音] 开始转写 len={len(buf)/SAMPLE_RATE:.2f}s voiced={voiced_chunks} peak={utterance_peak_rms:.5f}", flush=True)
                         speaker = self.verify_speaker(buf, speaker_threshold) if speaker_verify_enabled else {"passed": True}
                         if not speaker.get("passed", True):
                             await websocket.send(json.dumps({"type": "speaker_rejected", **speaker}))
@@ -315,6 +325,9 @@ class SenseVoiceServer:
                             text = await self.transcribe_async(buf, lang)
                             if text:
                                 await websocket.send(json.dumps({"type": "transcript", "text": text, "is_final": True, "speaker": speaker}))
+                    else:
+                        if len(buf) > 0:
+                            print(f"[语音] 跳过片段 len={len(buf)/SAMPLE_RATE:.2f}s voiced={voiced_chunks} peak={utterance_peak_rms:.5f}", flush=True)
                     buf = np.array([], dtype=np.int16)
                     silence_count = 0
                     voiced_chunks = 0

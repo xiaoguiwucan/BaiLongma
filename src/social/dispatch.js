@@ -2,6 +2,7 @@ import { requestJson } from './http.js'
 import { parseSocialTarget } from './targets.js'
 import { env } from './utils.js'
 import { sendClawbotMessage } from './wechat-clawbot.js'
+import { sendWechatyDutyGroupMessage } from './wechaty-duty-group.js'
 
 let feishuTenantToken = null
 let feishuTokenExpiresAt = 0
@@ -111,7 +112,11 @@ async function sendClawbot({ userId }, content) {
   return sendClawbotMessage(userId, content)
 }
 
-export async function dispatchSocialMessage(targetId, content) {
+async function sendWechaty({ roomId }, content, options = {}) {
+  return sendWechatyDutyGroupMessage(roomId, content, { mentionId: options?.social?.reply_mention_id || options?.replyMentionId || '' })
+}
+
+export async function dispatchSocialMessage(targetId, content, options = {}) {
   const target = parseSocialTarget(targetId)
   if (!target) return null
   switch (target.platform) {
@@ -125,6 +130,8 @@ export async function dispatchSocialMessage(targetId, content) {
       return await sendWeComWebhook(target, content)
     case 'wechat-clawbot':
       return sendClawbot(target, content)
+    case 'wechaty-duty-group':
+      return sendWechaty(target, content, options)
     default:
       return null
   }

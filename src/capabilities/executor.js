@@ -732,7 +732,7 @@ async function execSendMessage({ target_id, content, channel = 'AUTO' }, context
   let socialResult = null
   if (!delivery.isLocal && delivery.externalTargetId) {
     try {
-      socialResult = await dispatchSocialMessage(delivery.externalTargetId, cleanedContent)
+      socialResult = await dispatchSocialMessage(delivery.externalTargetId, cleanedContent, { social: context.currentSocial || null })
     } catch (err) {
       console.warn(`[消息发送] 外部投递异常 (${delivery.deliveryChannel}): ${err.message}`)
       socialResult = { ok: false, error: err.message }
