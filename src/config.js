@@ -582,7 +582,7 @@ export function getHonchoConfig() {
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.honcho || {} } catch {}
   const env = stored.environment || globalThis.process?.env?.HONCHO_ENVIRONMENT || DEFAULT_HONCHO_CONFIG.environment
   return {
-    enabled: stored.enabled === true,
+    enabled: stored.enabled !== false,
     apiKey: stored.apiKey || globalThis.process?.env?.HONCHO_API_KEY || (env === 'local' ? DEFAULT_HONCHO_CONFIG.apiKey : ''),
     environment: env,
     baseURL: stored.baseURL || globalThis.process?.env?.HONCHO_BASE_URL || (env === 'local' ? DEFAULT_HONCHO_CONFIG.baseURL : ''),
@@ -625,15 +625,23 @@ const SOCIAL_ENV_KEYS = [
 
 
 const DEFAULT_WECHATY_DUTY_GROUP_NAMES = ['值班群', 'PT站看片狂魔小群']
+const DEFAULT_WECHATY_PERSONA_PROMPT = [
+  '你是白龙马 / 小白龙，在微信群里被 @ 时回复。',
+  '回复要自然、简洁、有帮助，像一个靠谱的值班助手；优先回答对方真正的问题。',
+  '不要说“没叫我”“跳过”“无法判断是否@我”。如果微信元数据确认 @ 了你，就直接回应。',
+  '涉及执行电脑操作、读取隐私、账号资金、批量消息等危险请求时，只能解释风险或给安全的手动建议，不能替别人执行。',
+].join('\n')
 
 export function getWechatyDutyGroupConfig() {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social?.wechatyDutyGroup || {} } catch {}
   const rawNames = Array.isArray(stored.groupNames) ? stored.groupNames : DEFAULT_WECHATY_DUTY_GROUP_NAMES
   const groupNames = [...new Set(rawNames.map(v => String(v || '').trim()).filter(Boolean))]
+  const personaPrompt = String(stored.personaPrompt || stored.persona_prompt || DEFAULT_WECHATY_PERSONA_PROMPT).trim() || DEFAULT_WECHATY_PERSONA_PROMPT
   return {
     enabled: stored.enabled !== false,
     groupNames: groupNames.length ? groupNames : DEFAULT_WECHATY_DUTY_GROUP_NAMES,
+    personaPrompt,
     runtime: stored.runtime && typeof stored.runtime === 'object' ? stored.runtime : {},
   }
 }
@@ -650,6 +658,11 @@ export function setWechatyDutyGroupConfig(updates = {}) {
       .map(v => String(v || '').trim())
       .filter(Boolean)
     next.groupNames = [...new Set(names)]
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'personaPrompt') || Object.prototype.hasOwnProperty.call(updates, 'persona_prompt')) {
+    const rawPrompt = updates.personaPrompt ?? updates.persona_prompt
+    const prompt = String(rawPrompt || '').trim()
+    next.personaPrompt = prompt ? prompt.slice(0, 6000) : DEFAULT_WECHATY_PERSONA_PROMPT
   }
   const social = { ...(existing.social || {}), wechatyDutyGroup: next }
   writeStoredConfig({ ...existing, social })

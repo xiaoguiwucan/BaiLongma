@@ -1,19 +1,18 @@
-# Findings: WeChat Group Assistant False Online / Re-login Fix
+# Findings: WeChat Memory Management, Persona Prompt, Safety Guard UI
 
-## Runtime inspection
-- 当前 127.0.0.1:3721 由 Electron 进程监听，后端还在运行。
-- 原状态接口同时返回 `status: logged_in`、`online: true`、`login_user: 前夜`，但也返回 `error: 400 != 400` 和旧的 `last_room_refresh_at`。
-- 日志持续出现“本次未获取到群列表，保留上次真实群列表”，说明当前连接不能证明能收群消息。
-- 结论：这是“历史登录态/历史群快照被误当成当前在线”的问题。
+待填。
 
-## Code root cause
-- `isLoginActive()` 把 `logged_in` 也算作 online；但 `logged_in` 只表示 login 事件发生，不代表群消息通道健康。
-- `getWechatyDutyGroupStatus()` 之前用 `online: isLoginActive()`，导致 UI 显示假在线。
-- `listWechatyDutyGroupRooms()` 在 `Room.findAll()` 返回空数组时仍 `ok:true` 并返回旧 `roomSnapshot`，导致 UI 写“群列表已刷新”。
-- `/start` 在非 idle/error/disconnected 状态直接 `already_running`，坏登录态下用户无法重新扫码。
 
-## Additional root cause: MemoryCard not loaded
-- 当前 Wechaty 版本的 `WechatyBuilder` 不消费 `memory` 选项。
-- `WechatySkeleton.init()` 实际只使用 `new MemoryCard(this.__options.name)`。
-- 之前传 `memory: createWechatyMemoryCard()` 但 `name` 仍是普通字符串，导致空登录态启动时触发 `no payload, please call load() first.`。
-- 修复为 `WechatyBuilder.build({ name: WECHATY_MEMORY_NAME, puppet })` 后，重启可进入 `qr_ready` 并生成二维码。
+## 2026-05-28 审查发现
+- Honcho 现有 `listWeChatGroupMemory()` 只列 session.messages 原始消息，UI 也只显示第一选中群，因此用户会觉得“看不到记忆”。需要新增按群概览 + 当前群详细列表，至少显示消息、总结、结论/卡片（如果 Honcho 后台已生成）。
+- Honcho SDK `Session` 支持 `messages()`、`summaries()`、`context()`、`delete()`，没有公开单条 message delete；`Peer.conclusionsOf(target).delete(id)` 支持删除结论。单条原始消息管理只能在当前版本提供“删除整个群 session / 删除结论”，不能假装删除单条消息。
+- 微信助手配置目前只有 enabled/groupNames/runtime；需要增加 personaPrompt 并在 `buildWeChatGroupCommandPrompt()` 注入。
+- 安全规则当前只有 10 条且 UI 只显示 id/label，需要扩展规则库并展示描述/示例/处理方式。
+
+
+## 2026-05-28 UI/交互决策
+- 设置弹窗扩大到 1080x820，避免微信群助手/记忆/黑名单内容挤在小区域里看不清。
+- 群记忆管理采用左群列表、右详情结构；详情分为自动摘要、长期结论/知识、原始消息记录。
+- 允许手动添加“本群长期记忆”，写入 Honcho conclusion；支持删除单条 conclusion；原始 message 不假装可单条删除，只支持清空整个本群 session。
+- 安全规则以卡片展示 label/id/严重等级/说明/示例/安全替代方案，让用户能直观看到“到底限制了什么”。
+- 保存群设置时保留过滤列表之外已勾选的群，避免用户搜索后保存导致其他群丢失。

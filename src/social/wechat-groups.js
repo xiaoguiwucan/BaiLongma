@@ -1,5 +1,6 @@
 import { nowTimestamp } from '../time.js'
 import { getDB, insertConversation, normalizeConversationPartyId, upsertEntity } from '../db.js'
+import { getWechatyDutyGroupConfig } from '../config.js'
 import { getWeChatGroupMemoryContext } from './wechat-group-memory.js'
 
 export const WECHAT_GROUP_CHANNEL = 'WECHAT_CLAWBOT_GROUP'
@@ -143,6 +144,7 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
   const transcript = messages.map(row => `${row.timestamp?.slice(5, 16) || ''} ${row.content}`).join('\n')
   const quickSummary = buildWeChatGroupSummary(messages)
   const memoryContext = await getWeChatGroupMemoryContext({ groupId, senderId, senderName, query: text, limit: 18 })
+  const personaPrompt = String(getWechatyDutyGroupConfig().personaPrompt || '').trim()
   const rawText = String(text || '').trim()
   const commandText = stripLeadingWechatMentions(rawText) || rawText
   const verifiedMentionBlock = mentionedSelf
@@ -156,6 +158,8 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     : ''
   return [
     verifiedMentionBlock,
+    personaPrompt ? `<wechat-assistant-persona>\n${personaPrompt}\n</wechat-assistant-persona>` : '',
+    '',
     `微信群${groupName ? `「${groupName}」` : ''}成员 ${senderName || senderId || '未知成员'} 已经 @ 你并发来消息。`,
     `用户原文：${rawText}`,
     `去掉开头 @ 后的实际请求：${commandText}`,

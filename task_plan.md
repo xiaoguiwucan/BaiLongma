@@ -1,20 +1,21 @@
-# Task Plan: WeChat Group Assistant False Online / Re-login Fix
+# Task Plan: WeChat Memory Management, Persona Prompt, Safety Guard UI
 
 ## Goal
-修复设置页显示“已登录/群列表已刷新”，但群里 @ 无回复且没有重新生成二维码入口的问题。要求状态必须真实、可操作、可强制重新扫码登录。
+完成用户要求的三个功能：
+1. 微信群 Honcho 记忆必须按群组直观显示、列表管理、可查看/删除/刷新。
+2. 微信助手增加可手动设置的性格/提示词输入框，并在群回复 prompt 中生效。
+3. 完成微信机器人的安全隔离限制词库，提供明确规则库和设置页可视化管理。
 
 ## Phases
-1. [complete] 检查真实运行状态、端口、日志、Wechaty 状态接口。
-2. [complete] 定位 UI 状态来源和后端状态误判逻辑。
-3. [complete] 实现修复：真实状态展示、强制重新登录/清空登录态、二维码刷新入口、错误可见。
-4. [complete] 运行语法/接口验证。
-5. [in_progress] 按版本规则更新文档、提交、tag、推送 GitHub Release。
+1. [complete] 审查现有 Honcho 记忆写入/读取、安全守卫、配置结构。
+2. [complete] 新增/完善 API：按群列记忆、删除记忆、保存 persona、读取安全规则。
+3. [complete] 实现设置页 UI：群组列表 -> 记忆列表 -> 管理操作；persona 输入框；安全规则列表。
+4. [complete] 把 persona 注入微信群 LLM prompt。
+5. [complete] 验证语法、接口和 UI 状态。
+6. [complete] 更新版本文档并提交发布。
 
-## Key Findings
-- 旧状态把历史登录用户和历史群列表快照误当成在线证据。
-- `/rooms` 在没有真实获取群列表时仍返回 `ok:true`，导致 UI 写“群列表已刷新”。
-- 当前 Wechaty 版本不消费 `memory` 选项，必须通过 `name` 绑定 MemoryCard；否则空登录态会报 `no payload`，无法生成二维码。
-
-## Validation
-- `node --check` 通过：Wechaty connector、API、config、Brain UI JS。
-- 状态接口验证：当前可进入 `qr_ready` 且返回二维码，同时 `online:false`，不再假在线。
+## Constraints
+- 不启用本地记忆兜底，仍只使用 Honcho。
+- 记忆必须按群隔离，不能串群。
+- UI 要直观，不要让用户猜。
+- 安全规则不包含逆向和色情内容过滤，只做危险执行/电脑/账号/资金等安全隔离。

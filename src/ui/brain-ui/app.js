@@ -2042,7 +2042,14 @@ function initTTSSettings() {
   const wechatySelectedCount = document.getElementById("wechaty-selected-count");
   const wechatyDutyFeedback = document.getElementById("wechaty-duty-feedback");
   const wechatyLoginSub = document.getElementById("wechaty-login-sub");
-  const wechatyViewMemoryBtn = document.getElementById("wechaty-view-memory-btn");
+  const wechatyPersonaPrompt = document.getElementById("wechaty-persona-prompt");
+  const wechatyRefreshMemoryBtn = document.getElementById("wechaty-refresh-memory-btn");
+  const wechatyClearGroupMemoryBtn = document.getElementById("wechaty-clear-group-memory-btn");
+  const wechatyMemoryGroups = document.getElementById("wechaty-memory-groups");
+  const wechatyMemoryTitle = document.getElementById("wechaty-memory-title");
+  const wechatyMemoryStat = document.getElementById("wechaty-memory-stat");
+  const wechatyManualMemoryInput = document.getElementById("wechaty-manual-memory-input");
+  const wechatyAddMemoryBtn = document.getElementById("wechaty-add-memory-btn");
   const wechatyMemoryPreview = document.getElementById("wechaty-memory-preview");
   const wechatyQrArea = document.getElementById("wechaty-qr-area");
   const wechatyQrImg = document.getElementById("wechaty-qr-img");
@@ -2184,6 +2191,7 @@ function initTTSSettings() {
       if (["connected", "logged_in", "starting"].includes(wechatyDutyGroupStatus?.status)) {
         setTimeout(() => refreshWechatyRooms({ autoStart: false, silent: true }), 0);
       }
+      setTimeout(() => refreshWechatyMemoryOverview(), 300);
       for (const [statusId, keys] of Object.entries(SOCIAL_PLATFORM_STATUS)) {
         const el = document.getElementById(statusId);
         if (!el) continue;
@@ -2205,6 +2213,8 @@ function initTTSSettings() {
   let wechatyRoomsCache = [];
   let wechatySelectedGroupNames = new Set();
   let wechatyConfiguredGroupNames = new Set();
+  let wechatyActiveMemoryGroupId = "";
+  let wechatyActiveMemoryGroupName = "";
   let wechatyRoomsAreStale = false;
   let wechatyStatusPollTimer = null;
 
@@ -2261,12 +2271,24 @@ function initTTSSettings() {
   function renderGuardRules(rules = []) {
     if (!guardList) return;
     guardList.innerHTML = rules.length
-      ? rules.map(rule => `<div class="wechaty-guard-item"><span>${escapeHtml(rule.label)}</span><code>${escapeHtml(rule.id)}</code></div>`).join('')
+      ? rules.map(rule => {
+        const severity = escapeHtml(rule.severity || "medium");
+        const examples = Array.isArray(rule.examples) && rule.examples.length
+          ? `<div class="wechaty-guard-examples">${rule.examples.slice(0, 3).map(item => `<span>${escapeHtml(item)}</span>`).join("")}</div>`
+          : "";
+        return `<div class="wechaty-guard-item severity-${severity}">
+          <div class="wechaty-guard-head"><span>${escapeHtml(rule.label)}</span><code>${escapeHtml(rule.id)}</code></div>
+          <p>${escapeHtml(rule.description || "")}</p>
+          ${examples}
+          <small>${escapeHtml(rule.safeAlternative || "命中后只允许解释风险，不执行。")}</small>
+        </div>`;
+      }).join('')
       : '<div class="wechaty-empty">暂无黑名单规则</div>';
   }
 
   function applyWechatyDutyConfig(config = {}, status = {}) {
     if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
+    if (wechatyPersonaPrompt && document.activeElement !== wechatyPersonaPrompt) wechatyPersonaPrompt.value = config.personaPrompt || "";
     wechatyConfiguredGroupNames = new Set((config.groupNames || status.group_names || []).map(v => String(v || '').trim()).filter(Boolean));
     wechatyRoomsAreStale = !!status.rooms_stale || (!!status.rooms?.length && status.online === false);
     if (Array.isArray(status.rooms) && status.rooms.length) {
@@ -2301,6 +2323,7 @@ function initTTSSettings() {
     else if (status.status === "error" || status.status === "group_lookup_error") setWechatyStatus(`连接异常 · 请强制重新扫码`, false);
     else setWechatyStatus(config.enabled === false ? "已关闭" : "未登录", false);
     renderWechatyRooms();
+    renderWechatyMemoryGroups();
   }
 
   function renderWechatyRooms() {
@@ -2326,6 +2349,7 @@ function initTTSSettings() {
       }).join("");
     }
     updateWechatySelectedCount();
+    renderWechatyMemoryGroups();
   }
 
   function updateWechatySelectedCount() {
@@ -2339,12 +2363,147 @@ function initTTSSettings() {
     wechatySelectedCount.textContent = `${wechatyRoomsAreStale ? '缓存已选' : '真实已选'} ${realSelected} / ${wechatyRoomsCache.length} 个群`;
   }
 
+  function getWechatyMemoryCandidateGroups() {
+    const rows = [];
+    const seen = new Set();
+    for (const room of wechatyRoomsCache || []) {
+      if (!room?.topic) continue;
+      const selected = wechatySelectedGroupNames.has(room.topic) || room.selected === true;
+      if (!selected) continue;
+      const id = String(room.id || room.topic || "").trim();
+      const key = id || room.topic;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      rows.push({ id, topic: room.topic, selected: true, stale: wechatyRoomsAreStale, real: !!room.id });
+    }
+    for (const name of wechatyConfiguredGroupNames) {
+      if (!name || [...seen].some(key => key === name)) continue;
+      if (rows.some(row => row.topic === name)) continue;
+      rows.push({ id: name, topic: name, selected: true, stale: true, real: false });
+    }
+    return rows;
+  }
+
+  function memoryGroupRequestId(group = {}) {
+    const raw = String(group.id || group.topic || "").trim();
+    return raw.startsWith("wechaty:") ? raw : `wechaty:${raw}`;
+  }
+
+  function renderWechatyMemoryGroups(overview = null) {
+    if (!wechatyMemoryGroups) return;
+    const candidates = getWechatyMemoryCandidateGroups();
+    if (!wechatyActiveMemoryGroupId && candidates.length) {
+      wechatyActiveMemoryGroupId = memoryGroupRequestId(candidates[0]);
+      wechatyActiveMemoryGroupName = candidates[0].topic;
+    }
+    const overviewMap = new Map((overview?.groups || []).map(row => [String(row.group_id || row.id || ""), row]));
+    if (!candidates.length) {
+      wechatyMemoryGroups.innerHTML = '<div class="wechaty-empty">请先在上方勾选允许 @ 回复的群，保存后这里会按群显示 Honcho 记忆。</div>';
+      if (wechatyMemoryTitle) wechatyMemoryTitle.textContent = "未选择群";
+      if (wechatyMemoryStat) wechatyMemoryStat.textContent = "—";
+      return;
+    }
+    wechatyMemoryGroups.innerHTML = candidates.map(group => {
+      const reqId = memoryGroupRequestId(group);
+      const rawKey = reqId.replace(/^wechaty:/, "");
+      const info = overviewMap.get(rawKey) || overviewMap.get(reqId) || null;
+      const counts = info?.counts || {};
+      const active = reqId === wechatyActiveMemoryGroupId;
+      const stat = info ? `${counts.messages || 0} 消息 · ${counts.conclusions || 0} 结论 · ${counts.summaries || 0} 摘要` : (group.real ? "可读取 Honcho" : "等待真实群 ID");
+      return `<button class="wechaty-memory-group${active ? " active" : ""}${group.stale ? " stale" : ""}" type="button" data-group-id="${escapeHtml(reqId)}" data-group-name="${escapeHtml(group.topic)}">
+        <span class="wechaty-memory-group-name">${escapeHtml(group.topic)}</span>
+        <span class="wechaty-memory-group-stat">${escapeHtml(stat)}</span>
+      </button>`;
+    }).join("");
+  }
+
+  function renderWechatyMemoryDetail(data = null, groupName = "") {
+    if (!wechatyMemoryPreview) return;
+    const title = groupName || wechatyActiveMemoryGroupName || data?.group_name || data?.group_id || "未选择群";
+    if (wechatyMemoryTitle) wechatyMemoryTitle.textContent = title;
+    if (!data) {
+      if (wechatyMemoryStat) wechatyMemoryStat.textContent = "点击“刷新记忆”查看 Honcho 真实数据";
+      wechatyMemoryPreview.innerHTML = '<div class="wechaty-empty">左侧选择一个群，然后点击“刷新记忆”。</div>';
+      return;
+    }
+    const messages = data.messages || data.items || [];
+    const conclusions = data.conclusions || [];
+    const summaries = data.summaries || [];
+    const counts = data.counts || {};
+    if (wechatyMemoryStat) {
+      const parts = [
+        `${counts.totalMessages ?? counts.messages ?? messages.length} 条原始消息`,
+        `${counts.conclusions ?? conclusions.length} 条长期结论`,
+        `${counts.summaries ?? summaries.length} 条摘要`,
+      ];
+      if (Array.isArray(data.errors) && data.errors.length) parts.push(`有 ${data.errors.length} 个读取提示`);
+      wechatyMemoryStat.textContent = parts.join(" · ");
+    }
+    const summaryHtml = summaries.length ? `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">自动摘要</div>
+      ${summaries.map(item => `<article class="wechaty-memory-item summary"><b>${escapeHtml(item.type || "summary")}</b><p>${escapeHtml(item.content || "")}</p><span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span></article>`).join("")}
+    </section>` : "";
+    const conclusionHtml = conclusions.length ? `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">长期结论 / 知识</div>
+      ${conclusions.map(item => `<article class="wechaty-memory-item conclusion">
+        <b>${escapeHtml(item.scope === "member" ? "成员记忆" : "群组记忆")}</b>
+        <p>${escapeHtml(item.content || "")}</p>
+        <span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span>
+        <button class="wechaty-memory-delete" type="button" data-kind="conclusion" data-item-id="${escapeHtml(item.id)}" data-observer-id="${escapeHtml(item.observerId || "bailongma_assistant")}" data-observed-id="${escapeHtml(item.observedId || "")}">删除这条结论</button>
+      </article>`).join("")}
+    </section>` : "";
+    const messageHtml = messages.length ? `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">原始消息记录（Honcho session）</div>
+      ${messages.slice(0, 80).map(item => `<article class="wechaty-memory-item message"><b>[${escapeHtml(item.type || "message")}] ${escapeHtml(item.speaker || "群成员")}</b><p>${escapeHtml(item.content || "")}</p><span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span></article>`).join("")}
+    </section>` : "";
+    const errorHtml = Array.isArray(data.errors) && data.errors.length
+      ? `<div class="wechaty-memory-warning">${data.errors.map(err => `<div>${escapeHtml(err)}</div>`).join("")}</div>`
+      : "";
+    wechatyMemoryPreview.innerHTML = errorHtml + (summaryHtml || conclusionHtml || messageHtml
+      ? [summaryHtml, conclusionHtml, messageHtml].filter(Boolean).join("")
+      : '<div class="wechaty-empty">Honcho 当前没有这个群的可展示记忆。只有程序真实收到群消息、@ 回复或你手动添加记忆后才会出现。</div>');
+  }
+
+  async function refreshWechatyMemoryOverview() {
+    try {
+      const data = await fetch(`${API}/social/wechat-groups/memory-overview?limit=20`).then(r => r.json());
+      if (data.ok) renderWechatyMemoryGroups(data);
+    } catch {}
+  }
+
+  async function loadWechatyActiveMemory() {
+    const candidates = getWechatyMemoryCandidateGroups();
+    if (!wechatyActiveMemoryGroupId && candidates.length) {
+      wechatyActiveMemoryGroupId = memoryGroupRequestId(candidates[0]);
+      wechatyActiveMemoryGroupName = candidates[0].topic;
+    }
+    if (!wechatyActiveMemoryGroupId) {
+      renderWechatyMemoryDetail(null);
+      showFeedback(wechatyDutyFeedback, "请先选择一个群", true);
+      return;
+    }
+    if (wechatyRefreshMemoryBtn) wechatyRefreshMemoryBtn.disabled = true;
+    try {
+      const url = `${API}/social/wechat-groups/memory?group_id=${encodeURIComponent(wechatyActiveMemoryGroupId)}&group_name=${encodeURIComponent(wechatyActiveMemoryGroupName)}&limit=100&include_all_peers=true`;
+      const data = await fetch(url).then(r => r.json());
+      renderWechatyMemoryDetail(data, wechatyActiveMemoryGroupName);
+      await refreshWechatyMemoryOverview();
+    } catch {
+      showFeedback(wechatyDutyFeedback, "读取群记忆失败", true);
+    } finally {
+      if (wechatyRefreshMemoryBtn) wechatyRefreshMemoryBtn.disabled = false;
+    }
+  }
+
   function collectWechatySelectedRooms() {
-    const checked = [...document.querySelectorAll(".wechaty-room-checkbox:checked")]
-      .map(cb => cb.dataset.topic || cb.value)
-      .filter(Boolean);
-    wechatySelectedGroupNames = new Set(checked);
-    return checked;
+    // 不能只收集当前 DOM 里 checked 的项：用户搜索过滤群列表时，未显示但已勾选的群也必须保留。
+    document.querySelectorAll(".wechaty-room-checkbox").forEach(cb => {
+      const topic = cb.dataset.topic || cb.value;
+      if (!topic) return;
+      if (cb.checked) wechatySelectedGroupNames.add(topic);
+      else wechatySelectedGroupNames.delete(topic);
+    });
+    return [...wechatySelectedGroupNames];
   }
 
   async function refreshWechatyRooms({ autoStart = false, silent = false } = {}) {
@@ -2367,6 +2526,7 @@ function initTTSSettings() {
         if (wechatyLoginSub) wechatyLoginSub.textContent = data.online ? `已真实在线：${data.login_user || data.last_login_user || "微信"}。群列表已真实刷新。` : (data.hint || '群列表已刷新，但连接仍在确认中。');
         setWechatyStatus(`${data.online ? "已真实连接" : "正在连接"} · 真实群列表 ${wechatyRoomsCache.length} 个，已接入 ${wechatySelectedGroupNames.size} 个`, data.online === true);
         renderWechatyRooms();
+        refreshWechatyMemoryOverview();
       } else {
         if (Array.isArray(data.rooms) && data.rooms.length) {
           wechatyRoomsCache = data.rooms;
@@ -2378,6 +2538,7 @@ function initTTSSettings() {
         else setWechatyStatus(wechatyRoomsCache.length ? `未确认在线 · 仅显示上次缓存 ${wechatyRoomsCache.length} 个群` : "未登录/未获取真实群列表", false);
         if (!silent) showFeedback(wechatyDutyFeedback, data.error || data.hint || "群列表未真实刷新，请强制重新扫码", true);
         renderWechatyRooms();
+        refreshWechatyMemoryOverview();
       }
     } catch {
       if (!silent) showFeedback(wechatyDutyFeedback, "群列表获取失败", true);
@@ -2393,6 +2554,7 @@ function initTTSSettings() {
     if (cb.checked) wechatySelectedGroupNames.add(topic);
     else wechatySelectedGroupNames.delete(topic);
     updateWechatySelectedCount();
+    renderWechatyMemoryGroups();
   });
   wechatyRoomFilter?.addEventListener("input", renderWechatyRooms);
   wechatyStartBtn?.addEventListener("click", async () => {
@@ -2470,6 +2632,7 @@ function initTTSSettings() {
         if (honchoApiKey) honchoApiKey.value = '';
         applyHonchoConfig(data.honcho, data.honchoStatus);
         showFeedback(honchoFeedback, '群知识库已启用并保存');
+        await refreshWechatyMemoryOverview();
       } else showFeedback(honchoFeedback, data.error || '保存失败', true);
     } catch {
       showFeedback(honchoFeedback, '请求失败', true);
@@ -2478,28 +2641,99 @@ function initTTSSettings() {
     }
   });
 
-  wechatyViewMemoryBtn?.addEventListener("click", async () => {
-    const groupNames = collectWechatySelectedRooms();
-    const firstName = groupNames[0] || wechatyRoomsCache.find(r => wechatySelectedGroupNames.has(r.topic))?.topic || wechatyRoomsCache[0]?.topic;
-    const room = wechatyRoomsCache.find(r => r.topic === firstName);
-    const groupId = room?.id || firstName;
-    if (!groupId) {
+  wechatyMemoryGroups?.addEventListener("click", (event) => {
+    const btn = event.target?.closest?.(".wechaty-memory-group");
+    if (!btn) return;
+    wechatyActiveMemoryGroupId = btn.dataset.groupId || "";
+    wechatyActiveMemoryGroupName = btn.dataset.groupName || "";
+    renderWechatyMemoryGroups();
+    loadWechatyActiveMemory();
+  });
+
+  wechatyRefreshMemoryBtn?.addEventListener("click", loadWechatyActiveMemory);
+
+  wechatyAddMemoryBtn?.addEventListener("click", async () => {
+    const content = String(wechatyManualMemoryInput?.value || "").trim();
+    if (!wechatyActiveMemoryGroupId) {
       showFeedback(wechatyDutyFeedback, "请先选择一个群", true);
       return;
     }
-    wechatyViewMemoryBtn.disabled = true;
+    if (!content) {
+      showFeedback(wechatyDutyFeedback, "请输入要添加的群记忆", true);
+      return;
+    }
+    wechatyAddMemoryBtn.disabled = true;
     try {
-      const data = await fetch(`${API}/social/wechat-groups/memory?group_id=${encodeURIComponent(`wechaty:${groupId}`)}&limit=30`).then(r => r.json());
-      const items = data.items || [];
-      if (wechatyMemoryPreview) {
-        wechatyMemoryPreview.hidden = false;
-        wechatyMemoryPreview.innerHTML = `<div class="wechaty-memory-title">${escapeHtml(firstName || groupId)} · 群记忆 ${items.length} 条</div>` +
-          (items.length ? items.slice(0, 30).map(item => `<div class="wechaty-memory-item"><b>[${escapeHtml(item.metadata?.type || 'message')}]</b> ${escapeHtml(item.metadata?.sender_name || item.metadata?.target_member_name || '群组')}：${escapeHtml(item.content)}<span>${escapeHtml(String(item.createdAt || item.created_at || '').slice(0, 16))}</span></div>`).join('') : '<div class="wechaty-empty">暂无可展示记忆。群里 @ 助手或出现任务/决定/偏好/事实后会自动沉淀。</div>');
-      }
+      const res = await fetch(`${API}/social/wechat-groups/memory`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_id: wechatyActiveMemoryGroupId, group_name: wechatyActiveMemoryGroupName, content, category: "manual" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (wechatyManualMemoryInput) wechatyManualMemoryInput.value = "";
+        showFeedback(wechatyDutyFeedback, "已写入 Honcho 本群长期记忆");
+        await loadWechatyActiveMemory();
+      } else showFeedback(wechatyDutyFeedback, data.error || "添加记忆失败", true);
     } catch {
-      showFeedback(wechatyDutyFeedback, "读取群记忆失败", true);
+      showFeedback(wechatyDutyFeedback, "添加记忆请求失败", true);
     } finally {
-      wechatyViewMemoryBtn.disabled = false;
+      wechatyAddMemoryBtn.disabled = false;
+    }
+  });
+
+  wechatyMemoryPreview?.addEventListener("click", async (event) => {
+    const btn = event.target?.closest?.(".wechaty-memory-delete");
+    if (!btn || !wechatyActiveMemoryGroupId) return;
+    if (!confirm("确定删除这条 Honcho 长期结论吗？原始消息记录不会被删除。")) return;
+    btn.disabled = true;
+    try {
+      const res = await fetch(`${API}/social/wechat-groups/memory`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          group_id: wechatyActiveMemoryGroupId,
+          kind: btn.dataset.kind || "conclusion",
+          item_id: btn.dataset.itemId || "",
+          observer_id: btn.dataset.observerId || "bailongma_assistant",
+          observed_id: btn.dataset.observedId || "",
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(wechatyDutyFeedback, "已删除 Honcho 结论记忆");
+        await loadWechatyActiveMemory();
+      } else showFeedback(wechatyDutyFeedback, data.error || "删除失败", true);
+    } catch {
+      showFeedback(wechatyDutyFeedback, "删除请求失败", true);
+    } finally {
+      btn.disabled = false;
+    }
+  });
+
+  wechatyClearGroupMemoryBtn?.addEventListener("click", async () => {
+    if (!wechatyActiveMemoryGroupId) {
+      showFeedback(wechatyDutyFeedback, "请先选择一个群", true);
+      return;
+    }
+    if (!confirm(`确定清空「${wechatyActiveMemoryGroupName || wechatyActiveMemoryGroupId}」的 Honcho session 吗？这会删除本群 Honcho 消息与自动记忆，不能撤销。`)) return;
+    wechatyClearGroupMemoryBtn.disabled = true;
+    try {
+      const res = await fetch(`${API}/social/wechat-groups/memory`, {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_id: wechatyActiveMemoryGroupId, kind: "session" }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(wechatyDutyFeedback, "已清空本群 Honcho session");
+        renderWechatyMemoryDetail({ ok: true, messages: [], conclusions: [], summaries: [], counts: { messages: 0, conclusions: 0, summaries: 0 } }, wechatyActiveMemoryGroupName);
+        await refreshWechatyMemoryOverview();
+      } else showFeedback(wechatyDutyFeedback, data.error || "清空失败", true);
+    } catch {
+      showFeedback(wechatyDutyFeedback, "清空请求失败", true);
+    } finally {
+      wechatyClearGroupMemoryBtn.disabled = false;
     }
   });
 
@@ -2514,13 +2748,14 @@ function initTTSSettings() {
       const res = await fetch(`${API}/settings/social/wechaty-duty-group`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !!wechatyDutyEnabled?.checked, group_names: groupNames }),
+        body: JSON.stringify({ enabled: !!wechatyDutyEnabled?.checked, group_names: groupNames, persona_prompt: wechatyPersonaPrompt?.value || "" }),
       });
       const data = await res.json();
       if (data.ok) {
         applyWechatyDutyConfig(data.wechatyDutyGroup, data.status);
         showFeedback(wechatyDutyFeedback, data.wechatyDutyGroup?.enabled === false ? "已关闭" : "已保存并生效");
         setTimeout(() => refreshWechatyRooms({ autoStart: false }), 1200);
+        setTimeout(() => refreshWechatyMemoryOverview(), 1400);
       } else {
         showFeedback(wechatyDutyFeedback, data.error || "保存失败", true);
       }

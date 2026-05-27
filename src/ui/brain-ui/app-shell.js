@@ -379,10 +379,45 @@ const createSettingsModal = () => `
             </div>
             <div class="settings-row-action">
               <button class="settings-save-btn" id="wechaty-save-groups-btn" type="button">保存并生效</button>
-              <button class="settings-save-btn" id="wechaty-view-memory-btn" type="button">查看群记忆</button>
               <span class="settings-feedback" id="wechaty-duty-feedback"></span>
             </div>
-            <div class="wechaty-memory-preview" id="wechaty-memory-preview" hidden></div>
+            <div class="wechaty-persona-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">微信群助手性格设定</div>
+                  <p class="settings-hint">这里写的是微信群里被 @ 后的角色、人设、说话风格和边界。保存后会直接注入大模型提示词。</p>
+                </div>
+              </div>
+              <textarea class="settings-textarea wechaty-persona-textarea" id="wechaty-persona-prompt" rows="7" placeholder="例如：你是小白龙，回复要简洁、靠谱、有一点幽默；重要事情先给结论，再给步骤。"></textarea>
+            </div>
+            <div class="wechaty-memory-manager" id="wechaty-memory-manager">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">Honcho 群记忆管理</div>
+                  <p class="settings-hint">按微信群隔离显示：左侧选择群，右侧查看 Honcho 原始消息、自动总结、长期结论。这里不使用本地兜底记忆。</p>
+                </div>
+                <div class="wechaty-memory-actions">
+                  <button class="settings-save-btn" id="wechaty-refresh-memory-btn" type="button">刷新记忆</button>
+                  <button class="settings-save-btn danger" id="wechaty-clear-group-memory-btn" type="button">清空本群</button>
+                </div>
+              </div>
+              <div class="wechaty-memory-grid">
+                <div class="wechaty-memory-groups" id="wechaty-memory-groups">
+                  <div class="wechaty-empty">先获取并勾选群组</div>
+                </div>
+                <div class="wechaty-memory-detail">
+                  <div class="wechaty-memory-toolbar">
+                    <span class="wechaty-memory-title" id="wechaty-memory-title">未选择群</span>
+                    <span class="wechaty-memory-stat" id="wechaty-memory-stat">—</span>
+                  </div>
+                  <div class="wechaty-manual-memory">
+                    <input class="settings-input" id="wechaty-manual-memory-input" type="text" placeholder="手动添加一条本群长期记忆，例如：本群值班规则是先看监控再处理告警">
+                    <button class="settings-save-btn" id="wechaty-add-memory-btn" type="button">添加记忆</button>
+                  </div>
+                  <div class="wechaty-memory-preview" id="wechaty-memory-preview"></div>
+                </div>
+              </div>
+            </div>
           </div>
           <div class="settings-section">
             <div class="settings-section-label">Honcho 群知识库</div>
@@ -750,6 +785,20 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.3.5</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群助手记忆管理增强：按群查看/管理 Honcho 记忆，新增性格设定和完整安全隔离词库。</p>
+                <ul class="release-note-points">
+                  <li>设置页新增微信群助手性格提示词输入框，保存后直接注入群回复 prompt。</li>
+                  <li>Honcho 群知识库改为左侧群列表、右侧详情，可查看原始消息、自动摘要、长期结论。</li>
+                  <li>支持手动添加本群长期记忆、删除单条结论、清空本群 Honcho session。</li>
+                  <li>安全黑名单扩展为 17 类危险指令规则，并以卡片展示说明、示例和替代方案。</li>
+                  <li>设置窗口放大，保存群选择时不再因搜索过滤误取消隐藏群。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.3.4</span>

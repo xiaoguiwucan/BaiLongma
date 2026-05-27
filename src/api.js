@@ -22,7 +22,7 @@ import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
 import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
-import { getWeChatGroupMemoryStatus, listWeChatGroupMemory } from './social/wechat-group-memory.js'
+import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -303,6 +303,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /social/wechat-groups — 最近活跃微信群列表
     if (req.method === 'GET' && url.pathname === '/social/wechat-groups') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 100)
       const hours = Math.min(parseInt(url.searchParams.get('hours') || '72'), 24 * 30)
       return jsonResponse(res, 200, { ok: true, groups: listRecentWeChatGroups({ limit, hours }) })
@@ -310,17 +311,65 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /social/wechat-groups/memory?group_id=xxx&category=task
     if (req.method === 'GET' && url.pathname === '/social/wechat-groups/memory') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
       const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
       if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
       const category = url.searchParams.get('category') || ''
+      const groupName = url.searchParams.get('group_name') || url.searchParams.get('groupName') || ''
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '80'), 300)
-      const result = await listWeChatGroupMemory({ groupId: rawGroupId, category, limit })
+      const includeAllPeers = url.searchParams.get('include_all_peers') !== 'false'
+      const result = await listWeChatGroupMemory({ groupId: rawGroupId, groupName, category, limit, includeAllPeers })
       return jsonResponse(res, 200, { ok: true, group_id: rawGroupId, ...result })
+    }
+
+    // GET /social/wechat-groups/memory-overview — 按设置页真实群列表展示每个群的 Honcho 记忆概览
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/memory-overview') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const status = getWechatyDutyGroupStatus()
+      const groups = Array.isArray(status.rooms) ? status.rooms : []
+      const selectedOnly = url.searchParams.get('selected_only') !== 'false'
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 100)
+      const result = await listWeChatGroupMemoryOverview({ groups: selectedOnly ? groups.filter(room => room.selected) : groups, limit })
+      return jsonResponse(res, 200, { ok: true, rooms_stale: status.rooms_stale, online: status.online, ...result })
+    }
+
+    // POST /social/wechat-groups/memory — 手动给当前群新增一条 Honcho 结论记忆
+    if (req.method === 'POST' && url.pathname === '/social/wechat-groups/memory') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(async body => {
+        const result = await createWeChatGroupManualMemory({
+          groupId: body.group_id || body.groupId,
+          groupName: body.group_name || body.groupName,
+          content: body.content,
+          category: body.category || 'manual',
+          senderId: body.sender_id || body.senderId,
+          senderName: body.sender_name || body.senderName,
+        })
+        jsonResponse(res, result.ok ? 200 : 400, result)
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
+    }
+
+    // DELETE /social/wechat-groups/memory — 删除 Honcho 结论记忆或清空本群 session
+    if (req.method === 'DELETE' && url.pathname === '/social/wechat-groups/memory') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(async body => {
+        const result = await deleteWeChatGroupMemory({
+          groupId: body.group_id || body.groupId || url.searchParams.get('group_id') || url.searchParams.get('groupId'),
+          kind: body.kind || url.searchParams.get('kind'),
+          itemId: body.item_id || body.itemId || url.searchParams.get('item_id') || url.searchParams.get('itemId'),
+          observerId: body.observer_id || body.observerId || url.searchParams.get('observer_id') || url.searchParams.get('observerId'),
+          observedId: body.observed_id || body.observedId || url.searchParams.get('observed_id') || url.searchParams.get('observedId'),
+        })
+        jsonResponse(res, result.ok ? 200 : 400, result)
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
     }
 
     // GET /social/wechat-groups/summary?group_id=xxx&limit=100&hours=24
     // 本地抽取式总结：不额外调用大模型，适合作为自检/快速查看。
     if (req.method === 'GET' && url.pathname === '/social/wechat-groups/summary') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
       const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
       const groupExternalId = rawGroupId.startsWith('wechat:clawbot-group:') ? rawGroupId : makeWeChatGroupExternalId(rawGroupId)
       if (!groupExternalId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
@@ -352,7 +401,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
     if (isAllowedOrigin(origin)) {
       res.setHeader('Access-Control-Allow-Origin', origin || 'null')
     }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS')
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, DELETE, PATCH, OPTIONS')
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization')
 
     if (req.method !== 'OPTIONS' && isSensitivePath(url.pathname) && !requireLocalOrToken(req, res, url)) return
@@ -965,6 +1014,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           const cfg = setWechatyDutyGroupConfig({
             enabled: body.enabled,
             groupNames: body.group_names || body.groupNames || body.groups,
+            personaPrompt: body.persona_prompt ?? body.personaPrompt,
           })
           if (cfg.enabled) {
             // 保存群选择不能重启 Wechaty。重启会破坏刚扫码成功的 Web 微信会话，导致用户保存后立刻掉线。

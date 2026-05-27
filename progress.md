@@ -1,9 +1,13 @@
 # Progress Log
 
-- 2026-05-28: 用户截图显示设置页为“已登录：前夜。群列表已刷新”，但实际群里 @ 无回复，怀疑是假状态且缺少重新扫码入口。
-- 已确认当前不是单纯 UI 问题：后端状态同时给出 `logged_in/online:true` 与 `400 != 400/旧群列表`。
-- 已修改状态判定：只有真实 connected、当前进程解析到目标群且最近刷新/收到消息才 `online:true`。
-- 已修改 rooms 接口：没有真实群列表时返回失败并标记 `rooms_stale:true`。
-- 已新增设置页“强制重新扫码”按钮。
-- 已修复 Wechaty MemoryCard 传参：改用 `name: WECHATY_MEMORY_NAME`。
-- 本地验证：重启后 `/social/wechaty-duty-group/status` 返回 `status: qr_ready` 且包含二维码；同时 `online:false`，不再假在线。
+- 2026-05-28: 用户要求补齐微信群记忆管理、微信助手性格设定、安全隔离限制词库与 UI。
+
+- 已检查 Honcho SDK、微信群助手配置、API 与设置页代码，确认需要做真实 UI 列表和真实 Honcho session 数据展示，不能继续只显示第一条预览。
+
+- 已实现配置层 personaPrompt、微信群 prompt 注入、Honcho 记忆 API（详情/概览/手动新增/删除结论/清空 session）和扩展安全规则库。
+
+- 已完成设置页改造：性格提示词输入框、按群 Honcho 记忆管理、手动加记忆、删除结论、清空本群、安全规则详细卡片和弹窗放大。
+
+- 已更新 v0.3.5 版本号、README、CHANGELOG、BACKUP-2026-05-28 和软件内更新说明。
+
+- 已提交当前 v0.3.5 版本，创建 tag `v0.3.5`，推送 origin/main 和 origin/v0.3.5，并创建 GitHub Release：https://github.com/xiaoguiwucan/BaiLongma/releases/tag/v0.3.5

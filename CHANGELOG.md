@@ -4,6 +4,51 @@
 
 
 
+## v0.3.5 - 2026-05-28
+
+### 新增内容
+
+- 新增微信群助手「性格设定」输入框：可在设置页手动填写微信群回复的人设、语气、边界和提示词，保存后会直接注入微信群大模型 prompt。
+- 新增 Honcho 群记忆管理器：按微信群独立展示，不再只显示第一选中群的一小段预览。
+- 群记忆详情分为三块：Honcho 原始消息记录、Honcho 自动摘要、Honcho 长期结论/知识。
+- 支持手动给某个微信群添加一条长期记忆，写入 Honcho conclusion；适合写群规、值班要求、项目背景、群成员偏好等。
+- 支持删除单条 Honcho 结论记忆，支持清空整个本群 Honcho session。原始消息不假装支持单条删除，因为当前 Honcho SDK 未公开单条 message delete。
+- 扩展微信群安全隔离规则库到 17 类：文件破坏、批量文件改写、系统权限、终端执行、下载运行、凭证读取、隐私外传、网络上传、桌面/浏览器控制、摄像头麦克风屏幕、账号安全、支付金融、微信管理、群发骚扰、进程持久化、破坏性 Git、绕过安全等。
+- 安全黑名单 UI 改为详细卡片，显示规则 ID、严重程度、解释、示例和安全替代方案；明确不包含逆向和成人内容过滤。
+
+### 修复/改进
+
+- Honcho 默认本地配置改为默认启用：没有显式关闭时使用 `http://127.0.0.1:8018` 与 `bailongma-local-honcho`，避免设置页显示配置了但后端不读。
+- 群记忆 API 增加概览、详情、手动新增、删除结论、清空 session，并加本地/Token 访问校验，避免群聊记忆接口暴露给非本机来源。
+- 设置弹窗扩大到 1080x820，微信群助手、Honcho 记忆和安全规则不再挤在过小区域里。
+- 保存微信群选择时不再只读取当前搜索过滤后可见的 checkbox；过滤列表外已勾选的群会被保留，避免误取消。
+- Honcho 写入群消息/助手回复后会主动 scheduleDream，帮助后台尽快沉淀长期结论。
+
+### 改变原因
+
+- 用户反馈“看不到记录记忆，Honcho 记忆库没有任何显示”，旧版只做了一个非常弱的单群预览，不能直观看到按群隔离的记忆状态。
+- 用户要求微信群助手能手动设置性格/提示词，并且安全隔离限制词库要真正写完、开发完成、符合现有 UI。
+- 用户明确要求不启用本地记忆兜底，因此本版本仍只使用 Honcho；如果 Honcho 没有数据，UI 会明确显示空状态，不会伪造本地记忆。
+
+### 验证结果
+
+- `node --check src/social/wechat-group-memory.js` 通过。
+- `node --check src/social/wechat-groups.js` 通过。
+- `node --check src/social/wechat-command-guard.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/config.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `git diff --check` 通过。
+- 使用 Electron userData 配置启动临时 API 验证：`/settings/social` 返回 `personaPrompt` 和 17 条安全规则；`/social/wechat-groups/memory-overview` 能按真实群列表返回 Honcho 记忆概览；`值班群` 可读取到已有 Honcho 原始消息。
+
+### 部署注意事项
+
+- 更新后需要重启白龙马/Electron 才能加载新的设置页资源和 API。
+- 进入 `设置 -> 微信群助手`：先确认微信登录状态，再查看下方「微信群助手性格设定」「Honcho 群记忆管理」「安全黑名单」。
+- 群记忆只使用 Honcho：请确保本地 Honcho 服务仍运行在 `http://127.0.0.1:8018`。如果 Honcho 服务未运行，微信群 @ 回复仍可工作，但记忆管理会显示读取错误或空状态。
+- 清空本群 session 会删除该群 Honcho 消息和自动记忆，不能撤销；使用前请确认选中的群名正确。
+
 
 ## v0.3.4 - 2026-05-28
 
