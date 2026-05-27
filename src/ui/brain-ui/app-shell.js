@@ -749,6 +749,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.3.2</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群登录态修复：扫码态写入 userData，正常重启后优先自动恢复。</p>
+                <ul class="release-note-points">
+                  <li>显式挂载 Wechaty MemoryCard，避免登录态写到项目临时目录。</li>
+                  <li>正常 stop/restart 不再主动删除 PUPPET-WECHAT4U 登录数据。</li>
+                  <li>状态接口新增 login_memory 诊断信息，区分真实在线和历史群列表快照。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.3.1</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

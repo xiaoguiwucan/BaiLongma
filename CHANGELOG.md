@@ -5,6 +5,35 @@
 
 
 
+## v0.3.2 - 2026-05-28
+
+### 修复内容
+
+- 修复 Wechaty 登录态没有稳定写入 Electron `userData`，导致重启后容易重新出现二维码的问题。
+- 显式给 `WechatyBuilder` 传入 root `MemoryCard`，确保 `PUPPET-WECHAT4U` 登录数据写到 `~/Library/Application Support/Bailongma/wechaty-duty-group.memory-card.json`，而不是项目当前目录。
+- 保留 `PuppetWechat4u` 的 memory 配置，并在启动前确保登录态文件存在且 JSON 有效。
+- 自定义 logout handler 不再主动删除 `PUPPET-WECHAT4U` 登录态，避免正常 stop/restart 时把扫码状态清掉。
+- 修复运行状态误判：`roomSnapshot` 只是上次群列表快照，不能作为当前已登录证据；只有当前进程实际解析到 room 才算在线。
+- 等待扫码/恢复登录期间遇到 `400 != 400`、`-1 == 0` 等 wechat4u 暂态错误时，只保留当前状态，不再误标为 `logged_in`。
+- 状态接口新增 `login_memory` 诊断信息，可看到登录态文件路径、大小、key 数量和是否包含 Wechaty 登录数据。
+- `.gitignore` 新增 `*.memory-card.json`，防止 Wechaty 登录态/扫码凭证被上传 GitHub。
+
+### 改变原因
+
+- 正常情况下软件重启不应该每次都要求扫码；扫码态应该尽量复用。
+- 但 Web 微信/wechat4u 的登录态可能被微信服务端判定失效，此时仍然会要求重新扫码，这是上游登录机制限制，不是软件故意要求。
+
+### 验证结果
+
+- `node --check src/social/wechaty-duty-group.js` 通过。
+
+### 部署注意事项
+
+- 本补丁生效后，下一次扫码成功会把登录态保存到 userData；之后正常重启会优先尝试自动恢复。
+- 如果当前已经处于二维码状态，需要再扫码一次，让新的登录态文件生成。
+- 如果微信服务端主动踢掉 Web 登录态，仍需要重新扫码。
+
+
 ## v0.3.1 - 2026-05-28
 
 ### 修复内容

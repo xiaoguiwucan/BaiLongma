@@ -1,14 +1,18 @@
 import qrcodeTerminal from 'qrcode-terminal'
 import { WechatyBuilder, ScanStatus } from 'wechaty'
 import { PuppetWechat4u } from 'wechaty-puppet-wechat4u'
+import { MemoryCard } from 'memory-card'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply } from './wechat-group-memory.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
+import fs from 'fs'
 
 const FALLBACK_GROUP_NAMES = ['值班群', 'PT站看片狂魔小群']
+const WECHATY_MEMORY_NAME = path.join(paths.userDir, 'wechaty-duty-group')
+const WECHATY_MEMORY_FILE = `${WECHATY_MEMORY_NAME}.memory-card.json`
 
 let bot = null
 let status = 'idle' // idle | starting | qr_ready | logged_in | connected | error
@@ -44,7 +48,10 @@ function previousLoginUser() {
 }
 
 function hasResolvedRooms() {
-  return !!targetRoomId || targetRooms.size > 0 || roomSnapshot.some(room => room?.selected && room?.id)
+  // 这里只能看当前进程实际解析到的 room，不能看 roomSnapshot。
+  // roomSnapshot 是上次运行留下的 UI 快照；如果把它当成当前在线证据，
+  // 重启后等待扫码时遇到 wechat4u 暂态错误会被误标成 logged_in。
+  return !!targetRoomId || targetRooms.size > 0
 }
 
 function isWechat4uTransientError(message = '') {
@@ -91,6 +98,7 @@ export function getWechatyDutyGroupStatus() {
     rooms,
     last_room_refresh_at: lastRoomRefreshAt || String(runtime.lastRoomRefreshAt || ''),
     puppet: activePuppetName || String(runtime.puppet || ''),
+    login_memory: getWechatyMemoryState(),
   }
 }
 
@@ -215,7 +223,11 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
   targetRooms.clear()
 
   const puppet = createWechatyPuppet()
-  bot = WechatyBuilder.build({ name: 'bailongma-duty-group', puppet })
+  bot = WechatyBuilder.build({
+    name: 'bailongma-duty-group',
+    memory: createWechatyMemoryCard(),
+    puppet,
+  })
 
   bot.on('scan', (qrcode, scanStatus) => {
     status = 'qr_ready'
@@ -258,12 +270,20 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     // wechat4u 登录后常见 `-1 == 0` / `400 != 400` 这类底层同步抖动。
     // 如果已经登录并解析到目标群，不能因为这个暂态错误主动 stop/restart；
     // 否则会把刚扫码成功的会话踢回二维码状态，群里 @ 自然收不到。
-    if (isWechat4uTransientError(lastError) && hasResolvedRooms()) {
-      status = targetRoomId ? 'connected' : 'logged_in'
-      console.warn(`[Wechaty] 忽略 wechat4u 暂态错误，保持在线：${lastError}`)
-      persistRuntime(status)
-      emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], room_id: targetRoomId, warning: lastError, rooms: roomSnapshot })
-      return
+    if (isWechat4uTransientError(lastError)) {
+      if (hasResolvedRooms()) {
+        status = targetRoomId ? 'connected' : 'logged_in'
+        console.warn(`[Wechaty] 忽略 wechat4u 暂态错误，保持在线：${lastError}`)
+        persistRuntime(status)
+        emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], room_id: targetRoomId, warning: lastError, rooms: roomSnapshot })
+        return
+      }
+      if (status === 'qr_ready' || status === 'starting') {
+        console.warn(`[Wechaty] 等待登录期间忽略 wechat4u 暂态错误：${lastError}`)
+        persistRuntime(status)
+        emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], warning: lastError, rooms: roomSnapshot })
+        return
+      }
     }
     if (!targetRoomId) status = 'error'
     console.error(`[Wechaty] 错误：${lastError}`)
@@ -348,6 +368,8 @@ async function resolveTargetRooms() {
     }
     targetRoom = firstRoom
     targetRoomId = firstRoom.id
+    lastQr = ''
+    lastQrAscii = ''
     status = 'connected'
     persistRuntime(status)
     emitEventRef?.('social_status', {
@@ -477,9 +499,46 @@ function createWechatyPuppet() {
   // 在 macOS arm64 上出现 `WechatyBro` 注入失败、Chrome 断开、5s 超时等问题；
   // 用户看到的“网页版登录微信”就是那个 puppet 造成的。
   activePuppetName = 'wechaty-puppet-wechat4u'
+  ensureWechatyMemoryFile()
   return new BailongmaPuppetWechat4u({
-    memory: { name: path.join(paths.userDir, 'wechaty-duty-group') },
+    memory: { name: WECHATY_MEMORY_NAME },
   })
+}
+
+function createWechatyMemoryCard() {
+  ensureWechatyMemoryFile()
+  // Wechaty 会把自己的 root memory multiplex 给 puppet。
+  // 只在 PuppetWechat4u options 里传 memory 不够，因为 Wechaty 初始化时会覆盖 puppet memory。
+  // 因此 root memory 必须显式传给 WechatyBuilder，才能稳定写到 userData，而不是项目 cwd。
+  return new MemoryCard(WECHATY_MEMORY_NAME)
+}
+
+function ensureWechatyMemoryFile() {
+  try {
+    fs.mkdirSync(path.dirname(WECHATY_MEMORY_FILE), { recursive: true })
+    if (!fs.existsSync(WECHATY_MEMORY_FILE)) {
+      fs.writeFileSync(WECHATY_MEMORY_FILE, '{}')
+      return
+    }
+    const raw = fs.readFileSync(WECHATY_MEMORY_FILE, 'utf-8').trim()
+    if (!raw) fs.writeFileSync(WECHATY_MEMORY_FILE, '{}')
+    else JSON.parse(raw)
+  } catch (err) {
+    console.warn(`[Wechaty] 登录态文件异常，已重置为空：${WECHATY_MEMORY_FILE} (${err?.message || err})`)
+    try { fs.writeFileSync(WECHATY_MEMORY_FILE, '{}') } catch {}
+  }
+}
+
+function getWechatyMemoryState() {
+  try {
+    const raw = fs.readFileSync(WECHATY_MEMORY_FILE, 'utf-8')
+    const payload = JSON.parse(raw || '{}')
+    const keys = Object.keys(payload || {})
+    const hasLoginData = keys.some(key => key.includes('PUPPET-WECHAT4U'))
+    return { file: WECHATY_MEMORY_FILE, exists: true, bytes: Buffer.byteLength(raw), keys: keys.length, has_login_data: hasLoginData }
+  } catch {
+    return { file: WECHATY_MEMORY_FILE, exists: false, bytes: 0, keys: 0, has_login_data: false }
+  }
 }
 
 function persistRuntime(runtimeStatus = status) {
@@ -585,10 +644,9 @@ class BailongmaPuppetWechat4u extends PuppetWechat4u {
         try {
           if (this.isLoggedIn) await this.logout()
         } catch {}
-        try {
-          await this.memory.delete('PUPPET-WECHAT4U')
-          await this.memory.save()
-        } catch {}
+        // 不主动删除 PUPPET-WECHAT4U 登录态。
+        // 正常重启/stop 期间删除这里会导致每次打开软件都重新扫码。
+        // 真正被微信服务端踢下线时，wechat4u 下一次启动会自行发现登录态不可用并给出二维码。
       })
     } catch {}
   }
