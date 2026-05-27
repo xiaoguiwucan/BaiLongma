@@ -4025,8 +4025,99 @@ body.person-card-mode .person-card-panel,
   margin-top: 12px;
   background: rgba(255,255,255,0.025);
 }
+.wechaty-persona-presets {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0 12px;
+}
+.wechaty-persona-preset {
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  padding: 11px 12px;
+  text-align: left;
+  color: var(--ink);
+  background:
+    linear-gradient(135deg, rgba(87,214,255,0.09), rgba(255,255,255,0.025)),
+    rgba(0,0,0,0.16);
+  cursor: pointer;
+  transition: transform .16s ease, border-color .16s ease, background .16s ease, box-shadow .16s ease;
+}
+.wechaty-persona-preset:hover {
+  transform: translateY(-1px);
+  border-color: rgba(87,214,255,0.42);
+  box-shadow: 0 14px 28px rgba(0,0,0,0.18);
+}
+.wechaty-persona-preset.active {
+  border-color: rgba(87,214,255,0.72);
+  background:
+    linear-gradient(135deg, rgba(87,214,255,0.18), rgba(90,255,185,0.08)),
+    rgba(0,0,0,0.16);
+}
+.wechaty-persona-preset-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.wechaty-persona-preset-top b {
+  font-size: 12px;
+  letter-spacing: .02em;
+}
+.wechaty-persona-preset-top em {
+  flex: none;
+  font-style: normal;
+  font-size: 10px;
+  color: rgba(9, 20, 28, 0.9);
+  background: linear-gradient(135deg, #57d6ff, #72ffc3);
+  border-radius: 999px;
+  padding: 2px 7px;
+}
+.wechaty-persona-preset-summary {
+  display: block;
+  color: var(--ink2);
+  font-size: 11px;
+  line-height: 1.55;
+}
+.wechaty-persona-editor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 700;
+  margin: 4px 0 7px;
+}
+.wechaty-persona-editor-head small {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink3);
+}
+.wechaty-persona-editor-head small.matched {
+  color: #72ffc3;
+}
+.wechaty-persona-editor-head small.custom {
+  color: #ffd479;
+}
 .wechaty-persona-textarea {
-  min-height: 132px;
+  min-height: 172px;
+}
+.settings-save-btn.subtle {
+  width: auto;
+  padding: 0 12px;
+  background: transparent;
+  border: 1px solid var(--line);
+  color: var(--ink2);
+}
+.settings-hint.compact {
+  margin-top: 8px;
+  margin-bottom: 0;
+}
+@media (max-width: 920px) {
+  .wechaty-persona-presets {
+    grid-template-columns: 1fr;
+  }
 }
 .wechaty-subsection-head {
   display: flex;

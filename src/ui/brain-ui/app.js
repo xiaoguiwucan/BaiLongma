@@ -2043,6 +2043,9 @@ function initTTSSettings() {
   const wechatyDutyFeedback = document.getElementById("wechaty-duty-feedback");
   const wechatyLoginSub = document.getElementById("wechaty-login-sub");
   const wechatyPersonaPrompt = document.getElementById("wechaty-persona-prompt");
+  const wechatyPersonaPresets = document.getElementById("wechaty-persona-presets");
+  const wechatyPersonaActive = document.getElementById("wechaty-persona-active");
+  const wechatyPersonaResetBtn = document.getElementById("wechaty-persona-reset-btn");
   const wechatyRefreshMemoryBtn = document.getElementById("wechaty-refresh-memory-btn");
   const wechatyClearGroupMemoryBtn = document.getElementById("wechaty-clear-group-memory-btn");
   const wechatyMemoryGroups = document.getElementById("wechaty-memory-groups");
@@ -2181,7 +2184,8 @@ function initTTSSettings() {
 
   async function loadSocialSettings() {
     try {
-      const { social, wechatyDutyGroup, wechatyDutyGroupStatus, honcho, honchoStatus: honchoRuntime, guardRules } = await fetch(`${API}/settings/social`).then(r => r.json());
+      const { social, wechatyDutyGroup, wechatyDutyGroupStatus, wechatyPersonaPresets: personaPresets, honcho, honchoStatus: honchoRuntime, guardRules } = await fetch(`${API}/settings/social`).then(r => r.json());
+      renderWechatyPersonaPresets(personaPresets || [], wechatyDutyGroup?.personaPrompt || "");
       applyWechatyDutyConfig(wechatyDutyGroup, wechatyDutyGroupStatus);
       applyHonchoConfig(honcho, honchoRuntime);
       renderGuardRules(guardRules || []);
@@ -2217,6 +2221,7 @@ function initTTSSettings() {
   let wechatyActiveMemoryGroupName = "";
   let wechatyRoomsAreStale = false;
   let wechatyStatusPollTimer = null;
+  let wechatyPersonaPresetCache = [];
 
   function formatWechatyTime(value) {
     if (!value) return '';
@@ -2246,6 +2251,52 @@ function initTTSSettings() {
     if (!wechatyDutyStatus) return;
     wechatyDutyStatus.textContent = `${ok ? "●" : "○"} ${text}`;
     wechatyDutyStatus.className = `settings-platform-status ${ok ? "ok" : "miss"}`;
+  }
+
+  function normalizePersonaPrompt(value = "") {
+    return String(value || "").replace(/\r\n/g, "\n").trim();
+  }
+
+  function getActiveWechatyPersonaPreset(prompt = "") {
+    const normalized = normalizePersonaPrompt(prompt);
+    return wechatyPersonaPresetCache.find(preset => normalizePersonaPrompt(preset.prompt) === normalized) || null;
+  }
+
+  function updateWechatyPersonaActiveLabel(prompt = wechatyPersonaPrompt?.value || "") {
+    if (!wechatyPersonaActive) return;
+    const active = getActiveWechatyPersonaPreset(prompt);
+    wechatyPersonaActive.textContent = active ? `已套用：${active.name}` : "自定义提示词";
+    wechatyPersonaActive.className = active ? "matched" : "custom";
+    wechatyPersonaPresets?.querySelectorAll(".wechaty-persona-preset").forEach(btn => {
+      const isActive = active?.id === btn.dataset.presetId;
+      btn.classList.toggle("active", isActive);
+      btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+    });
+  }
+
+  function renderWechatyPersonaPresets(presets = [], currentPrompt = "") {
+    wechatyPersonaPresetCache = Array.isArray(presets) ? presets.filter(p => p?.id && p?.prompt) : [];
+    if (!wechatyPersonaPresets) return;
+    if (!wechatyPersonaPresetCache.length) {
+      wechatyPersonaPresets.innerHTML = '<div class="wechaty-empty">暂无可用性格预设，可直接手动编辑提示词。</div>';
+      updateWechatyPersonaActiveLabel(currentPrompt);
+      return;
+    }
+    wechatyPersonaPresets.innerHTML = wechatyPersonaPresetCache.map(preset => `
+      <button class="wechaty-persona-preset" type="button" data-preset-id="${escapeHtml(preset.id)}" aria-pressed="false">
+        <span class="wechaty-persona-preset-top"><b>${escapeHtml(preset.name)}</b><em>${escapeHtml(preset.badge || "预设")}</em></span>
+        <span class="wechaty-persona-preset-summary">${escapeHtml(preset.summary || "点击套用这个微信群助手性格。")}</span>
+      </button>
+    `).join("");
+    updateWechatyPersonaActiveLabel(currentPrompt);
+  }
+
+  function applyWechatyPersonaPreset(presetId = "") {
+    const preset = wechatyPersonaPresetCache.find(item => item.id === presetId);
+    if (!preset || !wechatyPersonaPrompt) return;
+    wechatyPersonaPrompt.value = preset.prompt || "";
+    updateWechatyPersonaActiveLabel(wechatyPersonaPrompt.value);
+    showFeedback(wechatyDutyFeedback, `已套用「${preset.name}」，点击保存并生效`);
   }
 
   function applyHonchoConfig(config = {}, runtime = {}) {
@@ -2288,7 +2339,10 @@ function initTTSSettings() {
 
   function applyWechatyDutyConfig(config = {}, status = {}) {
     if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
-    if (wechatyPersonaPrompt && document.activeElement !== wechatyPersonaPrompt) wechatyPersonaPrompt.value = config.personaPrompt || "";
+    if (wechatyPersonaPrompt && document.activeElement !== wechatyPersonaPrompt) {
+      wechatyPersonaPrompt.value = config.personaPrompt || "";
+      updateWechatyPersonaActiveLabel(wechatyPersonaPrompt.value);
+    }
     wechatyConfiguredGroupNames = new Set((config.groupNames || status.group_names || []).map(v => String(v || '').trim()).filter(Boolean));
     wechatyRoomsAreStale = !!status.rooms_stale || (!!status.rooms?.length && status.online === false);
     if (Array.isArray(status.rooms) && status.rooms.length) {
@@ -2546,6 +2600,24 @@ function initTTSSettings() {
       if (wechatyRefreshRoomsBtn) wechatyRefreshRoomsBtn.disabled = false;
     }
   }
+
+  wechatyPersonaPresets?.addEventListener("click", (event) => {
+    const btn = event.target?.closest?.(".wechaty-persona-preset");
+    if (!btn) return;
+    applyWechatyPersonaPreset(btn.dataset.presetId || "");
+  });
+
+  wechatyPersonaResetBtn?.addEventListener("click", () => {
+    const first = wechatyPersonaPresetCache[0];
+    if (first) applyWechatyPersonaPreset(first.id);
+    else if (wechatyPersonaPrompt) {
+      wechatyPersonaPrompt.value = "";
+      updateWechatyPersonaActiveLabel("");
+      showFeedback(wechatyDutyFeedback, "已清空，将在保存时恢复后端默认性格");
+    }
+  });
+
+  wechatyPersonaPrompt?.addEventListener("input", () => updateWechatyPersonaActiveLabel(wechatyPersonaPrompt.value));
 
   wechatyRoomList?.addEventListener("change", (event) => {
     const cb = event.target?.closest?.(".wechaty-room-checkbox");

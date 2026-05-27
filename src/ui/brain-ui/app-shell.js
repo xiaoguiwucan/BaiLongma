@@ -385,10 +385,19 @@ const createSettingsModal = () => `
               <div class="wechaty-subsection-head">
                 <div>
                   <div class="wechaty-subsection-title">微信群助手性格设定</div>
-                  <p class="settings-hint">这里写的是微信群里被 @ 后的角色、人设、说话风格和边界。保存后会直接注入大模型提示词。</p>
+                  <p class="settings-hint">先选一个预设，再按需要微调。这里不会包含网页微信 DOM、浏览器脚本等旧项目流程；保存后会注入当前 Wechaty + Honcho 群回复 prompt。</p>
                 </div>
+                <button class="settings-save-btn subtle" id="wechaty-persona-reset-btn" type="button">恢复默认</button>
               </div>
-              <textarea class="settings-textarea wechaty-persona-textarea" id="wechaty-persona-prompt" rows="7" placeholder="例如：你是小白龙，回复要简洁、靠谱、有一点幽默；重要事情先给结论，再给步骤。"></textarea>
+              <div class="wechaty-persona-presets" id="wechaty-persona-presets">
+                <div class="wechaty-empty">正在读取性格预设…</div>
+              </div>
+              <div class="wechaty-persona-editor-head">
+                <span>当前提示词</span>
+                <small id="wechaty-persona-active">未选择预设，可手动编辑</small>
+              </div>
+              <textarea class="settings-textarea wechaty-persona-textarea" id="wechaty-persona-prompt" rows="9" placeholder="例如：你是小白龙，回复要简洁、靠谱、有一点幽默；重要事情先给结论，再给步骤。"></textarea>
+              <p class="settings-hint compact">保存规则：点击预设只会填入上方文本，不会立刻生效；确认后点击“保存并生效”。危险电脑操作仍由安全黑名单强制拦截，性格设定不能绕过。</p>
             </div>
             <div class="wechaty-memory-manager" id="wechaty-memory-manager">
               <div class="wechaty-subsection-head">
@@ -785,6 +794,20 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.3.6</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群助手性格预设：新增 3 种可一键套用的人格风格，并过滤旧项目网页微信流程。</p>
+                <ul class="release-note-points">
+                  <li>新增“主人数字分身 / 技术值班助手 / 幽默社交助手”三张预设卡片。</li>
+                  <li>点击预设只填入提示词，不会立即生效；确认后仍需点“保存并生效”。</li>
+                  <li>预设提示词适配当前 Wechaty + Honcho：不包含 wx.qq.com、DOM、browser_evaluate、浏览器轮询等旧流程。</li>
+                  <li>可查看当前是否完全匹配某个预设；手动编辑后显示为自定义提示词。</li>
+                  <li>危险电脑操作仍由安全黑名单强制拦截，性格设定不能绕过。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.3.5</span>

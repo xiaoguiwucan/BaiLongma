@@ -11,7 +11,7 @@ import { getQuotaStatus } from './quota.js'
 import { isRunning, stopLoop, startLoop } from './control.js'
 import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
-import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
+import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, WECHATY_PERSONA_PRESETS, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
@@ -948,7 +948,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /settings/social — read per-platform configuration status (plaintext keys not returned)
     if (req.method === 'GET' && url.pathname === '/settings/social') {
-      jsonResponse(res, 200, { ok: true, social: getSocialConfig(), wechatyDutyGroup: getWechatyDutyGroupConfig(), wechatyDutyGroupStatus: getWechatyDutyGroupStatus(), honcho: getHonchoConfig(), honchoStatus: getWeChatGroupMemoryStatus(), guardRules: getWeChatCommandGuardRules() })
+      jsonResponse(res, 200, { ok: true, social: getSocialConfig(), wechatyDutyGroup: getWechatyDutyGroupConfig(), wechatyDutyGroupStatus: getWechatyDutyGroupStatus(), wechatyPersonaPresets: WECHATY_PERSONA_PRESETS, honcho: getHonchoConfig(), honchoStatus: getWeChatGroupMemoryStatus(), guardRules: getWeChatCommandGuardRules() })
       return
     }
 
