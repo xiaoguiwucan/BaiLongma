@@ -390,6 +390,19 @@ function shouldPersistActionLog(toolName) {
   return false
 }
 
+function isSuccessfulSendMessageResult(result = '') {
+  const value = String(result || '').trim()
+  return /^消息已发送至/u.test(value) && !/(消息发送失败|错误|未成功|permission denied|执行失败)/iu.test(value)
+}
+
+function isInvalidWechatMentionSkipContent(content = '', toolContext = {}) {
+  const social = toolContext.currentSocial || {}
+  if (social.platform !== 'wechaty-duty-group' || social.mentioned_self !== true) return false
+  const compact = String(content || '').trim().replace(/[\s\u2005\u2006\u2007\u2008\u2009\u200a]/g, '')
+  if (!compact || compact.length > 120) return false
+  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip)/iu.test(compact)
+}
+
 const TOOL_LOOP_LIMITS = {
   maxRounds: 100,
   maxTotalCalls: 30,
@@ -648,6 +661,20 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
 
     // 无工具调用：本轮结束；若工具后空回复，再补一轮明确的最终回复指令。
     if (effectiveToolCalls.length === 0) {
+      if (isInvalidWechatMentionSkipContent(content || allContent, toolContext) && !finalNudgeUsed) {
+        console.log('[Wechaty] 拦截模型误判“没叫我/跳过”，注入强制回复修正。')
+        messages.push({
+          role: 'assistant',
+          content: content || allContent,
+        })
+        messages.push({
+          role: 'user',
+          content: 'Wechaty has already verified from the WeChat message metadata that the current group message mentioned the logged-in assistant account. Your previous “not calling me / skip” answer is invalid. Do not check any nickname or wake word. Call send_message now and directly answer the user request after the leading @ mention.',
+        })
+        allContent = ''
+        finalNudgeUsed = true
+        continue
+      }
       if (!sawToolCall && requiresToolForRequest(message) && !missingToolNudgeUsed) {
         allContent = ''
         messages.push({
@@ -726,7 +753,7 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
       // 任何非 send_message 工具都把它清掉——意味着模型在 send_message 之后又做了新工作，
       // 那之前那次 send_message 只是过场（"好，我去看看…"），还欠用户一次最终回复。
       // 这样 line ~641 的"沉默退出 nudge"才能在该补刀时正确触发。
-      if (tc.name === 'send_message') sentMessage = true
+      if (tc.name === 'send_message') sentMessage = isSuccessfulSendMessageResult(result)
       else sentMessage = false
       if (shouldPersistActionLog(tc.name)) {
         insertActionLog({

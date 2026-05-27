@@ -23,13 +23,22 @@ export function isGroupSummaryRequest(text = '') {
   return /(?:总结|汇总|概括|整理).{0,8}(?:这个群|本群|群聊|聊天记录|最近|今天)|(?:群里|大家|刚刚).{0,8}(?:说了什么|聊了什么|重点|结论|待办)/u.test(value)
 }
 
-export function shouldWakeInWeChatGroup(text = '') {
-  const value = String(text || '').trim()
-  if (!value) return false
-  if (isGroupSummaryRequest(value)) return true
-  // 群聊默认只归档；只有明确 @/呼叫助手才进入 AI，避免刷屏。
-  // ClawBot/iLink 收到的群 @ 文本通常会保留为“@前夜 在吗”，所以必须识别当前登录微信名“前夜”。
-  return /(?:^|[\s@＠])(?:前夜|小白龙|白龙马|贾维斯|jarvis|Jarvis)(?:[\u2005\u2006\u2007\u2008\u2009\u200a\s，,：:、]|$)/u.test(value)
+export function stripLeadingWechatMentions(text = '') {
+  let value = String(text || '').trim()
+  // 微信 @ 后常见分隔符包括普通空格和 U+2005/U+2006 等窄空格。
+  // 这里只剥离开头连续 @ 段，避免把正文里的 @ 人名误删。
+  for (let i = 0; i < 5; i++) {
+    const next = value.replace(/^[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]{1,40}[\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]*/u, '').trim()
+    if (next === value) break
+    value = next
+  }
+  return value
+}
+
+export function shouldWakeInWeChatGroup(text = '', { mentionedSelf = false } = {}) {
+  // 群助手不再绑定“前夜/小白龙/贾维斯”等固定唤醒词。
+  // 只有上游连接器明确确认“@ 当前登录账号”时才唤醒；昵称、群备注、微信名以后怎么改都不影响。
+  return !!mentionedSelf
 }
 
 export function archiveWeChatGroupMessage({ groupId, senderId = '', text, timestamp = nowTimestamp() } = {}) {
@@ -128,16 +137,31 @@ export function buildWeChatGroupSummary(messages = []) {
   ].filter(Boolean).join('\n')
 }
 
-export async function buildWeChatGroupCommandPrompt({ groupId, senderId = '', senderName = '', text = '' } = {}) {
+export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', senderId = '', senderName = '', text = '', mentionedSelf = false } = {}) {
   const groupExternalId = makeWeChatGroupExternalId(groupId)
   const messages = getRecentWeChatGroupMessages(groupExternalId, { limit: 100, hours: 24 })
   const transcript = messages.map(row => `${row.timestamp?.slice(5, 16) || ''} ${row.content}`).join('\n')
   const quickSummary = buildWeChatGroupSummary(messages)
   const memoryContext = await getWeChatGroupMemoryContext({ groupId, senderId, senderName, query: text, limit: 18 })
+  const rawText = String(text || '').trim()
+  const commandText = stripLeadingWechatMentions(rawText) || rawText
+  const verifiedMentionBlock = mentionedSelf
+    ? [
+        '<wechat-mention-verification>',
+        'Wechaty 已经从微信消息结构确认：这条消息 @ 了当前登录的助手账号。',
+        '这不是关键词判断，也不依赖微信昵称、群昵称或备注名；即使文本里显示的是“小风/风/前夜/其他新昵称”，也必须视为用户正在叫你。',
+        '硬性要求：禁止回复“没叫我”“不是@我”“跳过”“无需回应”等内容；必须直接回答用户真正的问题或请求。',
+        '</wechat-mention-verification>',
+      ].join('\n')
+    : ''
   return [
-    `微信群成员 ${senderId || '未知成员'} 发来群聊命令：${String(text || '').trim()}`,
+    verifiedMentionBlock,
+    `微信群${groupName ? `「${groupName}」` : ''}成员 ${senderName || senderId || '未知成员'} 已经 @ 你并发来消息。`,
+    `用户原文：${rawText}`,
+    `去掉开头 @ 后的实际请求：${commandText}`,
     '',
-    '请基于下面这个群最近 24 小时的聊天记录和该群专属长期记忆回复。要求：简洁、按要点整理；如果是总结群聊，给出「结论/重点/待办/风险」；不要编造记录里没有的信息。注意：不同微信群的记忆必须严格隔离，只能使用当前群的记忆。',
+    '请基于用户的实际请求回复。群聊场景下要简洁自然；如果用户只是玩笑/吐槽/骂人，也要正常接话或简短化解，不要说没叫你。',
+    '如果是总结群聊，给出「结论/重点/待办/风险」；不要编造记录里没有的信息。注意：不同微信群的记忆必须严格隔离，只能使用当前群的记忆。',
     '',
     memoryContext || '<group-long-term-memory>（暂无当前群长期记忆）</group-long-term-memory>',
     '',
@@ -148,5 +172,5 @@ export async function buildWeChatGroupCommandPrompt({ groupId, senderId = '', se
     '<local-extractive-summary>',
     quickSummary,
     '</local-extractive-summary>',
-  ].join('\n')
+  ].filter(Boolean).join('\n')
 }

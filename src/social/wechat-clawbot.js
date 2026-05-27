@@ -124,7 +124,7 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
       }
 
       const archived = archiveWeChatGroupMessage({ groupId, senderId, text })
-      recordWeChatGroupMessage({ groupId, senderId, senderName: senderId, text, mentionedSelf: shouldWakeInWeChatGroup(text), source: 'clawbot' }).catch(err => console.warn(`[Honcho] 写入群记忆失败：${err?.message || err}`))
+      recordWeChatGroupMessage({ groupId, senderId, senderName: senderId, text, mentionedSelf: false, source: 'clawbot' }).catch(err => console.warn(`[Honcho] 写入群记忆失败：${err?.message || err}`))
       console.log(`[ClawBot] 群消息已归档 group=${groupId} sender=${senderId} text=${text.slice(0, 80)}`)
       emitEvent?.('message_in', {
         from_id: archived?.groupExternalId || groupExternalId,
@@ -135,10 +135,10 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
         timestamp: new Date().toISOString(),
       })
 
-      const woke = shouldWakeInWeChatGroup(text)
+      const woke = shouldWakeInWeChatGroup(text, { mentionedSelf: false })
       if (!woke) return
       console.log(`[ClawBot] 群 @/唤醒已命中，调用大模型 group=${groupId} sender=${senderId} text=${text.slice(0, 120)}`)
-      const prompt = await buildWeChatGroupCommandPrompt({ groupId, senderId, senderName: senderId, text })
+      const prompt = await buildWeChatGroupCommandPrompt({ groupId, senderId, senderName: senderId, text, mentionedSelf: true })
       // 无 token 时仍可入队让本地窗口显示/处理；出站回群可能失败并在日志中提示。
       const outboundId = contextToken
         ? `wechat:clawbot:group:${groupId}:ctx:${encodeURIComponent(contextToken)}`

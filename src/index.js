@@ -348,6 +348,19 @@ function hasNonMessageToolCall(toolCallLog = []) {
   return toolCallLog.some(t => t.name && t.name !== 'send_message')
 }
 
+function isInvalidWechatMentionSkipFallback(content = '', msg = null) {
+  const social = msg?.social || {}
+  if (social.platform !== 'wechaty-duty-group' || social.mentioned_self !== true) return false
+  const compact = String(content || '').trim().replace(/[\s\u2005\u2006\u2007\u2008\u2009\u200a]/g, '')
+  if (!compact || compact.length > 120) return false
+  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip)/iu.test(compact)
+}
+
+function buildWechatMentionSkipFallbackCorrection(msg = null) {
+  const sender = msg?.social?.sender_name ? `${msg.social.sender_name}，` : ''
+  return `${sender}我在。刚才把这条 @ 消息误判成“没叫我”了；现在已改成只要微信元数据确认 @ 我就必回，不再看昵称。你刚才那句我重新处理一下。`
+}
+
 // Fallback 投递：当模型未按协议调 send_message 时由主循环代为投递。
 // 用 msg 自带的 externalPartyId + channel 路由（用户从哪儿发，就回到哪儿），并写入 conversations 表。
 function deliverFallbackReply(msg, content, timestamp) {
@@ -1266,13 +1279,20 @@ async function runTurn(input, label, msg = null) {
       })
     } else if (fallbackContent) {
       const timestamp = nowTimestamp()
-      console.warn(`[protocol fallback] Model did not call send_message — delivering response body to ${msg.fromId}`)
-      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(fallbackContent, { voiceTurnId: msg?.voiceTurnId || null })
-      deliverFallbackReply(msg, fallbackContent, timestamp)
+      const safeFallbackContent = isInvalidWechatMentionSkipFallback(fallbackContent, msg)
+        ? buildWechatMentionSkipFallbackCorrection(msg)
+        : fallbackContent
+      if (safeFallbackContent !== fallbackContent) {
+        console.warn(`[protocol fallback] Blocked invalid WeChat mention skip reply for ${msg.fromId}; delivering correction instead.`)
+      } else {
+        console.warn(`[protocol fallback] Model did not call send_message — delivering response body to ${msg.fromId}`)
+      }
+      if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(safeFallbackContent, { voiceTurnId: msg?.voiceTurnId || null })
+      deliverFallbackReply(msg, safeFallbackContent, timestamp)
       toolCallLog.push({
         name: 'send_message',
-        args: { target_id: msg.fromId, content: fallbackContent },
-        result: 'fallback delivered from plain response',
+        args: { target_id: msg.fromId, content: safeFallbackContent },
+        result: safeFallbackContent === fallbackContent ? 'fallback delivered from plain response' : 'fallback corrected invalid wechat mention skip',
       })
       emitEvent('protocol_violation', {
         label,

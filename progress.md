@@ -14,3 +14,4 @@
 - 2026-05-27 23:36：验证发现 `nohup npm start` 在当前自动化会话里可能随会话结束被清掉，导致 API 短暂可用后消失；改启动脚本为 macOS `open -n Electron.app --args <项目路径>` 脱离式启动，并验证 30 秒后进程/API/Wechaty QR 仍在线。
 - 2026-05-27 23:39：用改后的 `start-jarvis-background.sh` 重新启动并验证：脚本改用 `open -n Electron.app --args`，18 秒后 API 正常，Wechaty 状态为 `qr_ready`，rooms 未登录时返回 409/保留状态，不再假装已连接。
 - 2026-05-27 23:54：定位扫码后无响应根因：登录接入群后 wechat4u 抛 `-1 == 0`，旧逻辑主动重连导致退出登录。已改为连接后忽略该类暂态错误，并增加群消息接收日志/@文本兜底。
+- 2026-05-28 00:20：修复群 @ 误判“没叫我，跳过”：@ 触发不再绑定任何昵称/关键词，只以 Wechaty mentionSelf 元数据为准，并增加工具与 fallback 拦截。

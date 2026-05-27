@@ -424,7 +424,7 @@ async function handleMessage(message) {
       timestamp: new Date().toISOString(),
     })
 
-    const prompt = await buildWeChatGroupCommandPrompt({ groupId, senderId: talker?.id || senderName, senderName, text })
+    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: talker?.id || senderName, senderName, text, mentionedSelf: true })
     pushMessageRef?.(`wechaty:room:${room.id}`, prompt, WECHAT_GROUP_CHANNEL, {
       noPersist: true,
       externalPartyIdOverride: `wechaty:room:${room.id}`,

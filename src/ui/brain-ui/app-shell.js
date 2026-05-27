@@ -749,6 +749,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.3.1</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群 @ 修复：只要微信元数据确认 @ 当前登录账号，就必须回复，不再看昵称关键词。</p>
+                <ul class="release-note-points">
+                  <li>修复群里 @ 后仍回复“没叫我，跳过”的问题。</li>
+                  <li>移除固定昵称/唤醒词绑定，进群改名、改微信昵称、改备注都不影响 @ 回复。</li>
+                  <li>send_message 和 fallback 增加保护，禁止把错误跳过文本发回微信群。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.3.0</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>
