@@ -5288,3 +5288,61 @@ body.person-card-mode .person-card-panel,
   .wechaty-record-meta { grid-template-columns: 1fr; }
   .wechaty-record-meta em { justify-self: start; }
 }
+.wechaty-meme-panel {
+  border: 1px solid rgba(255, 212, 121, 0.26);
+  border-radius: 14px;
+  padding: 12px;
+  margin-top: 12px;
+  background:
+    radial-gradient(circle at top right, rgba(255, 212, 121, 0.10), transparent 40%),
+    rgba(255,255,255,0.025);
+}
+.wechaty-meme-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin: 10px 0;
+}
+.wechaty-meme-grid label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink2);
+  font-size: 12px;
+}
+.wechaty-meme-preview {
+  min-height: 92px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(0,8,14,0.34);
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
+  gap: 10px;
+}
+.wechaty-meme-preview-card {
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 12px;
+  padding: 8px;
+  background: rgba(255,255,255,0.035);
+  min-width: 0;
+}
+.wechaty-meme-preview-card img {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  object-fit: contain;
+  border-radius: 8px;
+  background: rgba(255,255,255,0.92);
+}
+.wechaty-meme-preview-card small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+@media (max-width: 900px) {
+  .wechaty-meme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

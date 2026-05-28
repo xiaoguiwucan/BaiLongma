@@ -42,6 +42,7 @@ const WEB_TOOLS         = ['web_search', 'fetch_url', 'browser_read']
 const FILESYSTEM_TOOLS  = ['read_file', 'write_file', 'delete_file', 'list_dir', 'make_dir']
 const EXEC_TOOLS        = ['exec_command', 'kill_process', 'list_processes']
 const MEDIA_TOOLS       = ['media_mode', 'music']
+const MEME_TOOLS        = ['meme_search']
 const REMINDER_TOOLS    = ['manage_reminder']
 const PREFETCH_TOOLS    = ['manage_prefetch_task']
 const TICKER_TOOLS      = ['set_tick_interval']
@@ -105,6 +106,12 @@ const WEB_TRIGGERS = [
   '网址', '链接', '浏览', '打开网页', '看看网上', '抓一下',
   'search', 'google', 'bing', 'fetch', 'http://', 'https://', 'url',
   'web', 'browser', 'browse', 'website', '.com', '.cn', '.org', '.io',
+]
+
+const MEME_TRIGGERS = [
+  '斗图', '表情包', '表情', '梗图', '来张图', '来个图', '发个图', '发张图', '找张图',
+  '配个图', '配图', 'gif', '动图', '鄙视', '无语', '笑死', '吃瓜', '破防', '绷不住',
+  'meme', 'sticker', 'reaction gif',
 ]
 
 const MEDIA_TRIGGERS = [
@@ -222,6 +229,9 @@ export function selectTools(ctx = {}) {
   }
   if (hits(body, MEDIA_TRIGGERS)) {
     for (const t of MEDIA_TOOLS) out.add(t)
+  }
+  if (hits(body, MEME_TRIGGERS)) {
+    for (const t of MEME_TOOLS) out.add(t)
   }
   if (hits(body, REMINDER_TRIGGERS) || isTick) {
     for (const t of REMINDER_TOOLS) out.add(t)

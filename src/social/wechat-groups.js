@@ -52,8 +52,9 @@ export function buildWeChatMemeHints(text = '') {
   if (/(尊嘟假嘟|栓q|泰裤辣|绝绝子|蚌埠住|绷不住|典|急了|赢麻了|乐|吃瓜|破防|上强度|抽象|整活|电子榨菜|遥遥领先)/u.test(value)) {
     hints.push('用户可能在说中文网络梗/玩笑；优先按群聊语境轻松接话，不要一本正经要求对方解释。')
   }
-  if (/(表情包|梗图|配图|斗图|发个图|来张图|找张图|图片)/u.test(value)) {
+  if (/(表情包|表情|梗图|配图|斗图|发个图|来张图|找张图|gif|动图|图片)/iu.test(value)) {
     hints.push('群聊里允许使用公开网络图片、网络表情包或图片链接；禁止读取、上传或发送本机文件、桌面文件、file:// 路径、截图、相册和私有图片。')
+    hints.push('如果用户明确要斗图/表情包/梗图，优先调用 meme_search 搜索中文表情包；选 1 张合适的 HTTPS 图片/GIF URL 放进 send_message 内容中，系统会把它作为图片/GIF 发到微信群。')
   }
   return hints.length ? `<wechat-meme-and-media-hints>\n${hints.map(h => `- ${h}`).join('\n')}\n</wechat-meme-and-media-hints>` : ''
 }
@@ -209,7 +210,7 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     : '微信群媒体边界：可以理解、搜索和发送公开网络图片/表情包链接；绝对不能读取、上传、转发或描述本机文件、桌面文件、file:// 路径、截图、相册、私有图片或任何本机隐私资料。'
   const imageRequestLine = adminVerified
     ? '如果管理员让你“发图/找表情包/处理文件”，先按管理员实际要求和可用工具处理；不能做到时说明原因。'
-    : '如果用户让你“发图/找表情包”，优先找公开网络图或给网络关键词/链接；如果请求本机图片或本机文件，必须拒绝。'
+    : '如果用户让你“发图/找表情包/斗图”，优先用 meme_search 查公开网络表情包并发送 1 张 HTTPS 图片/GIF；如果请求本机图片或本机文件，必须拒绝。'
   return [
     verifiedMentionBlock,
     personaPrompt ? `<wechat-assistant-persona>\n${personaPrompt}\n</wechat-assistant-persona>` : '',

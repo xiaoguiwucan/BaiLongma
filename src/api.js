@@ -25,6 +25,7 @@ import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChat
 import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
 import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listKnownWeChatGroups, listWeChatGroupActivityRecords, listWeChatGroupMembers, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
+import { searchMemes } from './social/meme-search.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -1185,9 +1186,32 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return
     }
 
+
+    // GET/POST /social/meme/search — test/search public meme image/GIF URLs
+    if ((req.method === 'GET' || req.method === 'POST') && url.pathname === '/social/meme/search') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const body = req.method === 'POST' ? await readJsonBody(req).catch(() => ({})) : {}
+      const query = body.query || url.searchParams.get('query') || url.searchParams.get('q') || url.searchParams.get('msg') || ''
+      const count = body.count || url.searchParams.get('count') || url.searchParams.get('num') || undefined
+      const page = body.page || url.searchParams.get('page') || undefined
+      const result = await searchMemes({ query, count, page })
+      return jsonResponse(res, result.ok ? 200 : 400, result)
+    }
+
+    // POST /settings/wechat-meme — save WeChat meme/sticker settings
+    if (req.method === 'POST' && url.pathname === '/settings/wechat-meme') {
+      if (!requireLocalOrToken(req, res, url)) return
+      try {
+        const updates = await readJsonBody(req)
+        return jsonResponse(res, 200, { ok: true, wechatMeme: setWechatMemeConfig(updates) })
+      } catch (err) {
+        return jsonResponse(res, 400, { ok: false, error: err.message })
+      }
+    }
+
     // GET /settings/social — read per-platform configuration status (plaintext keys not returned)
     if (req.method === 'GET' && url.pathname === '/settings/social') {
-      jsonResponse(res, 200, { ok: true, social: getSocialConfig(), wechatyDutyGroup: getWechatyDutyGroupConfig(), wechatyDutyGroupStatus: getWechatyDutyGroupStatus(), wechatyPersonaPresets: WECHATY_PERSONA_PRESETS, honcho: getHonchoConfig(), honchoStatus: getWeChatGroupMemoryStatus(), wechatGroupDigest: getWeChatGroupDigestConfig(), guardRules: getWeChatCommandGuardRules() })
+      jsonResponse(res, 200, { ok: true, social: getSocialConfig(), wechatyDutyGroup: getWechatyDutyGroupConfig(), wechatyDutyGroupStatus: getWechatyDutyGroupStatus(), wechatyPersonaPresets: WECHATY_PERSONA_PRESETS, honcho: getHonchoConfig(), honchoStatus: getWeChatGroupMemoryStatus(), wechatGroupDigest: getWeChatGroupDigestConfig(), wechatMeme: getWechatMemeConfig(), guardRules: getWeChatCommandGuardRules() })
       return
     }
 

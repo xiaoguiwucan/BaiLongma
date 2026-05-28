@@ -2135,6 +2135,15 @@ function initTTSSettings() {
   const wechatyRecordsMoreBtn = document.getElementById("wechaty-records-more-btn");
   const wechatyQrArea = document.getElementById("wechaty-qr-area");
   const wechatyQrImg = document.getElementById("wechaty-qr-img");
+  const wechatyMemeEnabled = document.getElementById("wechaty-meme-enabled");
+  const wechatyMemeProvider = document.getElementById("wechaty-meme-provider");
+  const wechatyMemeMax = document.getElementById("wechaty-meme-max");
+  const wechatyMemeCooldown = document.getElementById("wechaty-meme-cooldown");
+  const wechatyMemeTestQuery = document.getElementById("wechaty-meme-test-query");
+  const wechatyTestMemeBtn = document.getElementById("wechaty-test-meme-btn");
+  const wechatySaveMemeBtn = document.getElementById("wechaty-save-meme-btn");
+  const wechatyMemePreview = document.getElementById("wechaty-meme-preview");
+  const wechatyMemeFeedback = document.getElementById("wechaty-meme-feedback");
   const honchoEnabled = document.getElementById("honcho-enabled");
   const honchoEnvironment = document.getElementById("honcho-environment");
   const honchoBaseUrl = document.getElementById("honcho-baseurl");
@@ -2401,11 +2410,12 @@ function initTTSSettings() {
 
   async function loadSocialSettings() {
     try {
-      const { social, wechatyDutyGroup, wechatyDutyGroupStatus, wechatyPersonaPresets: personaPresets, honcho, honchoStatus: honchoRuntime, wechatGroupDigest, guardRules } = await fetch(`${API}/settings/social`).then(r => r.json());
+      const { social, wechatyDutyGroup, wechatyDutyGroupStatus, wechatyPersonaPresets: personaPresets, honcho, honchoStatus: honchoRuntime, wechatGroupDigest, wechatMeme, guardRules } = await fetch(`${API}/settings/social`).then(r => r.json());
       renderWechatyPersonaPresets(personaPresets || [], wechatyDutyGroup?.personaPrompt || "");
       applyWechatyDutyConfig(wechatyDutyGroup, wechatyDutyGroupStatus);
       applyHonchoConfig(honcho, honchoRuntime);
       applyWechatyDigestConfig(wechatGroupDigest || {});
+      applyWechatyMemeConfig(wechatMeme || {});
       renderGuardRules(guardRules || []);
       if (Array.isArray(wechatyDutyGroupStatus?.rooms) && wechatyDutyGroupStatus.rooms.length) {
         wechatyRoomsCache = wechatyDutyGroupStatus.rooms;
@@ -3193,6 +3203,71 @@ function initTTSSettings() {
       : '<div class="wechaty-empty">暂无黑名单规则</div>';
   }
 
+
+  function applyWechatyMemeConfig(config = {}) {
+    if (wechatyMemeEnabled) wechatyMemeEnabled.checked = config.enabled !== false;
+    if (wechatyMemeProvider) wechatyMemeProvider.value = config.provider || 'xiaoapi';
+    if (wechatyMemeMax) wechatyMemeMax.value = String(config.maxPerMessage || 1);
+    if (wechatyMemeCooldown) wechatyMemeCooldown.value = String(config.cooldownSeconds || 30);
+  }
+
+  function renderWechatyMemePreview(items = [], error = '') {
+    if (!wechatyMemePreview) return;
+    if (error) {
+      wechatyMemePreview.innerHTML = `<div class="wechaty-empty">${escapeHtml(error)}</div>`;
+      return;
+    }
+    if (!items.length) {
+      wechatyMemePreview.innerHTML = '<div class="wechaty-empty">没有搜索到可发送的网络表情包。</div>';
+      return;
+    }
+    wechatyMemePreview.innerHTML = items.slice(0, 8).map(item => {
+      const url = escapeHtml(item.url || '');
+      const meta = `${item.type || 'image'} · ${item.width || 0}×${item.height || 0}`;
+      return `<div class="wechaty-meme-preview-card" title="${url}"><img src="${url}" alt="表情包预览" loading="lazy"><small>${escapeHtml(meta)}</small></div>`;
+    }).join('');
+  }
+
+  async function testWechatyMemeSearch() {
+    const query = wechatyMemeTestQuery?.value?.trim() || '鄙视';
+    if (wechatyMemePreview) wechatyMemePreview.innerHTML = '<div class="wechaty-empty">正在搜索表情包…</div>';
+    try {
+      const data = await fetch(`${API}/social/meme/search?query=${encodeURIComponent(query)}&count=8`).then(r => r.json());
+      if (data.ok) {
+        renderWechatyMemePreview(data.items || []);
+        showFeedback(wechatyMemeFeedback || wechatyDutyFeedback, `搜索完成：${data.count || 0} 张`);
+      } else {
+        renderWechatyMemePreview([], data.error || '搜索失败');
+        showFeedback(wechatyMemeFeedback || wechatyDutyFeedback, data.error || '搜索失败', true);
+      }
+    } catch {
+      renderWechatyMemePreview([], '搜索请求失败');
+      showFeedback(wechatyMemeFeedback || wechatyDutyFeedback, '搜索请求失败', true);
+    }
+  }
+
+  async function saveWechatyMemeConfig() {
+    const payload = {
+      enabled: wechatyMemeEnabled?.checked !== false,
+      provider: wechatyMemeProvider?.value || 'xiaoapi',
+      maxPerMessage: Number(wechatyMemeMax?.value || 1),
+      cooldownSeconds: Number(wechatyMemeCooldown?.value || 30),
+    };
+    try {
+      const data = await fetch(`${API}/settings/wechat-meme`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json());
+      if (data.ok) {
+        applyWechatyMemeConfig(data.wechatMeme || payload);
+        showFeedback(wechatyMemeFeedback || wechatyDutyFeedback, '斗图设置已保存，立即生效');
+      } else showFeedback(wechatyMemeFeedback || wechatyDutyFeedback, data.error || '保存失败', true);
+    } catch {
+      showFeedback(wechatyMemeFeedback || wechatyDutyFeedback, '保存请求失败', true);
+    }
+  }
+
   function applyWechatyDutyConfig(config = {}, status = {}) {
     if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
     applyWechatyAdminConfig(config || {});
@@ -3630,6 +3705,8 @@ function initTTSSettings() {
   });
   wechatyStatsViewMode?.addEventListener("change", () => loadWechatyActiveStats({ silent: true, refreshRecords: false }));
   wechatyRoomFilter?.addEventListener("input", renderWechatyRooms);
+  wechatyTestMemeBtn?.addEventListener("click", testWechatyMemeSearch);
+  wechatySaveMemeBtn?.addEventListener("click", saveWechatyMemeConfig);
   wechatyStartBtn?.addEventListener("click", async () => {
     wechatyStartBtn.disabled = true;
     setWechatyStatus("正在连接/恢复微信…", false);

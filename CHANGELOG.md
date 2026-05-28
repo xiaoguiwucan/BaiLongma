@@ -2,6 +2,24 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.24 - 2026-05-28
+
+### 新增
+- 新增 AI 斗图表情包能力，接入慕名 API / xiaoapi 表情搜索接口。
+- 新增 meme_search 工具，AI 可按“斗图、表情包、梗图、无语、鄙视、笑死、吃瓜”等请求搜索公开网络图片/GIF。
+- 新增微信群助手「AI 斗图表情包」设置区，可开启/关闭、选择表情源、设置每次发送数量、冷却时间，并支持关键词测试预览。
+
+### 安全与边界
+- 仅发送 HTTPS 公开网络图片/GIF，不做微信原生表情包收藏/表情商店能力。
+- 默认只允许 biaoqing.gtimg.com、tugelepic.mse.sogou.com 两类表情图域名。
+- 继续禁止读取、上传、转发或描述本机文件、桌面图片、截图、相册、file:// 路径。
+- API 失败时返回错误给 AI，不阻塞正常文字回复。
+
+### 验证
+- 已验证 xiaoapi meme 搜索“鄙视”可返回 GIF 图片。
+- 通过 npm run test:wechat-record-all。
+- 通过 npm run test:wechat-guard。
+
 ## v0.4.23 - 2026-05-28
 
 ### 修复

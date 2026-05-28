@@ -457,6 +457,53 @@ const createSettingsModal = () => `
                 <div class="wechaty-empty">登录并刷新昵称后，这里会按微信昵称显示群成员，可一键加入管理员。</div>
               </div>
             </div>
+
+            <div class="wechaty-meme-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">AI 斗图表情包</div>
+                  <p class="settings-hint">接入慕名 API 表情搜索：群友 @ 后要求斗图/表情包/梗图时，AI 可搜索公开网络图片或 GIF 并发送到群里；不读取、不上传任何本机文件。</p>
+                </div>
+                <button class="settings-save-btn subtle" id="wechaty-test-meme-btn" type="button">测试搜索</button>
+              </div>
+              <label class="wechaty-master-toggle">
+                <input id="wechaty-meme-enabled" type="checkbox" checked>
+                <span>启用 AI 斗图</span>
+              </label>
+              <div class="wechaty-meme-grid">
+                <label>表情源
+                  <select class="settings-select" id="wechaty-meme-provider">
+                    <option value="xiaoapi">慕名 API / xiaoapi</option>
+                  </select>
+                </label>
+                <label>每次最多发送
+                  <select class="settings-select" id="wechaty-meme-max">
+                    <option value="1">1 张（推荐）</option>
+                    <option value="2">2 张</option>
+                    <option value="3">3 张</option>
+                  </select>
+                </label>
+                <label>冷却时间
+                  <select class="settings-select" id="wechaty-meme-cooldown">
+                    <option value="15">15 秒</option>
+                    <option value="30">30 秒（推荐）</option>
+                    <option value="60">60 秒</option>
+                    <option value="120">120 秒</option>
+                  </select>
+                </label>
+                <label>测试关键词
+                  <input class="settings-input" id="wechaty-meme-test-query" type="text" value="鄙视" placeholder="例如：无语、笑死、吃瓜">
+                </label>
+              </div>
+              <div class="wechaty-meme-preview" id="wechaty-meme-preview">
+                <div class="wechaty-empty">输入关键词后点击“测试搜索”，这里会显示将要发送的网络图片/GIF。</div>
+              </div>
+              <div class="settings-row-action">
+                <button class="settings-save-btn primary" id="wechaty-save-meme-btn" type="button">保存斗图设置</button>
+                <span class="settings-feedback" id="wechaty-meme-feedback"></span>
+              </div>
+              <p class="settings-hint compact">安全规则：只允许 HTTPS 公开图片/GIF，默认白名单域名为 biaoqing.gtimg.com 和 tugelepic.mse.sogou.com；本机文件、桌面图片、截图、相册、file:// 一律禁止发送。</p>
+            </div>
             <div class="wechaty-persona-panel">
               <div class="wechaty-subsection-head">
                 <div>

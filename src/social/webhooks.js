@@ -9,7 +9,7 @@ import { env } from './utils.js'
 const WECHAT_TIMESTAMP_TOLERANCE_MS = 5 * 60 * 1000
 
 export function isSocialWebhookPath(pathname) {
-  return pathname.startsWith('/social/')
+  return pathname.startsWith('/social/') && !pathname.startsWith('/social/meme/')
 }
 
 function sha1(values) {

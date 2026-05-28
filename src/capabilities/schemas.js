@@ -56,6 +56,38 @@ export const TOOL_SCHEMAS = {
     }
   },
 
+
+  meme_search: {
+    type: 'function',
+    function: {
+      name: 'meme_search',
+      description: 'Search Chinese meme/sticker images or GIFs for WeChat group replies. Use when a group member asks for 斗图、表情包、梗图、来张图, or when a light meme image is appropriate. Returns public HTTPS image/GIF URLs only; never use local files.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Chinese meme keyword, e.g. 鄙视, 无语, 笑死, 吃瓜, 破防. Keep it short.'
+          },
+          provider: {
+            type: 'string',
+            enum: ['xiaoapi'],
+            description: 'Meme provider. Default xiaoapi.'
+          },
+          count: {
+            type: 'number',
+            description: 'Number of candidates to return, default follows settings.'
+          },
+          page: {
+            type: 'number',
+            description: 'Result page, default 1.'
+          }
+        },
+        required: ['query']
+      }
+    }
+  },
+
   read_file: {
     type: 'function',
     function: {

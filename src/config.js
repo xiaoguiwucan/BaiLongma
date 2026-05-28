@@ -1366,6 +1366,51 @@ export function clearClawbotCredentials() {
   writeStoredConfig(rest)
 }
 
+
+const DEFAULT_WECHAT_MEME_CONFIG = {
+  enabled: true,
+  provider: 'xiaoapi',
+  endpoint: 'https://api.suol.cc/v1/meme.php',
+  maxPerMessage: 1,
+  cooldownSeconds: 30,
+  searchCount: 10,
+  allowGif: true,
+  allowedDomains: ['biaoqing.gtimg.com', 'tugelepic.mse.sogou.com'],
+}
+
+function normalizeWechatMemeConfig(raw = {}) {
+  const endpoint = String(raw.endpoint || DEFAULT_WECHAT_MEME_CONFIG.endpoint).trim() || DEFAULT_WECHAT_MEME_CONFIG.endpoint
+  const allowedDomains = Array.isArray(raw.allowedDomains || raw.allowed_domains)
+    ? (raw.allowedDomains || raw.allowed_domains)
+    : DEFAULT_WECHAT_MEME_CONFIG.allowedDomains
+  return {
+    enabled: raw.enabled !== false,
+    provider: String(raw.provider || 'xiaoapi').trim() || 'xiaoapi',
+    endpoint,
+    maxPerMessage: Math.min(Math.max(Number(raw.maxPerMessage ?? raw.max_per_message ?? 1) || 1, 1), 3),
+    cooldownSeconds: Math.min(Math.max(Number(raw.cooldownSeconds ?? raw.cooldown_seconds ?? 30) || 30, 5), 600),
+    searchCount: Math.min(Math.max(Number(raw.searchCount ?? raw.search_count ?? 10) || 10, 1), 40),
+    allowGif: raw.allowGif !== false && raw.allow_gif !== false,
+    allowedDomains: [...new Set(allowedDomains.map(v => String(v || '').trim().toLowerCase()).filter(Boolean))].slice(0, 20),
+  }
+}
+
+export function getWechatMemeConfig() {
+  let stored = {}
+  try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social?.wechatMeme || {} } catch {}
+  return normalizeWechatMemeConfig(stored)
+}
+
+export function setWechatMemeConfig(updates = {}) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.social?.wechatMeme || {}
+  const next = normalizeWechatMemeConfig({ ...current, ...updates })
+  const social = { ...(existing.social || {}), wechatMeme: next }
+  writeStoredConfig({ ...existing, social })
+  return getWechatMemeConfig()
+}
+
 export function getSocialConfig() {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social || {} } catch {}

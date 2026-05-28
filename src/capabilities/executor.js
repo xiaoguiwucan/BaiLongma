@@ -7,6 +7,7 @@ import { nowTimestamp } from '../time.js'
 import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByMemId, memoryExistsByMemId, getMemoryByMemId, deleteMemoryByMemId, hideMemoryByMemId, normalizeConversationPartyId, createReminder, findMergeableOneOffReminder, appendReminderTask, listPendingReminders, getReminderById, cancelReminder, upsertPrefetchTask, removePrefetchTask, listPrefetchTasks, insertActionLog, insertConversation, upsertMusicTrack, getMusicTrack, searchMusicLibrary, listMusicLibrary, updateMusicLrc, deleteMusicTrack as dbDeleteMusicTrack, setConfig as dbSetConfig } from '../db.js'
 import { emitEvent, emitUICommand, emitACUIEvent, hasACUIClient, addActiveUICard, removeActiveUICard, getActiveUICards, setStickyEvent } from '../events.js'
 import { dispatchSocialMessage } from '../social/dispatch.js'
+import { execMemeSearch } from '../social/meme-search.js'
 import { callCapability, listCapabilities } from '../providers/registry.js'
 import { isDailyLimitReached } from '../quota.js'
 import { setCustomInterval as setTickerInterval, getStatus as getTickerStatus } from '../ticker.js'
@@ -294,6 +295,8 @@ function summarizeToolExecution(name, args = {}) {
       return `${name}(${String(args.url || args.link || args.href || '?').slice(0, 120)})`
     case 'web_search':
       return `web_search(${String(args.query || args.q || args.keyword || '?').slice(0, 120)})`
+    case 'meme_search':
+      return `meme_search(${String(args.query || args.q || args.keyword || '?').slice(0, 80)})`
     case 'send_message':
     case 'express':
       return `${name} -> ${args.target_id || '(unknown)'}`
@@ -416,6 +419,8 @@ async function executeToolUnchecked(name, args, context = {}) {
         return await execListProcesses(args)
       case 'web_search':
         return await execWebSearch(args, context)
+      case 'meme_search':
+        return await execMemeSearch(args)
       case 'fetch_url':
         return await execFetchUrl(args, context)
       case 'browser_read':
