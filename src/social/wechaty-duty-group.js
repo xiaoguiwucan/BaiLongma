@@ -1086,7 +1086,32 @@ function isAllowedGroupTopic(topic) {
 }
 
 function markSelectedRooms(rooms = []) {
-  return rooms.map(room => ({ ...room, selected: isAllowedGroupTopic(room.topic) }))
+  const map = new Map()
+  const canonicalTopic = value => String(value || '').trim().replace(/\s+/gu, ' ').toLowerCase()
+  for (const raw of Array.isArray(rooms) ? rooms : []) {
+    const topic = String(raw?.topic || '').trim()
+    const id = String(raw?.id || '').trim()
+    if (!topic && !id) continue
+    // Wechaty/wechat4u 可能因为重新登录给同一个群留下多个历史 room_id；
+    // UI 和运行态都必须按群名只保留一条，避免设置、记忆、统计页面重复。
+    const key = topic ? `name:${canonicalTopic(topic)}` : `id:${id}`
+    const selected = isAllowedGroupTopic(topic) || raw?.selected === true
+    const prev = map.get(key)
+    if (!prev) {
+      map.set(key, { ...raw, id, topic: topic || id, selected, historical_ids: id ? [id] : [] })
+      continue
+    }
+    const historical = new Set([...(prev.historical_ids || []), ...(raw?.historical_ids || []), id].filter(Boolean))
+    map.set(key, {
+      ...prev,
+      // 已开启 @ 回复的真实群优先；否则保留先出现的 id，旧 id 只进入 historical_ids。
+      id: selected && id ? id : prev.id,
+      topic: topic || prev.topic,
+      selected: prev.selected || selected,
+      historical_ids: [...historical],
+    })
+  }
+  return [...map.values()]
 }
 
 function createWechatyPuppet() {

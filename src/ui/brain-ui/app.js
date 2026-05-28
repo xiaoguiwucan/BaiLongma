@@ -3287,34 +3287,67 @@ function initTTSSettings() {
 
 
   function mergeWechatyKnownGroups() {
-    const rows = [];
-    const seen = new Set();
+    const map = new Map();
+    const canonicalTopic = value => String(value || '').trim().replace(/\s+/gu, ' ').toLowerCase();
+    const normalizeId = value => {
+      const raw = String(value || '').trim();
+      if (!raw) return '';
+      if (raw.startsWith('wechaty:')) return raw;
+      if (raw.startsWith('@@')) return `wechaty:${raw}`;
+      return raw;
+    };
+    const sourceRank = { room: 3, known: 2, configured: 1 };
     const add = (raw = {}, source = '') => {
-      const topic = String(raw.topic || raw.group_name || raw.groupName || raw.name || raw.id || '').trim();
-      const id = String(raw.id || raw.group_id || raw.groupId || topic || '').trim();
-      if (!topic && !id) return;
-      const key = id || topic;
-      if (seen.has(key)) return;
-      seen.add(key);
+      const topic = String(raw.topic || raw.group_name || raw.groupName || raw.name || '').trim();
+      const id = normalizeId(raw.id || raw.group_id || raw.groupId || '');
+      const displayTopic = topic || id;
+      if (!displayTopic) return;
+      // 用户看到的是微信群名，不应该因为 Wechaty 历史 room_id 变化重复显示同一个群。
+      const key = topic ? `name:${canonicalTopic(topic)}` : `id:${id}`;
       const selected = wechatySelectedGroupNames.has(topic) || raw.selected === true;
       const knownOnly = source === 'known';
-      const normalizedId = id.startsWith('wechaty:') ? id : (id.startsWith('@@') ? `wechaty:${id}` : id);
-      rows.push({
-        id: normalizedId,
-        topic: topic || normalizedId,
-        selected,
-        stale: knownOnly ? true : wechatyRoomsAreStale,
-        real: !!normalizedId,
-        knownOnly,
-        message_count: Number(raw.message_count || 0),
-        member_count: Number(raw.member_count || 0),
-        last_seen_display: raw.last_seen_display || '',
+      const prev = map.get(key);
+      const historicalIds = new Set([...(prev?.historical_ids || []), ...(Array.isArray(raw.historical_ids) ? raw.historical_ids.map(normalizeId) : []), id].filter(Boolean));
+      if (!prev) {
+        map.set(key, {
+          id: id || displayTopic,
+          topic: displayTopic,
+          selected,
+          stale: knownOnly ? true : wechatyRoomsAreStale,
+          real: !!id,
+          knownOnly,
+          sourceRank: sourceRank[source] || 0,
+          message_count: Number(raw.message_count || 0),
+          member_count: Number(raw.member_count || 0),
+          last_seen_display: raw.last_seen_display || '',
+          historical_ids: [...historicalIds],
+          duplicate_count: Number(raw.duplicate_count || Math.max(0, historicalIds.size - 1)),
+        });
+        return;
+      }
+      const incomingRank = sourceRank[source] || 0;
+      const preferIncoming = incomingRank > Number(prev.sourceRank || 0)
+        || (!!raw.last_seen_display && !prev.last_seen_display);
+      map.set(key, {
+        ...prev,
+        id: preferIncoming && id ? id : prev.id,
+        topic: preferIncoming && displayTopic ? displayTopic : prev.topic,
+        selected: prev.selected || selected,
+        stale: prev.stale && (knownOnly ? true : wechatyRoomsAreStale),
+        real: prev.real || !!id,
+        knownOnly: prev.knownOnly && knownOnly,
+        sourceRank: Math.max(Number(prev.sourceRank || 0), incomingRank),
+        message_count: Number(prev.message_count || 0) + Number(raw.message_count || 0),
+        member_count: Math.max(Number(prev.member_count || 0), Number(raw.member_count || 0)),
+        last_seen_display: raw.last_seen_display || prev.last_seen_display || '',
+        historical_ids: [...historicalIds],
+        duplicate_count: Math.max(Number(prev.duplicate_count || 0), Number(raw.duplicate_count || 0), Math.max(0, historicalIds.size - 1)),
       });
     };
     for (const room of wechatyRoomsCache || []) add(room, 'room');
     for (const group of wechatyKnownGroupsCache || []) add(group, 'known');
     for (const name of wechatyConfiguredGroupNames) add({ id: name, topic: name, selected: true }, 'configured');
-    return rows;
+    return [...map.values()].map(({ sourceRank: _sourceRank, ...row }) => row);
   }
 
   async function loadWechatyKnownGroups({ silent = true } = {}) {
