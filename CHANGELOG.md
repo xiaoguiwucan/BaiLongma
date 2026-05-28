@@ -2,6 +2,19 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.25 - 2026-05-28
+
+### 修复
+- 修复微信群斗图发送时先显示图片/GIF URL 链接的问题：现在默认隐藏 URL 文本，只直接发送图片或 GIF。
+- 如果 AI 回复内容只有表情包 URL，则不再发送任何文字气泡。
+- 如果 AI 同时写了自然语言说明和表情图，则只发送说明文字 + 图片，不暴露链接。
+- 优化图片/GIF发送速度，图片发送改为并发投递并统计成功数量。
+
+### 验证
+- 通过 node --check。
+- 通过 npm run test:wechat-record-all。
+- 通过 npm run test:wechat-guard。
+
 ## v0.4.24 - 2026-05-28
 
 ### 新增

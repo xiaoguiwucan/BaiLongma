@@ -370,20 +370,29 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
       return { ok: false, blocked: true, reason: 'local_file_reference_in_wechat_outbound' }
     }
     const imageUrls = extractPublicImageUrlsFromWechatText(body)
-    const textBody = imageUrls.length ? (stripImageMarkdown(body, imageUrls) || '公开网络图片：') : body
-    if (mentionContact) {
-      await room.say(textBody, mentionContact)
-    } else {
-      await room.say(textBody)
-    }
-    for (const url of imageUrls) {
-      try {
-        await room.say(FileBox.fromUrl(url))
-      } catch (err) {
-        console.warn(`[Wechaty] 公开网络图片发送失败：${url} ${err?.message || err}`)
+    const textBody = imageUrls.length ? stripImageMarkdown(body, imageUrls) : body
+    // 表情包/斗图场景不要把图片 URL 当文字发到群里；微信里应只看到图片/GIF。
+    // 若模型额外写了自然语言说明，则先 @ 提问人发一句短文字；纯图片回复则完全不发链接文本。
+    if (textBody.trim()) {
+      if (mentionContact) {
+        await room.say(textBody, mentionContact)
+      } else {
+        await room.say(textBody)
       }
     }
-    return { ok: true, platform: 'wechaty-duty-group', roomId: rid, images: imageUrls.length }
+    const imageResults = await Promise.allSettled(imageUrls.map(async url => {
+      await room.say(FileBox.fromUrl(url))
+      return url
+    }))
+    for (let i = 0; i < imageResults.length; i++) {
+      const result = imageResults[i]
+      if (result.status === 'rejected') {
+        console.warn(`[Wechaty] 公开网络图片发送失败：${imageUrls[i]} ${result.reason?.message || result.reason}`)
+      }
+    }
+    const sentImages = imageResults.filter(item => item.status === 'fulfilled').length
+    if (!textBody.trim() && !sentImages) return { ok: false, platform: 'wechaty-duty-group', roomId: rid, reason: 'no text or image sent' }
+    return { ok: true, platform: 'wechaty-duty-group', roomId: rid, images: sentImages }
   } catch (err) {
     console.error(`[Wechaty] 群消息发送失败：${err?.message || err}`)
     return { ok: false, error: err?.message || String(err) }
