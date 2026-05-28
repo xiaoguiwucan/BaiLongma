@@ -12,6 +12,27 @@ let appIdCache = ''
 const userCache = new Map()
 const sessionCache = new Map()
 
+let honchoDisabledUntil = 0
+let honchoLastError = ''
+
+function isHonchoTemporarilyDisabled() {
+  return honchoDisabledUntil && Date.now() < honchoDisabledUntil
+}
+
+function markHonchoUnavailable(err, source = 'honcho') {
+  const message = err?.message || String(err || 'unknown error')
+  honchoLastError = message
+  honchoDisabledUntil = Date.now() + 60_000
+  client = null
+  userCache.clear()
+  sessionCache.clear()
+  console.warn(`[Honcho] ${source} 暂不可用，60 秒内降级跳过：${message}`)
+}
+
+function honchoUnavailableResult(extra = {}) {
+  return { ok: false, provider: 'honcho', skipped: true, degraded: true, error: honchoLastError || 'Honcho 暂不可用', ...extra }
+}
+
 const ASSISTANT_PEER_ID = 'bailongma_assistant'
 
 const GROUP_SESSION_CONFIGURATION = {
@@ -160,6 +181,7 @@ function formatHonchoSummariesAsContext(summaries = []) {
 }
 
 function getClient() {
+  if (isHonchoTemporarilyDisabled()) return null
   const cfg = getHonchoConfig()
   if (!cfg.enabled || !cfg.apiKey) return null
   const key = cfg.apiKey
@@ -187,10 +209,15 @@ function getClient() {
 }
 
 async function ensureApp(honcho) {
-  await honcho.getMetadata().catch(() => ({}))
-  const cfg = getHonchoConfig()
-  appIdCache = cfg.workspaceId || cfg.appId || 'bailongma-wechat-memory'
-  return appIdCache
+  try {
+    await honcho.getMetadata()
+    const cfg = getHonchoConfig()
+    appIdCache = cfg.workspaceId || cfg.appId || 'bailongma-wechat-memory'
+    return appIdCache
+  } catch (err) {
+    markHonchoUnavailable(err, '连接')
+    throw err
+  }
 }
 
 async function ensurePeer(honcho, id, metadata = {}) {
@@ -298,7 +325,7 @@ export async function recordWeChatGroupMessage({ groupId, groupName = '', sender
   const gid = groupKey(groupId)
   const honcho = getClient()
   if (!honcho || !gid || !content) return { ok: false, skipped: true, reason: 'honcho_not_configured' }
-  await ensureApp(honcho)
+  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ reason: 'honcho_unavailable' }) }
   const groupPeerId = groupPeerIdFor(gid)
   const memberPeerId = memberPeerIdFor(senderId, senderName)
   const groupPeer = await ensurePeer(honcho, groupPeerId, { type: 'wechat_group', group_id: gid, group_name: groupName })
@@ -318,7 +345,7 @@ export async function recordWeChatGroupAssistantReply({ groupId, groupName = '',
   const gid = groupKey(groupId)
   const honcho = getClient()
   if (!honcho || !gid || !content) return { ok: false, skipped: true, reason: 'honcho_not_configured' }
-  await ensureApp(honcho)
+  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ reason: 'honcho_unavailable' }) }
   const groupPeer = await ensurePeer(honcho, groupPeerIdFor(gid), { type: 'wechat_group', group_id: gid, group_name: groupName })
   const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
   const session = await ensureSession(honcho, gid, { type: 'wechat_group_session', group_id: gid, group_name: groupName, source }, [groupPeer, assistantPeer])
@@ -333,7 +360,7 @@ export async function createWeChatGroupManualMemory({ groupId, groupName = '', c
   const honcho = getClient()
   if (!honcho || !gid) return { ok: false, provider: 'honcho', error: 'Honcho 未配置或未启用' }
   if (!body) return { ok: false, provider: 'honcho', error: '记忆内容不能为空' }
-  await ensureApp(honcho)
+  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ error: `Honcho 暂不可用：${err?.message || err}` }) }
   const groupPeer = await ensurePeer(honcho, groupPeerIdFor(gid), { type: 'wechat_group', group_id: gid, group_name: groupName })
   const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
   const memberPeer = senderId || senderName ? await ensurePeer(honcho, memberPeerIdFor(senderId, senderName), { type: 'wechat_member', sender_id: senderId, sender_name: senderName, group_id: gid, group_name: groupName }) : null
@@ -391,7 +418,7 @@ export async function getWeChatGroupMemoryContext({ groupId, senderId = '', send
   const gid = groupKey(groupId)
   const honcho = getClient()
   if (!honcho || !gid) return '<honcho-memory status="disabled">Honcho 未配置或未启用，本群无可用长期记忆。</honcho-memory>'
-  await ensureApp(honcho)
+  try { await ensureApp(honcho) } catch (err) { return `<honcho-memory status="error">Honcho 暂不可用，已降级跳过：${normalizeText(err?.message || err)}</honcho-memory>` }
   const groupPeer = await ensurePeer(honcho, groupPeerIdFor(gid), { type: 'wechat_group', group_id: gid })
   const memberPeer = await ensurePeer(honcho, memberPeerIdFor(senderId, senderName), { type: 'wechat_member', sender_id: senderId, sender_name: senderName, group_id: gid })
   const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
@@ -418,7 +445,7 @@ export async function listWeChatGroupMemory({ groupId, groupName = '', limit = 8
   const gid = groupKey(groupId)
   const honcho = getClient()
   if (!honcho || !gid) return { ok: false, provider: 'honcho', items: [], messages: [], conclusions: [], summaries: [], error: 'Honcho 未配置或未启用' }
-  await ensureApp(honcho)
+  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ items: [], messages: [], conclusions: [], summaries: [], error: `Honcho 暂不可用：${err?.message || err}` }) }
   const groupPeer = await ensurePeer(honcho, groupPeerIdFor(gid), { type: 'wechat_group', group_id: gid, group_name: groupName })
   const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
   const session = await ensureSession(honcho, gid, { type: 'wechat_group_session', group_id: gid, group_name: groupName }, [groupPeer, assistantPeer])
@@ -484,13 +511,13 @@ export async function listWeChatGroupMemory({ groupId, groupName = '', limit = 8
       errors,
     }
   } catch (err) {
-    return { ok: false, provider: 'honcho', items: [], messages: [], conclusions: [], summaries: [], error: err?.message || String(err), workspaceId: appIdCache, group_id: gid, sessionId: session.id }
+    return { ok: false, provider: 'honcho', items: [], messages: [], conclusions: [], summaries: [], error: err?.message || String(err), workspaceId: appIdCache, group_id: gid, sessionId: session?.id || '' }
   }
 }
 
 export async function listWeChatGroupMemoryOverview({ groups = [], limit = 20 } = {}) {
   const honcho = getClient()
-  if (!honcho) return { ok: false, provider: 'honcho', groups: [], error: 'Honcho 未配置或未启用' }
+  if (!honcho) return { ok: false, provider: 'honcho', groups: [], degraded: isHonchoTemporarilyDisabled(), error: isHonchoTemporarilyDisabled() ? `Honcho 暂不可用：${honchoLastError}` : 'Honcho 未配置或未启用' }
   const unique = []
   const seen = new Set()
   for (const group of groups || []) {
@@ -523,7 +550,7 @@ export async function deleteWeChatGroupMemory({ groupId, kind = '', itemId = '',
   const gid = groupKey(groupId)
   const honcho = getClient()
   if (!honcho || !gid) return { ok: false, provider: 'honcho', error: 'Honcho 未配置或未启用' }
-  await ensureApp(honcho)
+  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ error: `Honcho 暂不可用：${err?.message || err}` }) }
   const session = await ensureSession(honcho, gid, { type: 'wechat_group_session', group_id: gid }, [])
   const normalizedKind = String(kind || '').trim().toLowerCase()
   if (normalizedKind === 'session' || normalizedKind === 'group' || normalizedKind === 'all') {

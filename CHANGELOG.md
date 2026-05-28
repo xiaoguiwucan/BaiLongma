@@ -2,6 +2,20 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.20 - 2026-05-28
+
+### 修复 Honcho 离线影响设置页和 LLM 模型操作
+
+- 修复本地 Docker/Honcho 未启动时，群记忆接口反复 `fetch failed` 造成设置页请求异常、程序不稳定的问题。
+- Honcho 连接失败后进入 60 秒降级冷却：微信群记忆读取/写入会跳过并返回可读错误，不再影响 LLM 模型编辑、设为当前、删除等设置操作。
+- 修复 Honcho 列表异常路径里引用未定义 `session.id` 的潜在崩溃点。
+- 桌面启动脚本仍会尝试启动 Honcho，但 Docker 没开时不会阻断贾维斯主程序。
+
+### 验证
+
+- `node --check src/social/wechat-group-memory.js` 通过。
+- 本地 API 验证 LLM 模型“设为当前 / 新增测试模型 / 删除测试模型”成功。
+
 ## v0.4.19 - 2026-05-28
 
 ### 优化管理员设置：界面显示微信昵称

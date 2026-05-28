@@ -109,3 +109,9 @@
 2. [complete] 搜索框改为按微信昵称/备注搜索。
 3. [complete] 成员卡片隐藏长 ID，点击昵称卡片添加/取消管理员。
 4. [complete] 测试、重启、发布 GitHub Release。
+
+## v0.4.20 Hotfix Plan - Honcho offline should not break LLM settings
+1. [complete] 定位 LLM 接口可用，问题来自 Honcho/Docker 离线导致设置页异常和程序不稳定。
+2. [complete] Honcho 连接失败后 60 秒降级跳过，读写群记忆不再抛到主流程。
+3. [complete] 修复 Honcho list 异常路径引用未定义 session。
+4. [complete] 测试、重启、发布 GitHub Release。
