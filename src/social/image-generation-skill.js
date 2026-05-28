@@ -63,7 +63,8 @@ async function callImageApi({ prompt, quality, size, config }) {
     quality,
   }
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 90000)
+  const timeoutMs = Math.min(Math.max(Number(config.apiTimeoutSeconds || 180), 60), 600) * 1000
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
     const res = await fetch(url, {
       method: 'POST',
@@ -88,7 +89,7 @@ async function callImageApi({ prompt, quality, size, config }) {
     if (!imageUrl && !b64) return { ok: false, error: 'API 没有返回图片 URL 或 b64_json', request: { size, quality }, preview: text.slice(0, 300) }
     return { ok: true, imageUrl, b64, revisedPrompt: item?.revised_prompt || '', request: { size, quality } }
   } catch (err) {
-    return { ok: false, error: err?.name === 'AbortError' ? '图片生成请求超时' : (err?.message || String(err)), request: { size, quality } }
+    return { ok: false, error: err?.name === 'AbortError' ? `图片生成请求超时（${Math.round(timeoutMs / 1000)} 秒）` : (err?.message || String(err)), request: { size, quality } }
   } finally {
     clearTimeout(timer)
   }

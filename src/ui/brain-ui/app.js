@@ -2150,6 +2150,7 @@ function initTTSSettings() {
   const skillImageModel = document.getElementById("skill-image-model");
   const skillImageKey = document.getElementById("skill-image-key");
   const skillImageLimit = document.getElementById("skill-image-limit");
+  const skillImageTimeout = document.getElementById("skill-image-timeout");
   const skillImageDefaultQuality = document.getElementById("skill-image-default-quality");
   const skillImageHighQuality = document.getElementById("skill-image-high-quality");
   const skillImageSaveBtn = document.getElementById("skill-image-save-btn");
@@ -3220,6 +3221,7 @@ function initTTSSettings() {
     if (skillImageBaseUrl) skillImageBaseUrl.value = config.baseUrl || 'https://sub.pbopenai.cloud/v1';
     if (skillImageModel) skillImageModel.value = config.model || 'gpt-image-2';
     if (skillImageLimit) skillImageLimit.value = String(config.maxPerUserPerHour || 10);
+    if (skillImageTimeout) skillImageTimeout.value = String(config.apiTimeoutSeconds || 180);
     if (skillImageDefaultQuality) skillImageDefaultQuality.value = config.defaultQuality || 'low';
     if (skillImageHighQuality) skillImageHighQuality.value = config.highQuality || 'high';
     if (skillImageKey) skillImageKey.value = '';
@@ -3244,6 +3246,7 @@ function initTTSSettings() {
       baseUrl: skillImageBaseUrl?.value?.trim() || 'https://sub.pbopenai.cloud/v1',
       model: skillImageModel?.value?.trim() || 'gpt-image-2',
       maxPerUserPerHour: Number(skillImageLimit?.value || 10),
+      apiTimeoutSeconds: Number(skillImageTimeout?.value || 180),
       defaultQuality: skillImageDefaultQuality?.value || 'low',
       highQuality: skillImageHighQuality?.value || 'high',
     };

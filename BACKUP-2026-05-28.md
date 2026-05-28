@@ -1,4 +1,21 @@
 
+## v0.4.33 - 2026-05-29
+
+### 优化
+- 实测生图速度：low / 1024×1024 两次分别约 84 秒、75 秒。
+- 将生图 API 默认超时从 90 秒提高到 180 秒，避免服务稍微排队就被误判为超时。
+- Skill 设置页新增「API 超时」下拉框，可选 120 / 180 / 240 / 300 秒。
+- 生图超时错误现在会明确提示当前超时时间，例如 `图片生成请求超时（180 秒）`。
+
+### 建议
+- 默认 low / 1024×1024 继续保持速度优先。
+- 普通生图建议 180 秒；高清/2K/4K/8K 如果后续仍超时，可在 Skill 设置里调到 240 或 300 秒。
+
+### 验证
+- 通过 node --check：src/social/image-generation-skill.js、src/social/wechaty-duty-group.js、src/config.js、src/api.js、src/ui/brain-ui/app.js、src/ui/brain-ui/app-shell.js。
+- 通过 npm run test:wechat-guard。
+- 通过 npm run test:wechat-record-all。
+
 ## v0.4.32 - 2026-05-29
 
 ### 修复

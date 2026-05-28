@@ -429,6 +429,14 @@ const createSettingsModal = () => `
                     <option value="20">20 张</option>
                   </select>
                 </label>
+                <label>API 超时
+                  <select class="settings-select" id="skill-image-timeout">
+                    <option value="120">120 秒</option>
+                    <option value="180">180 秒（推荐）</option>
+                    <option value="240">240 秒</option>
+                    <option value="300">300 秒</option>
+                  </select>
+                </label>
                 <label>默认质量
                   <select class="settings-select" id="skill-image-default-quality">
                     <option value="low">low（最快）</option>

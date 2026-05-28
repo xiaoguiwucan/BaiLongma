@@ -1762,6 +1762,7 @@ const DEFAULT_SKILL_IMAGE_CONFIG = {
   defaultSize: '1024x1024',
   highQuality: 'high',
   highSize: '1024x1024',
+  apiTimeoutSeconds: 180,
 }
 
 function normalizeSkillImageConfig(raw = {}) {
@@ -1770,6 +1771,7 @@ function normalizeSkillImageConfig(raw = {}) {
   const apiKey = String(raw.apiKey || raw.api_key || process.env.BAILONGMA_IMAGE_API_KEY || '').trim()
   const maxPerUserPerHour = Math.min(Math.max(Number(raw.maxPerUserPerHour ?? raw.max_per_user_per_hour ?? DEFAULT_SKILL_IMAGE_CONFIG.maxPerUserPerHour) || 10, 1), 100)
   const defaultQuality = ['low', 'medium', 'high', 'auto'].includes(String(raw.defaultQuality || raw.default_quality || '').trim()) ? String(raw.defaultQuality || raw.default_quality).trim() : DEFAULT_SKILL_IMAGE_CONFIG.defaultQuality
+  const apiTimeoutSeconds = Math.min(Math.max(Number(raw.apiTimeoutSeconds ?? raw.api_timeout_seconds ?? DEFAULT_SKILL_IMAGE_CONFIG.apiTimeoutSeconds) || 180, 60), 600)
   const highQuality = ['low', 'medium', 'high', 'auto'].includes(String(raw.highQuality || raw.high_quality || '').trim()) ? String(raw.highQuality || raw.high_quality).trim() : DEFAULT_SKILL_IMAGE_CONFIG.highQuality
   return {
     enabled: raw.enabled !== false,
@@ -1783,6 +1785,7 @@ function normalizeSkillImageConfig(raw = {}) {
     defaultSize: String(raw.defaultSize || raw.default_size || DEFAULT_SKILL_IMAGE_CONFIG.defaultSize).trim() || DEFAULT_SKILL_IMAGE_CONFIG.defaultSize,
     highQuality,
     highSize: String(raw.highSize || raw.high_size || DEFAULT_SKILL_IMAGE_CONFIG.highSize).trim() || DEFAULT_SKILL_IMAGE_CONFIG.highSize,
+    apiTimeoutSeconds,
   }
 }
 
