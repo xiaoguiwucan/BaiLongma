@@ -973,6 +973,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.10</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">Wechaty 启动卡住自恢复修复：避免重启后假 starting 导致群消息进不来。</p>
+                <ul class="release-note-points">
+                  <li>启动 60 秒仍没有二维码、登录事件或真实在线状态时，自动重启 Wechaty 连接。</li>
+                  <li>设置页“登录/恢复微信”不再把无二维码的 starting 当作已运行，会走重启恢复。</li>
+                  <li>和 v0.4.9 的持续入库配合，确保“能收到消息”和“收到就入库”两层都稳定。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.9</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

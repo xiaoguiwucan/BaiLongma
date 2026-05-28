@@ -297,7 +297,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         if (before.online) {
           return jsonResponse(res, 200, { ok: true, already_running: true, ...before })
         }
-        if (['qr_ready', 'starting'].includes(before.status)) {
+        if (before.status === 'qr_ready' && before.qr) {
           return jsonResponse(res, 200, { ok: true, already_running: true, ...before })
         }
         const starter = ['idle', 'error', 'disconnected'].includes(before.status)

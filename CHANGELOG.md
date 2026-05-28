@@ -2,6 +2,25 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.10 - 2026-05-28
+
+### Wechaty 启动卡住自恢复修复
+
+- 修复程序重启后 Wechaty 可能长时间停在 `starting`，导致群消息无法进入程序、聊天记录库自然也无法继续入库的问题。
+- 新增 60 秒启动看门狗：如果启动后没有拿到二维码、登录事件或真实在线状态，会自动重启 Wechaty 连接。
+- 设置页/接口点击“登录/恢复微信”时，如果当前只是卡在 `starting` 且没有二维码，不再误判为已经在运行，而是走重启恢复链路。
+- 这个修复和 v0.4.9 的“收到消息必入库”配合，保证两层都稳定：先确保 Wechaty 能恢复连接，再确保收到的消息不被统计开关拦截。
+
+### 验证
+
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/api.js` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.9 - 2026-05-28
 
 ### 微信群聊天记录库持续入库修复

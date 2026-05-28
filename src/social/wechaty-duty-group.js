@@ -18,6 +18,7 @@ const WECHAT_MEDIA_DIR = path.join(paths.dataDir, 'wechat-media')
 const ROOM_REFRESH_STALE_MS = 2 * 60 * 1000
 const MESSAGE_HEALTH_STALE_MS = 10 * 60 * 1000
 const MEMBER_NAME_REFRESH_STALE_MS = 10 * 60 * 1000
+const START_WATCHDOG_MS = 60 * 1000
 const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
 const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
 
@@ -41,6 +42,7 @@ let activePuppetName = ''
 let reconnectTimer = null
 let reconnectAttempts = 0
 let suppressReconnectUntil = 0
+let startWatchdogTimer = null
 const memberNameRefreshAt = new Map()
 
 export function extractPublicImageUrlsFromWechatText(content = '') {
@@ -145,6 +147,29 @@ function hasResolvedRooms() {
   // roomSnapshot 是上次运行留下的 UI 快照；如果把它当成当前在线证据，
   // 重启后等待扫码时遇到 wechat4u 暂态错误会被误标成 logged_in。
   return !!targetRoomId || targetRooms.size > 0
+}
+
+function clearStartWatchdog() {
+  if (startWatchdogTimer) clearTimeout(startWatchdogTimer)
+  startWatchdogTimer = null
+}
+
+function armStartWatchdog(currentBot) {
+  clearStartWatchdog()
+  startWatchdogTimer = setTimeout(async () => {
+    startWatchdogTimer = null
+    if (bot !== currentBot) return
+    if (isTrulyOnline() || status !== 'starting') return
+    console.warn(`[Wechaty] 启动 ${Math.round(START_WATCHDOG_MS / 1000)} 秒仍未拿到二维码/登录事件，自动重启 Wechaty 连接，避免卡在 starting 导致群消息不入库。`)
+    try {
+      await stopWechatyGroupOnly()
+      await startWechatyDutyGroupConnector({ pushMessage: pushMessageRef, emitEvent: emitEventRef, groupNames: targetGroupNames, enabled: true })
+    } catch (err) {
+      lastError = err?.message || String(err)
+      persistRuntime('error')
+      scheduleReconnect('start_watchdog_failed')
+    }
+  }, START_WATCHDOG_MS)
 }
 
 function isWechat4uTransientError(message = '') {
@@ -398,6 +423,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
   })
 
   bot.on('scan', (qrcode, scanStatus) => {
+    clearStartWatchdog()
     status = 'qr_ready'
     lastQr = qrcode
     lastQrAscii = qrToAscii(qrcode)
@@ -409,6 +435,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
   })
 
   bot.on('login', async (user) => {
+    clearStartWatchdog()
     status = 'logged_in'
     lastLoginUser = user?.name?.() || ''
     lastQr = ''
@@ -421,6 +448,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
   })
 
   bot.on('ready', async () => {
+    clearStartWatchdog()
     await resolveTargetRooms()
   })
 
@@ -434,6 +462,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
   })
 
   bot.on('error', (err) => {
+    clearStartWatchdog()
     lastError = err?.message || String(err)
     // wechat4u 登录后常见 `-1 == 0` / `400 != 400` 这类底层同步抖动。
     // 如果已经登录并解析到目标群，不能因为这个暂态错误主动 stop/restart；
@@ -469,7 +498,9 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
 
   bot.on('message', handleMessage)
 
+  armStartWatchdog(bot)
   bot.start().catch(err => {
+    clearStartWatchdog()
     status = 'error'
     lastError = err?.message || String(err)
     persistRuntime(status)
@@ -1132,6 +1163,7 @@ function scheduleReconnect(reason = '') {
 }
 
 async function stopWechatyGroupOnly() {
+  clearStartWatchdog()
   try { await bot?.stop?.() } catch {}
   bot = null
   targetRoomId = ''
