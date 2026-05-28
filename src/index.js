@@ -405,6 +405,12 @@ function sanitizeMainTurnTools(tools = []) {
   return [...new Set(filtered)]
 }
 
+function isProviderSafetyRefusal(content = '') {
+  const value = String(content || '').trim()
+  if (!value || value.length > 240) return false
+  return /request was rejected because it was considered high risk|considered high risk|safety policy|content policy/i.test(value)
+}
+
 function isInternalToolProtocolFallback(content = '') {
   const value = String(content || '').trim()
   return /I did not actually call the required tool|cannot claim the operation completed|execute the tool first|required tool/i.test(value)
@@ -1366,6 +1372,8 @@ async function runTurn(input, label, msg = null) {
       const timestamp = nowTimestamp()
       const safeFallbackContent = isInternalToolProtocolFallback(fallbackContent)
         ? '我刚才的内部执行状态不可靠，不能把“已完成”当真。你再发一次，我会直接按你的问题处理。'
+        : isProviderSafetyRefusal(fallbackContent)
+        ? '刚才当前模型把这句话误判成高风险并拒绝了，没有给出有效回答。我不会把英文内部拒绝原文当答案；请换个说法或点 LLM 模型里的“测试连通/切换模型”后再试。'
         : isInvalidWechatMentionSkipFallback(fallbackContent, msg)
         ? buildWechatMentionSkipFallbackCorrection(msg)
         : fallbackContent

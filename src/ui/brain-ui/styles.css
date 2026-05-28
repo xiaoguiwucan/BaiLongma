@@ -5376,3 +5376,109 @@ body.person-card-mode .person-card-panel,
 .llm-signal-warn { color: #ffd479 !important; }
 .llm-signal-unknown { color: #9eb2c4 !important; }
 .llm-signal-off { color: #66788a !important; }
+
+.database-settings .settings-hint { max-width: 860px; }
+.db-hero-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px;
+  margin: 12px 0 14px;
+  border-radius: 18px;
+  border: 1px solid rgba(87,214,255,0.28);
+  background: radial-gradient(circle at top left, rgba(87,214,255,0.18), transparent 36%), rgba(255,255,255,0.035);
+  box-shadow: 0 16px 36px rgba(0,0,0,0.18);
+}
+.db-hero-card small,
+.db-stat-card small {
+  display: block;
+  color: var(--dim);
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 5px;
+}
+.db-hero-card strong {
+  display: block;
+  color: var(--ink);
+  font-size: 30px;
+  line-height: 1.1;
+  margin-bottom: 6px;
+}
+.db-hero-card span {
+  display: block;
+  color: var(--ink2);
+  font-size: 11px;
+  word-break: break-all;
+}
+.db-overview-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin: 12px 0;
+}
+.db-stat-card {
+  min-height: 96px;
+  padding: 13px 14px;
+  border-radius: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  background: rgba(255,255,255,0.035);
+}
+.db-stat-card strong {
+  display: block;
+  color: #bfe7ff;
+  font-size: 22px;
+  line-height: 1.15;
+  margin-bottom: 8px;
+}
+.db-stat-card span {
+  display: block;
+  color: var(--ink2);
+  font-size: 11px;
+  line-height: 1.45;
+}
+.db-table-panel {
+  margin-top: 14px;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(0,0,0,0.14);
+}
+.db-table-list {
+  display: grid;
+  gap: 7px;
+  max-height: 360px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.db-table-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 96px 92px;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.025);
+}
+.db-table-row b {
+  color: var(--ink);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-table-row span,
+.db-table-row em {
+  color: var(--ink2);
+  font-size: 11px;
+  font-style: normal;
+  text-align: right;
+}
+@media (max-width: 900px) {
+  .db-overview-grid { grid-template-columns: 1fr; }
+  .db-hero-card { align-items: flex-start; flex-direction: column; }
+  .db-table-row { grid-template-columns: 1fr; }
+  .db-table-row span, .db-table-row em { text-align: left; }
+}

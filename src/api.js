@@ -31,6 +31,7 @@ import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
 import { setDocPanelState, getDocPanelState, DOC_TOPICS } from './docs.js'
+import { getDatabaseOverview } from './database-overview.js'
 
 export { emitEvent }
 
@@ -1030,6 +1031,12 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         }
       })
       return
+    }
+
+    // GET /settings/database — local database and knowledge storage overview
+    if (req.method === 'GET' && url.pathname === '/settings/database') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      return jsonResponse(res, 200, getDatabaseOverview())
     }
 
     // GET /settings — return current LLM + MiniMax configuration status

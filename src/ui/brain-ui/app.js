@@ -2165,6 +2165,12 @@ function initTTSSettings() {
   const honchoFeedback = document.getElementById("honcho-feedback");
   const honchoStatus = document.getElementById("wechaty-honcho-status");
   const guardList = document.getElementById("wechaty-guard-list");
+  const dbTotalSize = document.getElementById("db-total-size");
+  const dbPathHint = document.getElementById("db-path-hint");
+  const dbOverviewGrid = document.getElementById("db-overview-grid");
+  const dbTableList = document.getElementById("db-table-list");
+  const dbRefreshBtn = document.getElementById("db-refresh-btn");
+  const dbFeedback = document.getElementById("db-feedback");
 
   if (!settingsBtn || !overlay) return;
 
@@ -2181,6 +2187,7 @@ function initTTSSettings() {
       overlay.querySelector(`.settings-tab[data-tab="${tab}"]`)?.classList.add("active");
       if (tab === "social" || tab === "wechat-groups") loadSocialSettings();
       if (tab === "skills") loadSkillSettings();
+      if (tab === "database") loadDatabaseSettings();
       if (tab === "wechat-groups") startWechatyStatsAutoRefresh();
       if (tab === "security") loadSecuritySettings();
       if (tab === "web-search") loadWebSearchSettings();
@@ -3228,6 +3235,50 @@ function initTTSSettings() {
   }
 
 
+  function formatBytes(bytes = 0) {
+    const value = Number(bytes || 0);
+    if (!value) return "0 B";
+    const units = ["B", "KB", "MB", "GB", "TB"];
+    let n = value;
+    let idx = 0;
+    while (n >= 1024 && idx < units.length - 1) { n /= 1024; idx += 1; }
+    return `${n >= 10 || idx === 0 ? n.toFixed(0) : n.toFixed(1)} ${units[idx]}`;
+  }
+
+  function renderDatabaseOverview(data = {}) {
+    if (dbTotalSize) dbTotalSize.textContent = formatBytes(data.totals?.totalBytes || 0);
+    if (dbPathHint) dbPathHint.textContent = data.paths?.userDir ? `本机目录：${data.paths.userDir}` : "本机数据库目录";
+    const categories = Array.isArray(data.categories) ? data.categories : [];
+    if (dbOverviewGrid) {
+      dbOverviewGrid.innerHTML = categories.length ? categories.map(item => `
+        <div class="db-stat-card">
+          <small>${escapeHtml(item.name || item.key || "数据")}</small>
+          <strong>${escapeHtml(String(item.rows || 0))}</strong>
+          <span>${formatBytes(item.bytes || 0)} · ${escapeHtml((item.tables || []).join(" / ") || "文件")}</span>
+        </div>`).join("") : '<div class="wechaty-empty">暂无数据库统计。</div>';
+    }
+    const tables = Array.isArray(data.tables) ? data.tables : [];
+    if (dbTableList) {
+      dbTableList.innerHTML = tables.length ? tables.slice(0, 40).map(row => `
+        <div class="db-table-row">
+          <b>${escapeHtml(row.name || "table")}</b>
+          <span>${escapeHtml(String(row.rows || 0))} 行</span>
+          <em>${formatBytes(row.bytes || 0)}</em>
+        </div>`).join("") : '<div class="wechaty-empty">暂无表明细。</div>';
+    }
+  }
+
+  async function loadDatabaseSettings() {
+    if (dbOverviewGrid) dbOverviewGrid.innerHTML = '<div class="wechaty-empty">正在加载数据库统计…</div>';
+    try {
+      const data = await fetch(`${API}/settings/database`).then(r => r.json());
+      if (data.ok) renderDatabaseOverview(data);
+      else showFeedback(dbFeedback, data.error || "数据库统计加载失败", true);
+    } catch {
+      showFeedback(dbFeedback, "数据库统计请求失败", true);
+    }
+  }
+
   function applySkillImageConfig(config = {}) {
     if (skillImageEnabled) skillImageEnabled.checked = config.enabled !== false;
     if (skillImageBaseUrl) skillImageBaseUrl.value = config.baseUrl || 'https://sub.pbopenai.cloud/v1';
@@ -3783,6 +3834,7 @@ function initTTSSettings() {
   wechatyTestMemeBtn?.addEventListener("click", testWechatyMemeSearch);
   wechatySaveMemeBtn?.addEventListener("click", saveWechatyMemeConfig);
   skillImageSaveBtn?.addEventListener("click", saveSkillImageConfig);
+  dbRefreshBtn?.addEventListener("click", loadDatabaseSettings);
   wechatyStartBtn?.addEventListener("click", async () => {
     wechatyStartBtn.disabled = true;
     setWechatyStatus("正在连接/恢复微信…", false);
@@ -4470,6 +4522,7 @@ function initTTSSettings() {
       });
       if (tab === "social") loadSocialSettings();
       if (tab === "skills") loadSkillSettings();
+      if (tab === "database") loadDatabaseSettings();
       if (tab === "web-search") loadWebSearchSettings();
       if (tab === "update") loadUpdateSettings();
     }

@@ -158,6 +158,7 @@ const createSettingsModal = () => `
         <button class="settings-nav-item" data-tab="media" type="button">媒体能力</button>
         <button class="settings-nav-item" data-tab="social" type="button">社交媒体</button>
         <button class="settings-nav-item" data-tab="wechat-groups" type="button">微信群助手</button>
+        <button class="settings-nav-item" data-tab="database" type="button">数据库</button>
         <button class="settings-nav-item" data-tab="skills" type="button">Skill 技能</button>
         <button class="settings-nav-item" data-tab="voice" type="button">语音识别</button>
         <button class="settings-nav-item" data-tab="web-search" type="button">上网搜索</button>
@@ -394,6 +395,35 @@ const createSettingsModal = () => `
           </div>
         </div>
 
+
+        <!-- ── 数据库 tab ── -->
+        <div class="settings-tab" data-tab="database">
+          <div class="settings-section database-settings">
+            <div class="settings-section-label">数据库与知识库容量</div>
+            <p class="settings-hint">这里集中查看本地数据库、微信群聊天记录、知识库记忆和媒体文件占用。微信群助手页只保留连接与回复设置，数据管理统一放到这里。</p>
+            <div class="db-hero-card">
+              <div>
+                <small>总占用</small>
+                <strong id="db-total-size">—</strong>
+                <span id="db-path-hint">正在读取本机数据库…</span>
+              </div>
+              <button class="settings-save-btn primary" id="db-refresh-btn" type="button">刷新容量</button>
+            </div>
+            <div class="db-overview-grid" id="db-overview-grid">
+              <div class="wechaty-empty">正在加载数据库统计…</div>
+            </div>
+            <div class="db-table-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">表级明细</div>
+                  <p class="settings-hint compact">按估算占用从大到小排列；SQLite 的 WAL/SHM 与媒体文件会计入总占用。</p>
+                </div>
+              </div>
+              <div class="db-table-list" id="db-table-list"></div>
+            </div>
+            <span class="settings-feedback" id="db-feedback"></span>
+          </div>
+        </div>
 
         <!-- ── Skill 技能 tab ── -->
         <div class="settings-tab" data-tab="skills">
