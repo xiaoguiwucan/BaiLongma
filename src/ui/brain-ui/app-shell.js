@@ -440,11 +440,23 @@ const createSettingsModal = () => `
               <div class="wechaty-subsection-head">
                 <div>
                   <div class="wechaty-subsection-title">群统计与定时总结</div>
-                  <p class="settings-hint">记录所有已接入群的消息，不只记录 @：文字、图片、表情、链接和“装逼指数”都会进入统计。定时总结会发送到上方勾选的微信群。</p>
+                  <p class="settings-hint">统计和定时总结有单独的群组选择：没在这里勾选的群不会进入统计，也不会自动发送总结，避免误发到所有群。</p>
                 </div>
                 <div class="wechaty-memory-actions">
                   <button class="settings-save-btn" id="wechaty-refresh-stats-btn" type="button">刷新统计</button>
                   <button class="settings-save-btn primary" id="wechaty-send-digest-btn" type="button">立即发本群总结</button>
+                </div>
+              </div>
+              <div class="wechaty-digest-group-picker">
+                <div class="wechaty-digest-group-head">
+                  <div>
+                    <b>选择参与统计/定时总结的群组</b>
+                    <small>这里独立于上方“@ 回复群组”；只有勾选并保存后，后续新消息才会写入本地统计库并参与定时总结。</small>
+                  </div>
+                  <span id="wechaty-digest-group-count">未选择</span>
+                </div>
+                <div class="wechaty-digest-group-list" id="wechaty-digest-group-list">
+                  <div class="wechaty-empty">先在上方登录微信并获取群列表</div>
                 </div>
               </div>
               <div class="wechaty-digest-config">
@@ -474,6 +486,7 @@ const createSettingsModal = () => `
                 <div class="wechaty-empty">选择左侧群并刷新统计后显示今日数据。</div>
               </div>
               <div class="wechaty-leaderboards" id="wechaty-leaderboards"></div>
+              <div class="wechaty-stats-recent" id="wechaty-stats-recent"></div>
             </div>
           </div>
           <div class="settings-section">
@@ -842,6 +855,19 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.1</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">群统计选择修复：统计/定时总结必须手动勾选群组，统计数据和成员记忆更直观。</p>
+                <ul class="release-note-points">
+                  <li>新增统计/定时总结专用群组选择，未选择群不会统计也不会自动发送。</li>
+                  <li>统计面板显示本机 SQLite 表位置，并展示最近写入的统计记录。</li>
+                  <li>Honcho 群组长期记忆和成员长期记忆固定显示空状态。</li>
+                  <li>历史英文内部协议误回复在记忆展示和上下文注入中隐藏。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.0</span>

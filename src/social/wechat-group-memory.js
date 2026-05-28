@@ -25,9 +25,14 @@ function normalizeText(text = '') {
   return String(text || '').replace(/\s+/g, ' ').trim()
 }
 
+function isInternalToolProtocolText(text = '') {
+  return /I did not actually call the required tool|cannot claim the operation completed|execute the tool first|required tool/i.test(String(text || ''))
+}
+
 function normalizeMemoryDisplayText(text = '') {
   const value = normalizeText(text)
   if (!value) return ''
+  if (isInternalToolProtocolText(value)) return '[历史内部协议误回复，已在 v0.4.1 隐藏；未来不会再发到群里]'
   if (/<msg[\s\S]{0,800}<emoji|<emoji\b|cdnurl=|emoji[^>]{0,120}(?:md5|len|aeskey)/iu.test(value)) return '[表情]'
   if (/<img\b|<image\b|cdnthumburl=|cdnmidimgurl=/iu.test(value)) return '[图片]'
   if (/^<appmsg\b|<weappinfo\b|小程序/u.test(value)) return '[小程序/链接]'
@@ -122,7 +127,8 @@ function formatHonchoMessagesAsContext(rows = []) {
     .slice()
     .reverse()
     .map(item => {
-      const text = normalizeText(item?.content || '')
+      if (isInternalToolProtocolText(item?.content || '')) return ''
+      const text = normalizeMemoryDisplayText(item?.content || '')
       if (!text) return ''
       const ts = String(messageCreatedAt(item) || '').slice(0, 16)
       const speaker = normalizeText(messageSpeaker(item))

@@ -34,6 +34,9 @@ function includeConfig(cfg = {}) {
 }
 
 function resolveWechatyDigestGroups() {
+  const cfg = getWeChatGroupDigestConfig()
+  const selected = Array.isArray(cfg.selectedGroups) ? cfg.selectedGroups.map(v => String(v || '').trim()).filter(Boolean) : []
+  if (!selected.length) return []
   const status = getWechatyDutyGroupStatus()
   const rooms = Array.isArray(status.rooms) ? status.rooms : []
   const roomIds = status.room_ids && typeof status.room_ids === 'object' ? status.room_ids : {}
@@ -45,18 +48,36 @@ function resolveWechatyDigestGroups() {
     const rid = roomIds[room.topic] || room.id || cachedRoomIds[room.topic] || ''
     if (!rid) continue
     const gid = normalizeStatsGroupId(`wechaty:${rid}`)
-    if (!gid || seen.has(gid)) continue
+    if (!gid || seen.has(gid) || !matchesSelectedDigestGroup({ groupId: gid, groupName: room.topic, roomId: rid }, selected)) continue
     seen.add(gid)
     rows.push({ groupId: gid, groupName: room.topic, roomId: rid })
   }
   for (const [topic, rid] of Object.entries(roomIds)) {
     if (!topic || !rid) continue
     const gid = normalizeStatsGroupId(`wechaty:${rid}`)
-    if (!gid || seen.has(gid)) continue
+    if (!gid || seen.has(gid) || !matchesSelectedDigestGroup({ groupId: gid, groupName: topic, roomId: rid }, selected)) continue
     seen.add(gid)
     rows.push({ groupId: gid, groupName: topic, roomId: rid })
   }
   return rows
+}
+
+function matchesSelectedDigestGroup({ groupId = '', groupName = '', roomId = '' } = {}, selected = []) {
+  const gid = normalizeStatsGroupId(groupId)
+  const rid = String(roomId || '').trim()
+  const name = String(groupName || '').trim()
+  return selected.some(item => {
+    const value = String(item || '').trim()
+    if (!value) return false
+    const normalized = normalizeStatsGroupId(value)
+    return value === gid
+      || normalized === gid
+      || value === rid
+      || normalized === rid
+      || value === `wechaty:${rid}`
+      || normalized === `wechaty:${rid}`
+      || (!!name && value === name)
+  })
 }
 
 function rangeForMode(mode, cfg = {}, now = new Date()) {
@@ -105,7 +126,7 @@ export async function runWeChatGroupDigestTick({ force = false } = {}) {
     const cfg = getWeChatGroupDigestConfig()
     if (!cfg.enabled && !force) return { ok: true, skipped: true, reason: 'digest_disabled' }
     const groups = resolveWechatyDigestGroups()
-    if (!groups.length) return { ok: true, skipped: true, reason: 'no_wechaty_groups' }
+    if (!groups.length) return { ok: true, skipped: true, reason: 'no_digest_groups_selected' }
     const now = new Date()
     const results = []
     if ((cfg.intervalEnabled || force) && Number(cfg.intervalMinutes) > 0) {

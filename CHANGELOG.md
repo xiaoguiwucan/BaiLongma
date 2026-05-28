@@ -4,6 +4,47 @@
 
 
 
+## v0.4.1 - 2026-05-28
+
+### 修复内容
+
+- 群统计与定时总结新增“选择参与统计/定时总结的群组”区域。
+- 未在该区域手动勾选并保存的群，不会写入本地统计库，也不会自动发送阶段总结或每日统计，避免误发到所有群。
+- 定时总结调度现在只遍历 `wechatGroupDigest.selectedGroups` 中的群组；没有选择群时直接跳过。
+- Wechaty/ClawBot 收到群消息时，只有命中已选择统计群组才写入 `wechat_group_activity`。
+
+### 数据可见性
+
+- 统计面板新增“统计数据位置”说明：群统计数据存放在本机 SQLite `data/jarvis.db` 的 `wechat_group_activity` 表。
+- 统计面板新增“本地统计库最近记录”，可直接看到最近写入的统计消息、类型和图/表情/链接/装逼计数。
+- 明确 Honcho 群记忆管理显示的是 Honcho session/长期结论，不是本地统计表，所以两个区域的数据不会完全一样。
+
+### Honcho 记忆展示
+
+- Honcho 详情页固定显示“群组长期记忆”和“成员长期记忆”两个分区，即使暂无结论也显示空状态说明。
+- 历史英文内部协议误回复在 Honcho 原始消息展示和上下文注入中被隐藏，避免继续污染群记忆和模型上下文。
+
+### 验证结果
+
+- `node --check src/config.js` 通过。
+- `node --check src/social/wechat-group-stats.js` 通过。
+- `node --check src/social/wechat-group-digest.js` 通过。
+- `node --check src/social/wechat-group-memory.js` 通过。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/social/wechat-clawbot.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
+### 部署注意事项
+
+- 更新后重启白龙马/Electron。
+- 进入 `设置 -> 微信群助手 -> 群统计与定时总结`，先勾选要统计/要发总结的群，再点击“保存总结设置”。
+- 保存后，后续新收到的群消息才会进入统计；升级前或保存前的消息不会自动补录。
+
+
 ## v0.4.0 - 2026-05-28
 
 ### 大版本更新：微信群全量统计与定时总结

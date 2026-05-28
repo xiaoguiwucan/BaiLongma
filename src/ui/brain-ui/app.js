@@ -2063,6 +2063,8 @@ function initTTSSettings() {
   const wechatyDigestInterval = document.getElementById("wechaty-digest-interval");
   const wechatyDigestDailyEnabled = document.getElementById("wechaty-digest-daily-enabled");
   const wechatyDigestDailyTime = document.getElementById("wechaty-digest-daily-time");
+  const wechatyDigestGroupList = document.getElementById("wechaty-digest-group-list");
+  const wechatyDigestGroupCount = document.getElementById("wechaty-digest-group-count");
   const wechatyRankMessage = document.getElementById("wechaty-rank-message");
   const wechatyRankImage = document.getElementById("wechaty-rank-image");
   const wechatyRankEmoji = document.getElementById("wechaty-rank-emoji");
@@ -2074,6 +2076,7 @@ function initTTSSettings() {
   const wechatyDigestFeedback = document.getElementById("wechaty-digest-feedback");
   const wechatyStatsCards = document.getElementById("wechaty-stats-cards");
   const wechatyLeaderboards = document.getElementById("wechaty-leaderboards");
+  const wechatyStatsRecent = document.getElementById("wechaty-stats-recent");
   const wechatyQrArea = document.getElementById("wechaty-qr-area");
   const wechatyQrImg = document.getElementById("wechaty-qr-img");
   const honchoEnabled = document.getElementById("honcho-enabled");
@@ -2247,6 +2250,7 @@ function initTTSSettings() {
   let wechatySavedPersonaPrompt = "";
   let wechatySavedPersonaPresetId = "custom";
   let wechatyDigestConfigCache = {};
+  let wechatyDigestSelectedGroups = new Set();
 
   function formatWechatyTime(value) {
     if (!value) return '';
@@ -2386,6 +2390,7 @@ function initTTSSettings() {
 
   function applyWechatyDigestConfig(config = {}) {
     wechatyDigestConfigCache = { ...config };
+    wechatyDigestSelectedGroups = new Set((config.selectedGroups || config.selected_groups || []).map(v => String(v || "").trim()).filter(Boolean));
     if (wechatyDigestEnabled) wechatyDigestEnabled.checked = config.enabled !== false;
     if (wechatyDigestIntervalEnabled) wechatyDigestIntervalEnabled.checked = config.intervalEnabled === true;
     if (wechatyDigestInterval) wechatyDigestInterval.value = String(config.intervalMinutes || 180);
@@ -2396,11 +2401,13 @@ function initTTSSettings() {
     if (wechatyRankEmoji) wechatyRankEmoji.checked = config.emojiLeaderboard !== false;
     if (wechatyRankLink) wechatyRankLink.checked = config.linkLeaderboard !== false;
     if (wechatyRankBrag) wechatyRankBrag.checked = config.bragLeaderboard !== false;
+    renderWechatyDigestGroups();
   }
 
   function collectWechatyDigestConfig() {
     return {
       enabled: !!wechatyDigestEnabled?.checked,
+      selectedGroups: [...wechatyDigestSelectedGroups],
       intervalEnabled: !!wechatyDigestIntervalEnabled?.checked,
       intervalMinutes: Number(wechatyDigestInterval?.value || 180),
       dailyStatsEnabled: !!wechatyDigestDailyEnabled?.checked,
@@ -2411,6 +2418,39 @@ function initTTSSettings() {
       linkLeaderboard: !!wechatyRankLink?.checked,
       bragLeaderboard: !!wechatyRankBrag?.checked,
     };
+  }
+
+  function groupDigestId(group = {}) {
+    return memoryGroupRequestId(group);
+  }
+
+  function updateWechatyDigestGroupCount() {
+    if (!wechatyDigestGroupCount) return;
+    const selected = getWechatyDigestCandidateGroups().filter(group => wechatyDigestSelectedGroups.has(groupDigestId(group)));
+    wechatyDigestGroupCount.textContent = selected.length
+      ? `已选择 ${selected.length} 个群`
+      : "未选择，不会统计/不会定时发送";
+  }
+
+  function renderWechatyDigestGroups() {
+    if (!wechatyDigestGroupList) return;
+    const groups = getWechatyDigestCandidateGroups();
+    if (!groups.length) {
+      wechatyDigestGroupList.innerHTML = '<div class="wechaty-empty">先在上方勾选并保存 @ 回复群组；统计/总结只能作用于程序真实接入的群。</div>';
+      updateWechatyDigestGroupCount();
+      return;
+    }
+    wechatyDigestGroupList.innerHTML = groups.map(group => {
+      const gid = groupDigestId(group);
+      const checked = wechatyDigestSelectedGroups.has(gid) ? " checked" : "";
+      const stale = group.stale ? " stale" : "";
+      const stat = group.real ? "后续新消息会统计" : "等待真实群 ID";
+      return `<label class="wechaty-digest-group-item${stale}" title="${escapeHtml(gid)}">
+        <input class="wechaty-digest-group-checkbox" type="checkbox" value="${escapeHtml(gid)}" data-group-id="${escapeHtml(gid)}" data-group-name="${escapeHtml(group.topic || "")}"${checked}>
+        <span><b>${escapeHtml(group.topic || "未命名群")}</b><em>${escapeHtml(stat)}</em></span>
+      </label>`;
+    }).join("");
+    updateWechatyDigestGroupCount();
   }
 
   function renderRank(title, rows = [], unit = "次") {
@@ -2425,6 +2465,7 @@ function initTTSSettings() {
     if (!data || data.ok === false) {
       wechatyStatsCards.innerHTML = `<div class="wechaty-empty">${escapeHtml(data?.error || "选择一个群后点击“刷新统计”。")}</div>`;
       wechatyLeaderboards.innerHTML = "";
+      if (wechatyStatsRecent) wechatyStatsRecent.innerHTML = "";
       return;
     }
     const totals = data.totals || {};
@@ -2445,6 +2486,25 @@ function initTTSSettings() {
       renderRank("🔗 链接排行榜", boards.links, "条"),
       renderRank("😎 装逼排行榜", boards.brag, "次"),
     ].join("");
+    if (wechatyStatsRecent) {
+      const recent = Array.isArray(data.recent) ? data.recent.slice(-40).reverse() : [];
+      const selected = wechatyDigestSelectedGroups.has(wechatyActiveMemoryGroupId);
+      const rows = recent.length
+        ? recent.map(row => `<article class="wechaty-stats-row">
+            <b>${escapeHtml(row.sender_name || row.sender_id || "群成员")}</b>
+            <p>${escapeHtml(row.display_text || "")}</p>
+            <span>${escapeHtml(String(row.timestamp || "").slice(0, 16))} · ${escapeHtml(row.message_type || "message")} · 图${row.image_count || 0}/表${row.emoji_count || 0}/链${row.link_count || 0}/装${row.brag_score || 0}</span>
+          </article>`).join("")
+        : `<div class="wechaty-empty">${selected ? "本群今天还没有写入本地统计库的新消息。统计只记录你在这里勾选并保存之后收到的新消息。" : "本群未勾选参与统计/定时总结，所以不会写入本地统计库。"}</div>`;
+      wechatyStatsRecent.innerHTML = `<section class="wechaty-stats-storage-note">
+        <b>统计数据位置</b>
+        <span>这里的数据存放在本机 SQLite：data/jarvis.db 的 wechat_group_activity 表；Honcho 群记忆管理展示的是 Honcho session/长期结论，二者不是同一个列表。</span>
+      </section>
+      <section class="wechaty-stats-recent-list">
+        <h5>本地统计库最近记录</h5>
+        ${rows}
+      </section>`;
+    }
   }
 
   async function loadWechatyActiveStats({ silent = false } = {}) {
@@ -2538,6 +2598,7 @@ function initTTSSettings() {
     else setWechatyStatus(config.enabled === false ? "已关闭" : "未登录", false);
     renderWechatyRooms();
     renderWechatyMemoryGroups();
+    renderWechatyDigestGroups();
   }
 
   function renderWechatyRooms() {
@@ -2564,6 +2625,7 @@ function initTTSSettings() {
     }
     updateWechatySelectedCount();
     renderWechatyMemoryGroups();
+    renderWechatyDigestGroups();
   }
 
   function updateWechatySelectedCount() {
@@ -2596,6 +2658,12 @@ function initTTSSettings() {
       rows.push({ id: name, topic: name, selected: true, stale: true, real: false });
     }
     return rows;
+  }
+
+  function getWechatyDigestCandidateGroups() {
+    // 统计/总结只能覆盖程序真实接入的群；沿用上方已勾选的 Wechaty 群作为候选，
+    // 但是否参与统计/定时发送由这里的独立勾选决定。
+    return getWechatyMemoryCandidateGroups();
   }
 
   function memoryGroupRequestId(group = {}) {
@@ -2665,16 +2733,16 @@ function initTTSSettings() {
       <div class="wechaty-memory-section-title">自动摘要</div>
       ${summaries.map(item => `<article class="wechaty-memory-item summary"><b>${escapeHtml(item.type || "summary")}</b><p>${escapeHtml(item.content || "")}</p><span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span></article>`).join("")}
     </section>` : "";
-    const groupConclusionHtml = groupConclusions.length ? `<section class="wechaty-memory-section">
-      <div class="wechaty-memory-section-title">群组长期记忆</div>
+    const groupConclusionHtml = `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">群组长期记忆（${groupConclusions.length}）</div>
       <div class="wechaty-memory-section-sub">当前微信群通用的规则、背景、群设定和公共结论，只在这个群内使用。</div>
-      ${groupConclusions.map(renderConclusionItem).join("")}
-    </section>` : "";
-    const memberConclusionHtml = memberConclusions.length ? `<section class="wechaty-memory-section">
-      <div class="wechaty-memory-section-title">成员长期记忆</div>
+      ${groupConclusions.length ? groupConclusions.map(renderConclusionItem).join("") : '<div class="wechaty-empty small">暂无群组长期结论。你可以在上方手动添加，或等待 Honcho 后台总结。</div>'}
+    </section>`;
+    const memberConclusionHtml = `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">成员长期记忆（${memberConclusions.length}）</div>
       <div class="wechaty-memory-section-sub">按当前微信群里的成员单独隔离；和群组记忆一起参与匹配，但不会串到其他群。</div>
-      ${memberConclusions.map(renderConclusionItem).join("")}
-    </section>` : "";
+      ${memberConclusions.length ? memberConclusions.map(renderConclusionItem).join("") : '<div class="wechaty-empty small">暂无成员长期记忆。只有群成员明确说“以后叫我…”“我叫…”这类身份/称呼偏好，或 Honcho 后台形成结论后才会出现在这里。</div>'}
+    </section>`;
     const messageHtml = messages.length ? `<section class="wechaty-memory-section">
       <div class="wechaty-memory-section-title">原始消息记录（Honcho session）</div>
       ${messages.slice(0, 80).map(item => `<article class="wechaty-memory-item message"><b>[${escapeHtml(item.type || "message")}] ${escapeHtml(item.speaker || "群成员")}</b><p>${escapeHtml(item.content || "")}</p><span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span></article>`).join("")}
@@ -2797,6 +2865,16 @@ function initTTSSettings() {
     else wechatySelectedGroupNames.delete(topic);
     updateWechatySelectedCount();
     renderWechatyMemoryGroups();
+    renderWechatyDigestGroups();
+  });
+  wechatyDigestGroupList?.addEventListener("change", (event) => {
+    const cb = event.target?.closest?.(".wechaty-digest-group-checkbox");
+    if (!cb) return;
+    const gid = cb.dataset.groupId || cb.value;
+    if (!gid) return;
+    if (cb.checked) wechatyDigestSelectedGroups.add(gid);
+    else wechatyDigestSelectedGroups.delete(gid);
+    updateWechatyDigestGroupCount();
   });
   wechatyRoomFilter?.addEventListener("input", renderWechatyRooms);
   wechatyStartBtn?.addEventListener("click", async () => {
@@ -2907,7 +2985,8 @@ function initTTSSettings() {
       const data = await res.json();
       if (data.ok) {
         applyWechatyDigestConfig(data.digest);
-        showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "群统计/定时总结设置已保存");
+        const selectedCount = (data.digest?.selectedGroups || []).length;
+        showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, selectedCount ? `群统计/定时总结设置已保存，已选择 ${selectedCount} 个群` : "已保存：未选择群组，所以不会统计/不会定时发送");
       } else showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.error || "保存失败", true);
     } catch {
       showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "保存总结设置失败", true);

@@ -28,3 +28,11 @@
 | Error | Attempt | Resolution |
 |-------|---------|------------|
 | better-sqlite3 ABI 不匹配 | 用系统 Node 直接运行统计模块写库测试 | 记录为验证环境差异；继续用 node --check 和现有无 DB 测试验证，Electron 运行环境使用 ABI 130 的原编译模块。 |
+
+
+## v0.4.1 Follow-up Plan
+1. [complete] 统计/定时总结新增独立群组选择，未选择不统计、不发送。
+2. [complete] UI 显示统计数据真实存储位置和最近统计记录。
+3. [complete] Honcho 群组/成员长期记忆分区固定显示空状态。
+4. [complete] 历史英文内部协议误回复在记忆展示和上下文注入中隐藏。
+5. [pending] 版本文档、提交、推送、Release。

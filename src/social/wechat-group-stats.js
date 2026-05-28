@@ -1,5 +1,6 @@
 import { getDB } from '../db.js'
 import { nowTimestamp } from '../time.js'
+import { getWeChatGroupDigestConfig } from '../config.js'
 
 const MAX_TEXT_LENGTH = 2400
 
@@ -91,6 +92,31 @@ function toLocalTimestamp(date = new Date()) {
 export function normalizeStatsGroupId(groupId = '') {
   const raw = String(groupId || '').trim()
   return raw.startsWith('wechat:clawbot-group:') ? raw.slice('wechat:clawbot-group:'.length) : raw
+}
+
+function groupMatchesSelection({ groupId = '', groupName = '' } = {}, selected = []) {
+  const gid = normalizeStatsGroupId(groupId)
+  const raw = gid.replace(/^wechaty:/, '')
+  const name = String(groupName || '').trim()
+  return selected.some(item => {
+    const value = String(item || '').trim()
+    if (!value) return false
+    const normalized = normalizeStatsGroupId(value)
+    return value === gid
+      || normalized === gid
+      || value === raw
+      || normalized === raw
+      || (!!name && value === name)
+  })
+}
+
+export function shouldTrackWeChatGroupStats({ groupId = '', groupName = '' } = {}) {
+  const cfg = getWeChatGroupDigestConfig()
+  if (cfg.enabled === false) return false
+  const selected = Array.isArray(cfg.selectedGroups) ? cfg.selectedGroups : []
+  // 重要：没有手动选择群组时，不默认统计、不默认定时发送，避免把所有群都纳入统计。
+  if (!selected.length) return false
+  return groupMatchesSelection({ groupId, groupName }, selected)
 }
 
 export function normalizeWechatMessageType(messageType = '') {
@@ -186,6 +212,7 @@ export function normalizeWeChatGroupDisplayText(text = '', messageType = '') {
 
 export function recordWeChatGroupActivity({ groupId, groupName = '', senderId = '', senderName = '', text = '', messageType = '', mentionedSelf = false, source = 'wechaty', timestamp = nowTimestamp() } = {}) {
   const gid = normalizeStatsGroupId(groupId)
+  if (!shouldTrackWeChatGroupStats({ groupId: gid, groupName })) return { ok: false, skipped: true, reason: 'group_not_selected_for_stats' }
   const analysis = analyzeWeChatGroupMessage({ text, messageType })
   if (!gid || !analysis.ok) return { ok: false, skipped: true, reason: 'empty_activity', analysis }
   ensureSchema()

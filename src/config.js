@@ -794,6 +794,7 @@ export function setWechatyDutyGroupRuntime(runtime = {}) {
 
 export const DEFAULT_WECHAT_GROUP_DIGEST_CONFIG = {
   enabled: true,
+  selectedGroups: [],
   intervalEnabled: false,
   intervalMinutes: 180,
   dailyStatsEnabled: true,
@@ -817,11 +818,19 @@ function normalizeIntervalMinutes(value) {
   return allowed.has(n) ? n : DEFAULT_WECHAT_GROUP_DIGEST_CONFIG.intervalMinutes
 }
 
+function normalizeDigestGroups(value = []) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[，,;；\n]+/)
+  return [...new Set(raw.map(v => String(v || '').trim()).filter(Boolean))]
+}
+
 export function getWeChatGroupDigestConfig() {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social?.wechatGroupDigest || {} } catch {}
   return {
     enabled: stored.enabled !== false,
+    selectedGroups: normalizeDigestGroups(stored.selectedGroups ?? stored.selected_groups ?? stored.groups ?? []),
     intervalEnabled: stored.intervalEnabled === true || stored.interval_enabled === true,
     intervalMinutes: normalizeIntervalMinutes(stored.intervalMinutes ?? stored.interval_minutes),
     dailyStatsEnabled: stored.dailyStatsEnabled !== false && stored.daily_stats_enabled !== false,
@@ -859,6 +868,9 @@ export function setWeChatGroupDigestConfig(updates = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(updates, 'dailyStatsTime') || Object.prototype.hasOwnProperty.call(updates, 'daily_stats_time')) {
     next.dailyStatsTime = normalizeDigestTime(updates.dailyStatsTime || updates.daily_stats_time)
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'selectedGroups') || Object.prototype.hasOwnProperty.call(updates, 'selected_groups') || Object.prototype.hasOwnProperty.call(updates, 'groups')) {
+    next.selectedGroups = normalizeDigestGroups(updates.selectedGroups ?? updates.selected_groups ?? updates.groups)
   }
   const social = { ...(existing.social || {}), wechatGroupDigest: next }
   writeStoredConfig({ ...existing, social })
