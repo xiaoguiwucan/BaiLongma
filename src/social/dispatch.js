@@ -112,9 +112,9 @@ async function sendClawbot({ userId }, content) {
   return sendClawbotMessage(userId, content)
 }
 
-async function sendWechaty({ roomId }, content, options = {}) {
+async function sendWechaty({ roomId, memberId = '' }, content, options = {}) {
   return sendWechatyDutyGroupMessage(roomId, content, {
-    mentionId: options?.social?.reply_mention_id || options?.social?.sender_id || options?.replyMentionId || '',
+    mentionId: options?.social?.reply_mention_id || options?.social?.sender_id || options?.replyMentionId || memberId || '',
     mentionName: options?.social?.reply_mention_name || options?.social?.sender_name || options?.replyMentionName || '',
   })
 }

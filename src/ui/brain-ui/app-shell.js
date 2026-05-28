@@ -973,6 +973,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.8</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群 @ 回复目标链路热修复：正确解析带成员的 Wechaty 群目标，避免发送时 room_id 被拼坏。</p>
+                <ul class="release-note-points">
+                  <li>支持解析 <code>wechaty:room:&lt;room&gt;:member:&lt;member&gt;</code>，分开发送群 room_id 和 @ 对象 member_id。</li>
+                  <li>如果模型只传 target_id，也会用 member_id 作为兜底 @ 对象。</li>
+                  <li>继续坚持精确成员 ID 匹配，找不到真实成员就不 @，避免 @ 错主人或上一位提问人。</li>
+                  <li>新增 social target 解析测试，覆盖旧格式、新编码格式和带成员格式。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.7</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

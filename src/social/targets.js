@@ -1,3 +1,12 @@
+function safeDecodeTargetPart(value = '') {
+  const raw = String(value || '')
+  try {
+    return decodeURIComponent(raw)
+  } catch {
+    return raw
+  }
+}
+
 export function parseSocialTarget(targetId = '') {
   const raw = String(targetId || '').trim()
   if (raw.startsWith('discord:')) {
@@ -16,7 +25,15 @@ export function parseSocialTarget(targetId = '') {
     return { platform: 'wecom-webhook', key: raw.slice('wecom:webhook:'.length), raw }
   }
   if (raw.startsWith('wechaty:room:')) {
-    return { platform: 'wechaty-duty-group', roomId: raw.slice('wechaty:room:'.length), raw }
+    const rest = raw.slice('wechaty:room:'.length)
+    const memberMarker = ':member:'
+    const memberIndex = rest.indexOf(memberMarker)
+    if (memberIndex >= 0) {
+      const roomId = safeDecodeTargetPart(rest.slice(0, memberIndex))
+      const memberId = safeDecodeTargetPart(rest.slice(memberIndex + memberMarker.length))
+      return { platform: 'wechaty-duty-group', roomId, memberId, raw }
+    }
+    return { platform: 'wechaty-duty-group', roomId: safeDecodeTargetPart(rest), raw }
   }
   if (raw.startsWith('wechat:clawbot:group:')) {
     const rest = raw.slice('wechat:clawbot:group:'.length)
@@ -29,4 +46,3 @@ export function parseSocialTarget(targetId = '') {
   }
   return null
 }
-

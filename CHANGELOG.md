@@ -2,6 +2,27 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.8 - 2026-05-28
+
+### 微信群 @ 回复目标链路热修复
+
+- 修复 v0.4.7 新增的 `wechaty:room:<room>:member:<member>` 回复目标在分发层没有正确解析的问题。
+- 现在 `parseSocialTarget()` 会把 room/member 分开解码，真正发送时使用正确的微信群 room_id。
+- `dispatchSocialMessage()` 会把 target_id 中的 member_id 作为兜底 mentionId，避免模型只传 target_id 时丢失 @ 对象。
+- 保留“只按当前群成员 contact.id 精确 @，找不到就不 @”的策略，宁可不 @ 也不 @ 错到主人、管理员或上一位成员。
+
+### 验证
+
+- 新增 `npm run test:social-targets`，覆盖 Wechaty 群目标解析：旧格式、新编码格式、带成员格式。
+- `node --check src/social/targets.js` 通过。
+- `node --check src/social/dispatch.js` 通过。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/social/wechat-groups.js` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.7 - 2026-05-28
 
 ### 微信群 @ 回复对象修复
