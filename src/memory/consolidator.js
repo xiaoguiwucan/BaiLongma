@@ -78,6 +78,8 @@ export async function runConsolidator({ entity, memories }) {
       tools: CONSOLIDATOR_TOOLS,
       thinking: false,
       mustReply: false,
+      maxToolRounds: 3,
+      stopAfterTools: ['skip_consolidation', 'merge_memories', 'downgrade_memory'],
       onToolCall,
       toolContext: { source: 'consolidator', entity },
     })

@@ -2,6 +2,31 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.12 - 2026-05-28
+
+### 彻底修复后台一直“跳过识别/跳过整理”
+
+- 修复 v0.4.11 后仍能在日志里看到 `skip_recognition` 连续刷屏、并最终触发 tool loop 熔断的问题。
+- 根因：记忆识别器/整合器把 `skip_recognition`、`skip_consolidation` 当作“任务结束”的内部协议工具，但通用 LLM 工具循环在工具返回后还会继续问模型下一步，部分模型会重复调用同一个 skip 工具直到熔断。
+- `callLLM()` 新增 `maxToolRounds` 和 `stopAfterTools` 选项；主聊天不受影响，后台记忆识别/整合可以声明遇到内部终止工具后立刻结束。
+- TICK 心跳没有实际工具动作时不再送入记忆识别器，避免把“安静等待/没有主动行动”这类运行时闲聊存成识别任务。
+- 内部记忆工具不再写入 `action_logs` / `tool_audit`，前端思考流也会隐藏这些内部协议工具，避免用户看到“跳过识别”误以为助手不处理消息。
+- 当前排查确认：微信群助手若处于 `starting/qr_ready` 非在线状态，群里的 @ 不会进入程序；已强制切到重新扫码状态，扫码登录后才能恢复群消息监听。
+
+### 验证
+
+- `node --check src/llm.js` 通过。
+- `node --check src/index.js` 通过。
+- `node --check src/memory/recognizer.js` 通过。
+- `node --check src/memory/consolidator.js` 通过。
+- `node --check src/capabilities/executor.js` 通过。
+- `npm run test:tool-router` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.11 - 2026-05-28
 
 ### 修复一直“跳过识别”不回复

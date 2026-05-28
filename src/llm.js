@@ -704,8 +704,28 @@ function throwIfAborted(signal) {
 
 // 主调用：agentic 循环，连续执行工具直到模型停止
 // 返回 { content: string, toolResult: { name, args, result } | null, aborted: bool }
-export async function callLLM({ systemPrompt, message, messages: inputMessages = null, temperature = 0.5, topP = 0.9, tools = [], maxTokens, thinking = true, signal, onToolCall, onToolExecute, onStream, onRetry, toolContext = {}, mustReply = false }) {
+export async function callLLM({
+  systemPrompt,
+  message,
+  messages: inputMessages = null,
+  temperature = 0.5,
+  topP = 0.9,
+  tools = [],
+  maxTokens,
+  thinking = true,
+  signal,
+  onToolCall,
+  onToolExecute,
+  onStream,
+  onRetry,
+  toolContext = {},
+  mustReply = false,
+  maxToolRounds = TOOL_LOOP_LIMITS.maxRounds,
+  stopAfterTools = [],
+}) {
   const toolSchemas = getToolSchemas(tools)
+  const roundLimit = Math.max(1, Math.min(TOOL_LOOP_LIMITS.maxRounds, Number(maxToolRounds) || TOOL_LOOP_LIMITS.maxRounds))
+  const stopAfterToolSet = new Set((stopAfterTools || []).map(name => String(name || '').trim()).filter(Boolean))
 
   const messages = Array.isArray(inputMessages) && inputMessages.length > 0
     ? inputMessages.map(item => ({ ...item }))
@@ -728,7 +748,7 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
   let fakeToolNudgeUsed = false
   const toolLoopState = createToolLoopState()
 
-  for (let round = 0; round < TOOL_LOOP_LIMITS.maxRounds; round++) {
+  for (let round = 0; round < roundLimit; round++) {
     throwIfAborted(signal)
 
     const { content, reasoningContent, toolCalls, aborted } = await streamOnceWithRetry({
@@ -926,6 +946,18 @@ export async function callLLM({ systemPrompt, message, messages: inputMessages =
       }
     }
     throwIfAborted(signal)
+
+    // Some internal/background agents use tools as a terminal protocol:
+    // - memory recognizer: skip_recognition / upsert_memory means the job is done
+    // - memory consolidator: skip_consolidation / merge/downgrade means one cleanup pass is done
+    //
+    // Without an explicit terminal condition the generic agent loop asks the model
+    // for another round after the tool result. Several models then repeatedly call
+    // the same "skip_*" tool until the loop breaker fires, which shows up as
+    // "一直跳过识别" and burns tokens. Main chat turns do not set stopAfterTools.
+    if (stopAfterToolSet.size > 0 && toolResults.some(tr => stopAfterToolSet.has(tr.name))) {
+      break
+    }
 
     // 将本轮 assistant 消息（含工具调用）加入对话
     // 若是 XML 解析的工具调用，assistant 消息用文本形式（避免 MiniMax 不支持 tool_calls 格式回放）

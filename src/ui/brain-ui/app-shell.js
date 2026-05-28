@@ -973,6 +973,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.12</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">彻底修复后台一直“跳过识别/跳过整理”：内部记忆工具不再循环刷屏。</p>
+                <ul class="release-note-points">
+                  <li>记忆识别器遇到 skip_recognition / upsert_memory 后立即结束，不再继续问模型下一步。</li>
+                  <li>记忆整合器遇到 skip_consolidation / merge / downgrade 后立即结束，避免内部整理循环熔断。</li>
+                  <li>TICK 心跳没有实际工具动作时不再进入记忆识别，减少空闲状态的无意义识别。</li>
+                  <li>内部记忆工具不写入审计流，前端思考流也隐藏这些内部协议工具。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.11</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

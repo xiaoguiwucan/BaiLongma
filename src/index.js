@@ -1419,8 +1419,11 @@ async function runTurn(input, label, msg = null) {
   const jarvisThink = thinkMatch ? thinkMatch[1].trim() : ''
   const jarvisText = response.replace(/<think>[\s\S]*?<\/think>/gi, '').trim()
 
-  // Silent tick with no tool calls = nothing happened worth remembering; skip LLM call entirely.
-  if (isTick && toolCallLog.length === 0 && !jarvisText) {
+  // Heartbeat/TICK with no actual tool action is runtime chatter, not user memory.
+  // Do not send it into the memory recognizer: otherwise the recognizer's terminal
+  // skip_recognition call can flood logs/UI and make the app look like it is
+  // "一直跳过识别" even though no real user message was being processed.
+  if (isTick && toolCallLog.length === 0) {
     emitEvent('memories_written', { count: 0, memories: [] })
     return
   }

@@ -994,6 +994,17 @@ const L2 = new ThoughtStream("si-l2", "warm", {
 let currentPath = "l2";
 function currentStream() { return currentPath === "l1" ? L1 : L2; }
 
+const INTERNAL_MEMORY_TOOLS = new Set([
+  "skip_recognition",
+  "skip_consolidation",
+  "merge_memories",
+  "downgrade_memory",
+  "upsert_memory",
+]);
+function isInternalMemoryToolName(name) {
+  return INTERNAL_MEMORY_TOOLS.has(String(name || "").trim());
+}
+
 function isBusyErrorMessage(message = "") {
   return /(429|rate limit|too many requests|busy|overload|temporarily unavailable|server busy|resource exhausted)/i.test(String(message || ""));
 }
@@ -1174,6 +1185,7 @@ function handle({ type, data = {} }) {
       currentStream().stopThinking();
       break;
     case "tool_preparing": {
+      if (isInternalMemoryToolName(data.name)) break;
       // 思考动画已停，但工具尚未真正执行 —— 给一个占位状态避免 UI 死寂
       const stream = currentStream();
       const label = data.name ? stream.toolLabel(data.name) : "";
@@ -1181,12 +1193,14 @@ function handle({ type, data = {} }) {
       break;
     }
     case "tool_executing": {
+      if (isInternalMemoryToolName(data.name)) break;
       const stream = currentStream();
       const label = data.name ? stream.toolLabel(data.name) : "工具";
       stream.setStatus(`正在执行 ${label}…`, "busy");
       break;
     }
     case "tool_call":
+      if (isInternalMemoryToolName(data.name)) break;
       currentStream().tool(data.name, data.args, data.result, data.ok);
       break;
     case "response":

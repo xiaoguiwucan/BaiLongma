@@ -182,8 +182,10 @@ export async function runRecognizer({ userMessage, jarvisThink, jarvisResponse, 
       tools: RECOGNIZER_TOOLS,
       thinking: false,
       mustReply: false,
+      maxToolRounds: 4,
+      stopAfterTools: ['skip_recognition', 'upsert_memory'],
       onToolCall,
-      toolContext: { sessionRef, senderId },
+      toolContext: { source: 'memory-recognizer', sessionRef, senderId },
     })
   } catch (err) {
     console.error('[识别器] LLM 调用失败:', err.message)

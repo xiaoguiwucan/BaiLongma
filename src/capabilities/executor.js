@@ -108,6 +108,7 @@ import { config, getTTSCredentials, setSecurity, getWebSearchCredentials } from 
 import { streamTTS } from '../voice/tts-providers.js'
 import { paths } from '../paths.js'
 import { PRIMARY_USER_ID, lookupReplyTarget, normalizeChannel, suggestProactiveChannel } from '../identity.js'
+import { isInternalMemoryTool } from '../memory/tool-router.js'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 // 文件操作只允许在 sandbox 目录内
 const SANDBOX_ROOT = path.resolve(paths.sandboxDir)
@@ -348,6 +349,11 @@ function inferToolStatus(result) {
 }
 
 function writeToolAuditLog({ name, args, context, policy, status, result = '', error = '', startedAt }) {
+  // 记忆识别/整合内部协议工具不属于用户可见行动：
+  // 1) 不写 action_logs，避免被 tool-router 的 actionLog 保活机制再注入主对话；
+  // 2) 不发 tool_audit，避免设置页/审计流反复显示“跳过识别/跳过整理”。
+  if (isInternalMemoryTool(name)) return
+
   const durationMs = Date.now() - startedAt
   const detailParts = []
   if (policy?.reason) detailParts.push(`policy=${policy.reason}`)
