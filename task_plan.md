@@ -115,3 +115,9 @@
 2. [complete] Honcho 连接失败后 60 秒降级跳过，读写群记忆不再抛到主流程。
 3. [complete] 修复 Honcho list 异常路径引用未定义 session。
 4. [complete] 测试、重启、发布 GitHub Release。
+
+## v0.4.21 Hotfix Plan - New WeChat groups visible everywhere
+1. [complete] 新增后端 known groups 聚合接口。
+2. [complete] 前端群候选统一合并缓存群、已识别群和已配置群。
+3. [complete] 新群默认显示为已识别/未开启 @ 回复，不自动授权。
+4. [complete] 测试、重启、发布 GitHub Release。

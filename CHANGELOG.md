@@ -2,6 +2,24 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.21 - 2026-05-28
+
+### 统一新增微信群显示来源
+
+- 新增 `/social/wechat-groups/known` 接口，合并 Wechaty 缓存群、成员昵称库和聊天记录库里已经识别到的群。
+- 设置页“允许 @ 回复群组 / 群记忆 / 聊天记录库 / 统计与定时总结”的候选群来源统一，新增群不会再出现有的地方能看到、有的地方看不到。
+- 新增群默认显示为“已识别/未开启 @ 回复”，需要你在上方勾选并保存后才会参与 @ 回复；统计/总结仍可单独勾选。
+- 记录库/统计里的群 ID 统一补齐 `wechaty:` 前缀，避免同一个群因 ID 格式不同被拆成两个候选。
+
+### 验证
+
+- `node --check src/api.js` 通过。
+- `node --check src/social/wechat-group-stats.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:wechat-guard` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.20 - 2026-05-28
 
 ### 修复 Honcho 离线影响设置页和 LLM 模型操作

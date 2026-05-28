@@ -24,7 +24,7 @@ import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWe
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
 import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
-import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listWeChatGroupActivityRecords, listWeChatGroupMembers, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
+import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listKnownWeChatGroups, listWeChatGroupActivityRecords, listWeChatGroupMembers, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -341,6 +341,14 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '20'), 100)
       const hours = Math.min(parseInt(url.searchParams.get('hours') || '72'), 24 * 30)
       return jsonResponse(res, 200, { ok: true, groups: listRecentWeChatGroups({ limit, hours }) })
+    }
+
+
+    // GET /social/wechat-groups/known — 已识别/有记录的微信群全集，用于设置页统一候选来源。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/known') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '300'), 1000)
+      return jsonResponse(res, 200, listKnownWeChatGroups({ limit }))
     }
 
     // GET /social/wechat-groups/memory?group_id=xxx&category=task

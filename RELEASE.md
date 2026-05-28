@@ -2,10 +2,11 @@
 
 ## Current Version
 
-- `0.4.20`
+- `0.4.21`
 
 ## What This Release Includes
 
+- v0.4.21 统一新增微信群显示来源：合并 Wechaty 缓存群、成员库和聊天记录库，避免新群在不同设置模块里显示不一致。
 - v0.4.20 修复 Honcho 离线影响 LLM 设置：本地 Docker/Honcho 未启动时群记忆降级跳过，LLM 模型编辑、设默认、删除不再被拖垮。
 - v0.4.19 优化微信群管理员设置：用户界面显示/搜索微信昵称，点击成员昵称卡片添加；后台仍按精确 sender_id 授权。
 - v0.4.18 修复微信群发送失败和多人 @ 堵塞：真实 sender_id 目标进入本轮发送白名单，避免 target 校验失败；短时间多条 Wechaty 群 @ 默认最多 3 条并行处理。
@@ -40,12 +41,12 @@ npm run build
 
 Installer output:
 
-- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.20.exe`
+- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.21.exe`
 - `D:\claude\BaiLongma\dist\latest.yml`
 
 ## Local Verification Checklist
 
-1. Install `Bailongma Setup 0.4.20.exe`.
+1. Install `Bailongma Setup 0.4.21.exe`.
 2. Launch the app and confirm the activation page appears on first run.
 3. Enter a valid API key and verify the app enters `brain-ui`.
 4. Uninstall the app.
@@ -67,9 +68,9 @@ npm run publish
 
 Published artifacts:
 
-- GitHub Release asset: `Bailongma Setup 0.4.20.exe`
+- GitHub Release asset: `Bailongma Setup 0.4.21.exe`
 - GitHub Release asset: `latest.yml`
-- GitHub Release asset: `Bailongma Setup 0.4.20.exe.blockmap`
+- GitHub Release asset: `Bailongma Setup 0.4.21.exe.blockmap`
 
 ## Notes On First Launch Of The Installer
 

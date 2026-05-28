@@ -2416,6 +2416,7 @@ function initTTSSettings() {
       setTimeout(() => refreshWechatyMemoryOverview(), 300);
       setTimeout(() => loadWechatyActiveStats({ silent: true }), 500);
       setTimeout(() => loadWechatyAdminMembers({ silent: true }), 700);
+      setTimeout(() => loadWechatyKnownGroups({ silent: true }), 900);
       for (const [statusId, keys] of Object.entries(SOCIAL_PLATFORM_STATUS)) {
         const el = document.getElementById(statusId);
         if (!el) continue;
@@ -2435,6 +2436,7 @@ function initTTSSettings() {
   }
 
   let wechatyRoomsCache = [];
+  let wechatyKnownGroupsCache = [];
   let wechatySelectedGroupNames = new Set();
   let wechatyConfiguredGroupNames = new Set();
   let wechatyActiveMemoryGroupId = "";
@@ -2727,7 +2729,7 @@ function initTTSSettings() {
     if (!wechatyDigestGroupList) return;
     const groups = getWechatyDigestCandidateGroups();
     if (!groups.length) {
-      wechatyDigestGroupList.innerHTML = '<div class="wechaty-empty">先在上方勾选并保存 @ 回复群组；统计/总结只能作用于程序真实接入的群。</div>';
+      wechatyDigestGroupList.innerHTML = '<div class="wechaty-empty">还没有识别到微信群。登录微信或收到群消息后会自动出现。</div>';
       updateWechatyDigestGroupCount();
       return;
     }
@@ -2735,7 +2737,7 @@ function initTTSSettings() {
       const gid = groupDigestId(group);
       const checked = isWechatyDigestGroupSelected(group) ? " checked" : "";
       const stale = group.stale ? " stale" : "";
-      const stat = group.real ? "后续新消息会统计" : "等待真实群 ID";
+      const stat = group.selected ? "已允许 @ 回复，可参与统计" : (group.knownOnly ? "已识别/有记录，未开启 @ 回复" : "未开启 @ 回复");
       const requestId = memoryGroupRequestId(group);
       return `<label class="wechaty-digest-group-item${stale}" title="${escapeHtml(gid)}">
         <input class="wechaty-digest-group-checkbox" type="checkbox" value="${escapeHtml(gid)}" data-group-id="${escapeHtml(gid)}" data-request-id="${escapeHtml(requestId)}" data-group-name="${escapeHtml(group.topic || "")}"${checked}>
@@ -3241,13 +3243,14 @@ function initTTSSettings() {
     renderWechatyRooms();
     renderWechatyMemoryGroups();
     renderWechatyDigestGroups();
+    loadWechatyKnownGroups({ silent: true });
   }
 
   function renderWechatyRooms() {
     if (!wechatyRoomList) return;
     const keyword = String(wechatyRoomFilter?.value || "").trim().toLowerCase();
     const selected = wechatySelectedGroupNames;
-    const rooms = wechatyRoomsCache
+    const rooms = mergeWechatyKnownGroups()
       .filter(room => !keyword || String(room.topic || "").toLowerCase().includes(keyword))
       .sort((a, b) => Number(selected.has(b.topic)) - Number(selected.has(a.topic)) || String(a.topic).localeCompare(String(b.topic), 'zh-Hans-CN'));
     if (!rooms.length) {
@@ -3257,8 +3260,8 @@ function initTTSSettings() {
         const topic = escapeHtml(String(room.topic || "未命名群"));
         const id = escapeHtml(String(room.id || ""));
         const checked = selected.has(room.topic) ? " checked" : "";
-        const badge = wechatyRoomsAreStale ? "缓存" : "@ 回复";
-        return `<label class="wechaty-room-item${wechatyRoomsAreStale ? ' stale' : ''}" title="${id}">
+        const badge = selected.has(room.topic) ? "@ 回复" : (room.knownOnly ? "已识别" : (wechatyRoomsAreStale ? "缓存" : "未开启"));
+        return `<label class="wechaty-room-item${(wechatyRoomsAreStale || room.knownOnly) ? ' stale' : ''}" title="${id}">
           <input class="wechaty-room-checkbox" type="checkbox" value="${topic}" data-topic="${topic}"${checked}>
           <span class="wechaty-room-main"><span class="wechaty-room-name">${topic}</span><span class="wechaty-room-id">${id}</span></span>
           <span class="wechaty-room-badge">${badge}</span>
@@ -3277,29 +3280,58 @@ function initTTSSettings() {
       wechatySelectedCount.textContent = configured ? `已配置 ${configured} 个群名，等待真实群列表匹配` : '未获取群列表';
       return;
     }
-    const realSelected = wechatyRoomsCache.filter(room => wechatySelectedGroupNames.has(room.topic)).length;
-    wechatySelectedCount.textContent = `${wechatyRoomsAreStale ? '缓存已选' : '真实已选'} ${realSelected} / ${wechatyRoomsCache.length} 个群`;
+    const allGroups = mergeWechatyKnownGroups();
+    const realSelected = allGroups.filter(room => wechatySelectedGroupNames.has(room.topic)).length;
+    wechatySelectedCount.textContent = `${wechatyRoomsAreStale ? '缓存已选' : '已选'} ${realSelected} / ${allGroups.length || wechatyRoomsCache.length} 个群`;
+  }
+
+
+  function mergeWechatyKnownGroups() {
+    const rows = [];
+    const seen = new Set();
+    const add = (raw = {}, source = '') => {
+      const topic = String(raw.topic || raw.group_name || raw.groupName || raw.name || raw.id || '').trim();
+      const id = String(raw.id || raw.group_id || raw.groupId || topic || '').trim();
+      if (!topic && !id) return;
+      const key = id || topic;
+      if (seen.has(key)) return;
+      seen.add(key);
+      const selected = wechatySelectedGroupNames.has(topic) || raw.selected === true;
+      const knownOnly = source === 'known';
+      const normalizedId = id.startsWith('wechaty:') ? id : (id.startsWith('@@') ? `wechaty:${id}` : id);
+      rows.push({
+        id: normalizedId,
+        topic: topic || normalizedId,
+        selected,
+        stale: knownOnly ? true : wechatyRoomsAreStale,
+        real: !!normalizedId,
+        knownOnly,
+        message_count: Number(raw.message_count || 0),
+        member_count: Number(raw.member_count || 0),
+        last_seen_display: raw.last_seen_display || '',
+      });
+    };
+    for (const room of wechatyRoomsCache || []) add(room, 'room');
+    for (const group of wechatyKnownGroupsCache || []) add(group, 'known');
+    for (const name of wechatyConfiguredGroupNames) add({ id: name, topic: name, selected: true }, 'configured');
+    return rows;
+  }
+
+  async function loadWechatyKnownGroups({ silent = true } = {}) {
+    try {
+      const data = await fetch(`${API}/social/wechat-groups/known?limit=500`).then(r => r.json());
+      if (data.ok && Array.isArray(data.groups)) {
+        wechatyKnownGroupsCache = data.groups;
+        renderWechatyMemoryGroups();
+        renderWechatyDigestGroups();
+      }
+    } catch {
+      if (!silent) showFeedback(wechatyDutyFeedback, '读取已识别群失败', true);
+    }
   }
 
   function getWechatyMemoryCandidateGroups() {
-    const rows = [];
-    const seen = new Set();
-    for (const room of wechatyRoomsCache || []) {
-      if (!room?.topic) continue;
-      const selected = wechatySelectedGroupNames.has(room.topic) || room.selected === true;
-      if (!selected) continue;
-      const id = String(room.id || room.topic || "").trim();
-      const key = id || room.topic;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      rows.push({ id, topic: room.topic, selected: true, stale: wechatyRoomsAreStale, real: !!room.id });
-    }
-    for (const name of wechatyConfiguredGroupNames) {
-      if (!name || [...seen].some(key => key === name)) continue;
-      if (rows.some(row => row.topic === name)) continue;
-      rows.push({ id: name, topic: name, selected: true, stale: true, real: false });
-    }
-    return rows;
+    return mergeWechatyKnownGroups();
   }
 
   function getWechatyDigestCandidateGroups() {
@@ -3320,7 +3352,7 @@ function initTTSSettings() {
     const options = candidates.map(group => {
       const reqId = memoryGroupRequestId(group);
       const selected = reqId === currentId ? " selected" : "";
-      const label = `${group.topic || reqId}${group.stale ? "（缓存）" : ""}`;
+      const label = `${group.topic || reqId}${group.knownOnly ? "（已识别）" : (group.stale ? "（缓存）" : "")}`;
       return `<option value="${escapeHtml(reqId)}" data-group-name="${escapeHtml(group.topic || "")}"${selected}>${escapeHtml(label)}</option>`;
     }).join("");
     wechatyRecordsGroup.innerHTML = options || '<option value="">没有可查看的接入群</option>';
@@ -3337,7 +3369,7 @@ function initTTSSettings() {
     renderWechatyRecordsGroupSelect();
     const overviewMap = new Map((overview?.groups || []).map(row => [String(row.group_id || row.id || ""), row]));
     if (!candidates.length) {
-      wechatyMemoryGroups.innerHTML = '<div class="wechaty-empty">请先在上方勾选允许 @ 回复的群，保存后这里会按群显示 Honcho 记忆。</div>';
+      wechatyMemoryGroups.innerHTML = '<div class="wechaty-empty">还没有识别到微信群。请先登录/恢复微信，或等待程序收到群消息后自动出现。</div>';
       if (wechatyMemoryTitle) wechatyMemoryTitle.textContent = "未选择群";
       if (wechatyMemoryStat) wechatyMemoryStat.textContent = "—";
       return;
@@ -3348,7 +3380,7 @@ function initTTSSettings() {
       const info = overviewMap.get(rawKey) || overviewMap.get(reqId) || null;
       const counts = info?.counts || {};
       const active = reqId === wechatyActiveMemoryGroupId;
-      const stat = info ? `${counts.messages || 0} 消息 · ${counts.conclusions || 0} 结论 · ${counts.summaries || 0} 摘要` : (group.real ? "可读取 Honcho" : "等待真实群 ID");
+      const stat = info ? `${counts.messages || 0} 消息 · ${counts.conclusions || 0} 结论 · ${counts.summaries || 0} 摘要` : (group.selected ? "已开启 @ 回复" : (group.knownOnly ? "已识别/有记录，未开启 @ 回复" : "可查看记录"));
       return `<button class="wechaty-memory-group${active ? " active" : ""}${group.stale ? " stale" : ""}" type="button" data-group-id="${escapeHtml(reqId)}" data-group-name="${escapeHtml(group.topic)}">
         <span class="wechaty-memory-group-name">${escapeHtml(group.topic)}</span>
         <span class="wechaty-memory-group-stat">${escapeHtml(stat)}</span>
@@ -3475,6 +3507,7 @@ function initTTSSettings() {
         if (wechatyLoginSub) wechatyLoginSub.textContent = data.online ? `已真实在线：${data.login_user || data.last_login_user || "微信"}。群列表已真实刷新。` : (data.hint || '群列表已刷新，但连接仍在确认中。');
         setWechatyStatus(`${data.online ? "已真实连接" : "正在连接"} · 真实群列表 ${wechatyRoomsCache.length} 个，已接入 ${wechatySelectedGroupNames.size} 个`, data.online === true);
         renderWechatyRooms();
+        loadWechatyKnownGroups({ silent: true });
         refreshWechatyMemoryOverview();
       } else {
         if (Array.isArray(data.rooms) && data.rooms.length) {
@@ -3487,6 +3520,7 @@ function initTTSSettings() {
         else setWechatyStatus(wechatyRoomsCache.length ? `未确认在线 · 仅显示上次缓存 ${wechatyRoomsCache.length} 个群` : "未登录/未获取真实群列表", false);
         if (!silent) showFeedback(wechatyDutyFeedback, data.error || data.hint || "群列表未真实刷新，请强制重新扫码", true);
         renderWechatyRooms();
+        loadWechatyKnownGroups({ silent: true });
         refreshWechatyMemoryOverview();
       }
     } catch {

@@ -602,6 +602,58 @@ export function upsertWeChatGroupMemberName({ groupId, groupName = '', senderId 
   return { ok: true, group_id: gid, sender_id: sid, display_name: finalName, updated: updated?.updated || 0 }
 }
 
+
+export function listKnownWeChatGroups({ limit = 300 } = {}) {
+  ensureSchema()
+  const db = getDB()
+  const max = Math.min(Math.max(Number(limit || 300), 1), 1000)
+  const map = new Map()
+  function add(row = {}, source = '') {
+    const groupId = normalizeStatsGroupId(row.group_id || row.groupId || '')
+    const groupName = cleanStatsGroupName(row.group_name || row.groupName || '')
+    const key = groupId || groupName
+    if (!key) return
+    const prev = map.get(key) || { group_id: groupId, group_name: groupName, message_count: 0, member_count: 0, last_seen: '', sources: new Set() }
+    if (groupId && !prev.group_id) prev.group_id = groupId
+    if (groupName && (!prev.group_name || prev.group_name === prev.group_id)) prev.group_name = groupName
+    prev.message_count += Number(row.message_count || 0)
+    prev.member_count += Number(row.member_count || 0)
+    const last = row.last_seen || row.last_ts || row.last_timestamp || ''
+    if (last && String(last).localeCompare(String(prev.last_seen || '')) > 0) prev.last_seen = last
+    if (source) prev.sources.add(source)
+    map.set(key, prev)
+  }
+  try {
+    for (const row of db.prepare(`
+      SELECT group_id, group_name, COUNT(*) AS message_count, MAX(timestamp) AS last_seen
+      FROM wechat_group_activity
+      GROUP BY group_id, group_name
+      ORDER BY last_seen DESC
+      LIMIT ?
+    `).all(max)) add(row, 'activity')
+  } catch {}
+  try {
+    for (const row of db.prepare(`
+      SELECT group_id, group_name, COUNT(DISTINCT sender_id) AS member_count, MAX(last_seen) AS last_seen
+      FROM wechat_group_member_names
+      GROUP BY group_id, group_name
+      ORDER BY last_seen DESC
+      LIMIT ?
+    `).all(max)) add(row, 'members')
+  } catch {}
+  const groups = [...map.values()]
+    .map(item => ({
+      ...item,
+      id: item.group_id,
+      topic: item.group_name || item.group_id,
+      sources: [...item.sources],
+      last_seen_display: formatWeChatLocalDateTime(item.last_seen),
+    }))
+    .sort((a, b) => String(b.last_seen || '').localeCompare(String(a.last_seen || '')) || String(a.topic || '').localeCompare(String(b.topic || ''), 'zh-Hans-CN'))
+    .slice(0, max)
+  return { ok: true, total: groups.length, groups }
+}
+
 export function listWeChatGroupMembers({ groupId = '', groupName = '', q = '', limit = 300 } = {}) {
   ensureSchema()
   const db = getDB()
