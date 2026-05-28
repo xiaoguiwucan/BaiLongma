@@ -2,7 +2,8 @@ import { WeChatClient } from 'wechat-ilink-client'
 import { getClawbotCredentials, setClawbotCredentials, clearClawbotCredentials } from '../config.js'
 import { upsertClawbotToken, getAllClawbotTokens } from '../db.js'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, shouldWakeInWeChatGroup, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
-import { recordWeChatGroupMessage } from './wechat-group-memory.js'
+import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
+import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply } from './wechat-group-memory.js'
 
 let client = null
 let currentQrUrl = null   // set during login, cleared after scan
@@ -138,6 +139,19 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
       const woke = shouldWakeInWeChatGroup(text, { mentionedSelf: false })
       if (!woke) return
       console.log(`[ClawBot] 群 @/唤醒已命中，调用大模型 group=${groupId} sender=${senderId} text=${text.slice(0, 120)}`)
+
+      const safety = checkWeChatGroupCommandSafety(text)
+      if (!safety.allowed) {
+        const refusal = safety.reason
+        const outboundId = contextToken
+          ? `group:${groupId}:ctx:${contextToken}`
+          : `group:${groupId}`
+        await sendClawbotMessage(outboundId, refusal)
+        recordWeChatGroupAssistantReply({ groupId, reply: refusal, targetMemberName: senderId, source: 'clawbot' }).catch(() => {})
+        console.warn(`[ClawBot] 群高危请求已拦截 group=${groupId} sender=${senderId} rules=${safety.hits.map(h => h.id).join(',')}`)
+        return
+      }
+
       const prompt = await buildWeChatGroupCommandPrompt({ groupId, senderId, senderName: senderId, text, mentionedSelf: true })
       // 无 token 时仍可入队让本地窗口显示/处理；出站回群可能失败并在日志中提示。
       const outboundId = contextToken

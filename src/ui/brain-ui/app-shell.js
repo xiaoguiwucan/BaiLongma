@@ -796,6 +796,20 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.3.7</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">紧急安全修复：微信群黑名单补拦截查看桌面、本机文件列表和系统盘点请求。</p>
+                <ul class="release-note-points">
+                  <li>新增本机文件/目录盘点规则，拦截“查看桌面有啥文件”等请求。</li>
+                  <li>新增本机系统信息盘点规则，拦截查看配置、进程、窗口、软件列表等请求。</li>
+                  <li>扩展凭证规则，补上“把 .env 发群里”这类表达。</li>
+                  <li>ClawBot 群聊路径也接入安全守卫，避免旁路绕过。</li>
+                  <li>新增自动测试脚本 test:wechat-guard。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.3.6</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>
