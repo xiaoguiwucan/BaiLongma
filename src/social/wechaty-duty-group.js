@@ -7,6 +7,7 @@ import { getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, setWechatyDutyGro
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
 import { isWeChatInternalIdLike, listWeChatGroupMembers, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
 import { searchMemes } from './meme-search.js'
+import { generateImageForWechat, isWechatImageGenerationRequest } from './image-generation-skill.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -840,6 +841,10 @@ async function handleMessage(message) {
       })
       .catch(err => console.warn(`[Honcho] 显式群记忆写入失败：${err?.message || err}`))
 
+    if (await tryDirectImageGenerationReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+      return
+    }
+
     if (!adminVerified && await tryDirectMemeReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
       return
     }
@@ -901,6 +906,27 @@ async function tryDirectMemeReply(room, text = '', { senderId = '', senderName =
   console.log(`[WechatyMeme] 直接表情包回复 topic="${groupName}" sender="${senderName}" query="${query}" url="${item.url}"`)
   await sendWechatyDutyGroupMessage(room.id, item.url, { mentionId: senderId, mentionName: senderName })
   return true
+}
+
+async function tryDirectImageGenerationReply(room, text = '', { senderId = '', senderName = '', groupId = '', groupName = '' } = {}) {
+  if (!isWechatImageGenerationRequest(text)) return false
+  console.log(`[WechatImageSkill] 命中微信群生图请求 topic="${groupName}" sender="${senderName}" text="${String(text || '').slice(0, 120)}"`)
+  await sendWechatyDutyGroupMessage(room.id, '收到，正在生图，稍等一下…', { mentionId: senderId, mentionName: senderName })
+  try {
+    const result = await generateImageForWechat({ text, groupId, groupName, senderId, senderName })
+    if (!result.ok) {
+      await sendWechatyDutyGroupMessage(room.id, result.error || '生图失败：未知错误', { mentionId: senderId, mentionName: senderName })
+      return true
+    }
+    await room.say(FileBox.fromFile(result.filePath))
+    const suffix = typeof result.remaining === 'number' ? `（本小时剩余 ${result.remaining} 张）` : ''
+    await sendWechatyDutyGroupMessage(room.id, `图好了${suffix}`, { mentionId: senderId, mentionName: senderName })
+    recordWeChatGroupAssistantReply({ groupId, groupName, reply: `[生图] ${result.prompt}`, targetMemberName: senderName, source: 'wechaty-image-skill' }).catch(() => {})
+    return true
+  } catch (err) {
+    await sendWechatyDutyGroupMessage(room.id, `生图失败：${err?.message || err}`, { mentionId: senderId, mentionName: senderName })
+    return true
+  }
 }
 
 async function getWechatRawMessagePayload(message) {

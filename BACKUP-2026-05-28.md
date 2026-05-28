@@ -1,4 +1,30 @@
 
+## v0.4.31 - 2026-05-29
+
+### 新增
+- 新增「Skill 技能」设置菜单，首个技能为「生图 Skill」。
+- 生图 Skill 支持配置 Base URL、模型、API Key、每人每小时限额、默认质量、高清质量。
+- 微信群里有人 @ 助手并明确要求“生成图片 / 生图 / 画图 / 出图”时，会直接调用生图 API 生成图片并发送到群里。
+- 生图调用不添加任何预制提示词，只使用群友提出的图片需求文本。
+- 新增每人每小时限流：默认每人每小时最多 10 张图，超过后会 @ 提问人反馈。
+- 默认使用 low 质量和 1024×1024 分辨率以提高速度；用户明确要求高清、2K、4K、8K、超清时使用高质量参数。
+
+### 接入
+- 生图模型：gpt-image-2。
+- OpenAI 兼容接口：/images/generations。
+- 支持 API 返回 URL 或 b64_json；生成结果会保存到本机 data/generated-images 后再作为图片发送到微信群。
+- API 调用失败、超时、未配置密钥、限流等情况都会 @ 提问人说明原因。
+
+### 安全
+- API Key 只写入本机运行配置，不提交到 GitHub，不在设置页回显明文。
+- 生成图片发送使用本机刚生成的图片文件，不允许群友指定本机文件路径外发。
+
+### 验证
+- 本机已用 low/1024×1024 实测生成成功，并保存图片到 data/generated-images。
+- 通过 node --check：src/social/image-generation-skill.js、src/social/wechaty-duty-group.js、src/config.js、src/api.js、src/ui/brain-ui/app.js、src/ui/brain-ui/app-shell.js。
+- 通过 npm run test:wechat-guard。
+- 通过 npm run test:wechat-record-all。
+
 ## v0.4.30 - 2026-05-29
 
 ### 新增

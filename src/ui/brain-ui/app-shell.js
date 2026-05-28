@@ -158,6 +158,7 @@ const createSettingsModal = () => `
         <button class="settings-nav-item" data-tab="media" type="button">媒体能力</button>
         <button class="settings-nav-item" data-tab="social" type="button">社交媒体</button>
         <button class="settings-nav-item" data-tab="wechat-groups" type="button">微信群助手</button>
+        <button class="settings-nav-item" data-tab="skills" type="button">Skill 技能</button>
         <button class="settings-nav-item" data-tab="voice" type="button">语音识别</button>
         <button class="settings-nav-item" data-tab="web-search" type="button">上网搜索</button>
         <button class="settings-nav-item" data-tab="security" type="button">安全沙箱</button>
@@ -393,6 +394,65 @@ const createSettingsModal = () => `
           </div>
         </div>
 
+
+        <!-- ── Skill 技能 tab ── -->
+        <div class="settings-tab" data-tab="skills">
+          <div class="settings-section">
+            <div class="settings-section-label">Skill 技能管理</div>
+            <p class="settings-hint">这里管理可被微信群 @ 触发的技能。第一个技能「生图」会在群友 @ 助手并明确要求生成图片时直接调用图片模型，不额外添加预制提示词。</p>
+            <div class="wechaty-meme-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">生图 Skill</div>
+                  <p class="settings-hint">触发：微信群里 @ 助手并要求“生成图片 / 生图 / 画图”。默认低质量 1024×1024 以提高速度；用户明确要求高清、2K、4K、8K 时使用高质量参数。每人每小时最多 10 张。</p>
+                </div>
+                <span class="settings-platform-status" id="skill-image-status">○ 未配置</span>
+              </div>
+              <label class="wechaty-master-toggle">
+                <input id="skill-image-enabled" type="checkbox" checked>
+                <span>启用生图 Skill</span>
+              </label>
+              <div class="wechaty-meme-grid">
+                <label>Base URL
+                  <input class="settings-input" id="skill-image-baseurl" type="text" placeholder="https://sub.pbopenai.cloud/v1">
+                </label>
+                <label>模型
+                  <input class="settings-input" id="skill-image-model" type="text" placeholder="gpt-image-2">
+                </label>
+                <label>API Key
+                  <input class="settings-input" id="skill-image-key" type="password" placeholder="留空则不覆盖已保存密钥">
+                </label>
+                <label>每人每小时上限
+                  <select class="settings-select" id="skill-image-limit">
+                    <option value="5">5 张</option>
+                    <option value="10">10 张（推荐）</option>
+                    <option value="20">20 张</option>
+                  </select>
+                </label>
+                <label>默认质量
+                  <select class="settings-select" id="skill-image-default-quality">
+                    <option value="low">low（最快）</option>
+                    <option value="medium">medium</option>
+                    <option value="high">high</option>
+                    <option value="auto">auto</option>
+                  </select>
+                </label>
+                <label>高清质量
+                  <select class="settings-select" id="skill-image-high-quality">
+                    <option value="high">high（推荐）</option>
+                    <option value="medium">medium</option>
+                    <option value="auto">auto</option>
+                  </select>
+                </label>
+              </div>
+              <div class="settings-row-action">
+                <button class="settings-save-btn primary" id="skill-image-save-btn" type="button">保存生图 Skill</button>
+                <span class="settings-feedback" id="skill-image-feedback"></span>
+              </div>
+              <p class="settings-hint compact">密钥只保存在本机配置，不会在页面回显，也不会提交到 GitHub。微信群生成失败或 API 调用失败时会 @ 提问人反馈原因。</p>
+            </div>
+          </div>
+        </div>
 
         <!-- ── 微信群助手 tab ── -->
         <div class="settings-tab" data-tab="wechat-groups">

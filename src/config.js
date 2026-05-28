@@ -1750,6 +1750,74 @@ export function setWebSearchConfig(updates) {
   writeStoredConfig(next)
 }
 
+
+const DEFAULT_SKILL_IMAGE_CONFIG = {
+  enabled: true,
+  name: '生图',
+  baseUrl: 'https://sub.pbopenai.cloud/v1',
+  model: 'gpt-image-2',
+  apiKey: '',
+  maxPerUserPerHour: 10,
+  defaultQuality: 'low',
+  defaultSize: '1024x1024',
+  highQuality: 'high',
+  highSize: '1024x1024',
+}
+
+function normalizeSkillImageConfig(raw = {}) {
+  const baseUrl = String(raw.baseUrl || raw.base_url || DEFAULT_SKILL_IMAGE_CONFIG.baseUrl).trim().replace(/\/$/, '') || DEFAULT_SKILL_IMAGE_CONFIG.baseUrl
+  const model = String(raw.model || DEFAULT_SKILL_IMAGE_CONFIG.model).trim() || DEFAULT_SKILL_IMAGE_CONFIG.model
+  const apiKey = String(raw.apiKey || raw.api_key || process.env.BAILONGMA_IMAGE_API_KEY || '').trim()
+  const maxPerUserPerHour = Math.min(Math.max(Number(raw.maxPerUserPerHour ?? raw.max_per_user_per_hour ?? DEFAULT_SKILL_IMAGE_CONFIG.maxPerUserPerHour) || 10, 1), 100)
+  const defaultQuality = ['low', 'medium', 'high', 'auto'].includes(String(raw.defaultQuality || raw.default_quality || '').trim()) ? String(raw.defaultQuality || raw.default_quality).trim() : DEFAULT_SKILL_IMAGE_CONFIG.defaultQuality
+  const highQuality = ['low', 'medium', 'high', 'auto'].includes(String(raw.highQuality || raw.high_quality || '').trim()) ? String(raw.highQuality || raw.high_quality).trim() : DEFAULT_SKILL_IMAGE_CONFIG.highQuality
+  return {
+    enabled: raw.enabled !== false,
+    name: String(raw.name || DEFAULT_SKILL_IMAGE_CONFIG.name).trim() || DEFAULT_SKILL_IMAGE_CONFIG.name,
+    baseUrl,
+    model,
+    apiKey,
+    configured: !!apiKey,
+    maxPerUserPerHour,
+    defaultQuality,
+    defaultSize: String(raw.defaultSize || raw.default_size || DEFAULT_SKILL_IMAGE_CONFIG.defaultSize).trim() || DEFAULT_SKILL_IMAGE_CONFIG.defaultSize,
+    highQuality,
+    highSize: String(raw.highSize || raw.high_size || DEFAULT_SKILL_IMAGE_CONFIG.highSize).trim() || DEFAULT_SKILL_IMAGE_CONFIG.highSize,
+  }
+}
+
+export function getSkillImageConfig({ revealKey = false } = {}) {
+  let stored = {}
+  try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.skills?.imageGeneration || {} } catch {}
+  const cfg = normalizeSkillImageConfig(stored)
+  if (!revealKey) delete cfg.apiKey
+  return cfg
+}
+
+export function getSkillImageCredentials() {
+  return getSkillImageConfig({ revealKey: true })
+}
+
+export function setSkillImageConfig(updates = {}) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.skills?.imageGeneration || {}
+  const merged = { ...current, ...updates }
+  if (!Object.prototype.hasOwnProperty.call(updates, 'apiKey') && !Object.prototype.hasOwnProperty.call(updates, 'api_key')) {
+    merged.apiKey = current.apiKey || current.api_key || ''
+  }
+  const nextConfig = normalizeSkillImageConfig(merged)
+  const skills = { ...(existing.skills || {}), imageGeneration: nextConfig }
+  writeStoredConfig({ ...existing, skills })
+  return getSkillImageConfig()
+}
+
+export function getSkillsConfig() {
+  return {
+    imageGeneration: getSkillImageConfig(),
+  }
+}
+
 export const __internals = {
   DEEPSEEK_MODELS,
   MINIMAX_MODELS,

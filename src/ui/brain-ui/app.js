@@ -2144,6 +2144,16 @@ function initTTSSettings() {
   const wechatySaveMemeBtn = document.getElementById("wechaty-save-meme-btn");
   const wechatyMemePreview = document.getElementById("wechaty-meme-preview");
   const wechatyMemeFeedback = document.getElementById("wechaty-meme-feedback");
+  const skillImageStatus = document.getElementById("skill-image-status");
+  const skillImageEnabled = document.getElementById("skill-image-enabled");
+  const skillImageBaseUrl = document.getElementById("skill-image-baseurl");
+  const skillImageModel = document.getElementById("skill-image-model");
+  const skillImageKey = document.getElementById("skill-image-key");
+  const skillImageLimit = document.getElementById("skill-image-limit");
+  const skillImageDefaultQuality = document.getElementById("skill-image-default-quality");
+  const skillImageHighQuality = document.getElementById("skill-image-high-quality");
+  const skillImageSaveBtn = document.getElementById("skill-image-save-btn");
+  const skillImageFeedback = document.getElementById("skill-image-feedback");
   const honchoEnabled = document.getElementById("honcho-enabled");
   const honchoEnvironment = document.getElementById("honcho-environment");
   const honchoBaseUrl = document.getElementById("honcho-baseurl");
@@ -2169,6 +2179,7 @@ function initTTSSettings() {
       const tab = btn.dataset.tab;
       overlay.querySelector(`.settings-tab[data-tab="${tab}"]`)?.classList.add("active");
       if (tab === "social" || tab === "wechat-groups") loadSocialSettings();
+      if (tab === "skills") loadSkillSettings();
       if (tab === "wechat-groups") startWechatyStatsAutoRefresh();
       if (tab === "security") loadSecuritySettings();
       if (tab === "web-search") loadWebSearchSettings();
@@ -3204,6 +3215,55 @@ function initTTSSettings() {
   }
 
 
+  function applySkillImageConfig(config = {}) {
+    if (skillImageEnabled) skillImageEnabled.checked = config.enabled !== false;
+    if (skillImageBaseUrl) skillImageBaseUrl.value = config.baseUrl || 'https://sub.pbopenai.cloud/v1';
+    if (skillImageModel) skillImageModel.value = config.model || 'gpt-image-2';
+    if (skillImageLimit) skillImageLimit.value = String(config.maxPerUserPerHour || 10);
+    if (skillImageDefaultQuality) skillImageDefaultQuality.value = config.defaultQuality || 'low';
+    if (skillImageHighQuality) skillImageHighQuality.value = config.highQuality || 'high';
+    if (skillImageKey) skillImageKey.value = '';
+    if (skillImageStatus) {
+      skillImageStatus.textContent = config.configured ? '● 已配置' : '○ 未配置密钥';
+      skillImageStatus.classList.toggle('ok', !!config.configured);
+    }
+  }
+
+  async function loadSkillSettings() {
+    try {
+      const data = await fetch(`${API}/settings/skills`).then(r => r.json());
+      applySkillImageConfig(data.skills?.imageGeneration || {});
+    } catch {
+      showFeedback(skillImageFeedback, 'Skill 设置加载失败', true);
+    }
+  }
+
+  async function saveSkillImageConfig() {
+    const payload = {
+      enabled: skillImageEnabled?.checked !== false,
+      baseUrl: skillImageBaseUrl?.value?.trim() || 'https://sub.pbopenai.cloud/v1',
+      model: skillImageModel?.value?.trim() || 'gpt-image-2',
+      maxPerUserPerHour: Number(skillImageLimit?.value || 10),
+      defaultQuality: skillImageDefaultQuality?.value || 'low',
+      highQuality: skillImageHighQuality?.value || 'high',
+    };
+    const key = skillImageKey?.value?.trim();
+    if (key) payload.apiKey = key;
+    try {
+      const data = await fetch(`${API}/settings/skills/image-generation`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json());
+      if (data.ok) {
+        applySkillImageConfig(data.imageGeneration || payload);
+        showFeedback(skillImageFeedback, '生图 Skill 已保存，立即生效');
+      } else showFeedback(skillImageFeedback, data.error || '保存失败', true);
+    } catch {
+      showFeedback(skillImageFeedback, '保存请求失败', true);
+    }
+  }
+
   function applyWechatyMemeConfig(config = {}) {
     if (wechatyMemeEnabled) wechatyMemeEnabled.checked = config.enabled !== false;
     if (wechatyMemeProvider) wechatyMemeProvider.value = config.provider || 'xiaoapi';
@@ -3707,6 +3767,7 @@ function initTTSSettings() {
   wechatyRoomFilter?.addEventListener("input", renderWechatyRooms);
   wechatyTestMemeBtn?.addEventListener("click", testWechatyMemeSearch);
   wechatySaveMemeBtn?.addEventListener("click", saveWechatyMemeConfig);
+  skillImageSaveBtn?.addEventListener("click", saveSkillImageConfig);
   wechatyStartBtn?.addEventListener("click", async () => {
     wechatyStartBtn.disabled = true;
     setWechatyStatus("正在连接/恢复微信…", false);
@@ -4392,6 +4453,7 @@ function initTTSSettings() {
         t.classList.toggle("active", t.dataset.tab === tab);
       });
       if (tab === "social") loadSocialSettings();
+      if (tab === "skills") loadSkillSettings();
       if (tab === "web-search") loadWebSearchSettings();
       if (tab === "update") loadUpdateSettings();
     }
