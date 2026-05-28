@@ -39,6 +39,33 @@ const XML_LIKE_RE = /^<\?xml|^<msg\b|^<appmsg\b|^<sysmsg\b/iu
 
 let schemaReady = false
 
+export function isWeChatInternalIdLike(value = '') {
+  const text = String(value || '').trim()
+  if (!text) return false
+  return /^wechaty:/iu.test(text)
+    || /^@@?[a-f0-9]{16,}$/iu.test(text)
+    || /^@(?:[a-f0-9_-]{16,}|[0-9a-z_-]{24,})$/iu.test(text)
+    || /^wxid_[a-z0-9_-]{8,}$/iu.test(text)
+    || /^gh_[a-z0-9_-]{8,}$/iu.test(text)
+}
+
+function pickWeChatDisplayName(candidates = [], fallback = '') {
+  const list = Array.isArray(candidates) ? candidates : [candidates]
+  for (const item of [...list, fallback]) {
+    const value = String(item || '').trim()
+    if (value && !/^(未知成员|unknown)$/iu.test(value) && !isWeChatInternalIdLike(value)) return value
+  }
+  const safeFallback = String(fallback || '').trim()
+  return safeFallback && !/^(未知成员|unknown)$/iu.test(safeFallback) && !isWeChatInternalIdLike(safeFallback) ? safeFallback : '未知成员'
+}
+
+function splitNameCandidates(value = '') {
+  return String(value || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+}
+
 function ensureSchema() {
   if (schemaReady) return
   const db = getDB()
@@ -226,7 +253,7 @@ export function recordWeChatGroupActivity({ groupId, groupName = '', senderId = 
     gid,
     String(groupName || '').trim(),
     String(senderId || '').trim(),
-    String(senderName || senderId || '').trim(),
+    pickWeChatDisplayName([senderName], senderId),
     analysis.messageType,
     analysis.displayText,
     analysis.rawText,
@@ -240,6 +267,37 @@ export function recordWeChatGroupActivity({ groupId, groupName = '', senderId = 
     String(timestamp || nowTimestamp())
   )
   return { ok: true, id: info.lastInsertRowid, group_id: gid, ...analysis }
+}
+
+export function updateWeChatGroupActivitySenderName({ groupId, groupName = '', senderId = '', senderName = '' } = {}) {
+  const gid = normalizeStatsGroupId(groupId)
+  const sid = String(senderId || '').trim()
+  const displayName = pickWeChatDisplayName([senderName], '')
+  const cleanGroupName = String(groupName || '').trim()
+  if (!gid || !sid || !displayName || displayName === '未知成员' || isWeChatInternalIdLike(displayName)) {
+    return { ok: false, skipped: true, reason: 'invalid_sender_display_name' }
+  }
+  ensureSchema()
+  const db = getDB()
+  const info = db.prepare(`
+    UPDATE wechat_group_activity
+    SET sender_name = ?,
+        group_name = CASE WHEN ? <> '' THEN ? ELSE group_name END
+    WHERE group_id = ?
+      AND sender_id = ?
+      AND (
+        sender_name IS NULL
+        OR sender_name = ''
+        OR sender_name = '未知成员'
+        OR LOWER(sender_name) = 'unknown'
+        OR sender_name = sender_id
+        OR sender_name LIKE '@%'
+        OR sender_name LIKE 'wxid_%'
+        OR sender_name LIKE 'gh_%'
+        OR LENGTH(sender_name) >= 16
+      )
+  `).run(displayName, cleanGroupName, cleanGroupName, gid, sid)
+  return { ok: true, updated: info.changes || 0, group_id: gid, sender_id: sid, sender_name: displayName }
 }
 
 function rangeDates({ from = '', to = '', hours = 24, range = '' } = {}) {
@@ -267,18 +325,25 @@ function rowsByMetric(db, gid, from, to, metric, limit) {
     brag_count: 'SUM(CASE WHEN brag_score > 0 THEN 1 ELSE 0 END)',
   }[metric]
   if (!safeMetric) return []
-  return db.prepare(`
-    SELECT COALESCE(NULLIF(sender_name, ''), NULLIF(sender_id, ''), '未知成员') AS name,
+  const rows = db.prepare(`
+    SELECT COALESCE(NULLIF(sender_id, ''), NULLIF(sender_name, ''), 'unknown') AS sender_key,
            sender_id,
+           GROUP_CONCAT(DISTINCT NULLIF(sender_name, '')) AS sender_names,
            ${safeMetric} AS value,
            COUNT(*) AS message_count
     FROM wechat_group_activity
     WHERE group_id = ? AND timestamp >= ? AND timestamp <= ?
-    GROUP BY COALESCE(NULLIF(sender_id, ''), sender_name, 'unknown'), name
+    GROUP BY sender_key
     HAVING value > 0
     ORDER BY value DESC, message_count DESC
     LIMIT ?
   `).all(gid, from, to, Math.min(Math.max(Number(limit || 10), 1), 30))
+  return rows.map(row => ({
+    ...row,
+    name: pickWeChatDisplayName(splitNameCandidates(row.sender_names), row.sender_id || row.sender_key),
+    value: Number(row.value || 0),
+    message_count: Number(row.message_count || 0),
+  }))
 }
 
 export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, range = '', limit = 10 } = {}) {
@@ -307,14 +372,16 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
     ORDER BY id DESC
     LIMIT ?
   `).all(gid, dates.from, dates.to, 80).reverse()
+    .map(row => ({ ...row, sender_name: pickWeChatDisplayName([row.sender_name], row.sender_id) }))
   const important = recent.filter(row => IMPORTANT_RE.test(row.display_text || '')).slice(-12)
   const links = db.prepare(`
-    SELECT display_text, sender_name, timestamp
+    SELECT display_text, sender_id, sender_name, timestamp
     FROM wechat_group_activity
     WHERE group_id = ? AND timestamp >= ? AND timestamp <= ? AND link_count > 0
     ORDER BY id DESC
     LIMIT 20
   `).all(gid, dates.from, dates.to).reverse()
+    .map(row => ({ ...row, sender_name: pickWeChatDisplayName([row.sender_name], row.sender_id) }))
   return {
     ok: true,
     group_id: gid,

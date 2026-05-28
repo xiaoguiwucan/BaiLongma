@@ -857,6 +857,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.2</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群排行榜昵称修复：发言榜/发图榜等优先显示微信群昵称，不再暴露内部 ID。</p>
+                <ul class="release-note-points">
+                  <li>优先读取群昵称、微信备注和微信昵称，过滤 @ 开头的 WeChaty 内部 ID。</li>
+                  <li>接入群或收到消息后后台刷新成员列表，自动回填旧统计行。</li>
+                  <li>排行榜按 sender_id 合并，昵称变化不会把同一个人拆成多条。</li>
+                  <li>最近记录、链接列表和群总结重点线索同步清洗昵称。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.1</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

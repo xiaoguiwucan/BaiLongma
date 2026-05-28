@@ -2,11 +2,11 @@
 
 ## Current Version
 
-- `0.4.1`
+- `0.4.2`
 
 ## What This Release Includes
 
-- v0.4.1 微信群统计选择修复：统计/定时总结必须手动勾选群组，补充本地统计库可视化和成员记忆空状态。
+- v0.4.2 微信群排行榜昵称修复：排行榜优先显示微信群昵称/备注/微信昵称，并自动回填旧统计里的内部 ID。
 - Windows NSIS installer
 - GitHub Releases auto-update metadata
 - First-run activation flow
@@ -27,12 +27,12 @@ npm run build
 
 Installer output:
 
-- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.1.exe`
+- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.2.exe`
 - `D:\claude\BaiLongma\dist\latest.yml`
 
 ## Local Verification Checklist
 
-1. Install `Bailongma Setup 0.4.1.exe`.
+1. Install `Bailongma Setup 0.4.2.exe`.
 2. Launch the app and confirm the activation page appears on first run.
 3. Enter a valid API key and verify the app enters `brain-ui`.
 4. Uninstall the app.
@@ -54,9 +54,9 @@ npm run publish
 
 Published artifacts:
 
-- GitHub Release asset: `Bailongma Setup 0.4.1.exe`
+- GitHub Release asset: `Bailongma Setup 0.4.2.exe`
 - GitHub Release asset: `latest.yml`
-- GitHub Release asset: `Bailongma Setup 0.4.1.exe.blockmap`
+- GitHub Release asset: `Bailongma Setup 0.4.2.exe.blockmap`
 
 ## Notes On First Launch Of The Installer
 

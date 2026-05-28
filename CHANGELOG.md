@@ -3,6 +3,32 @@
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
 
+## v0.4.2 - 2026-05-28
+
+### 修复内容
+
+- 修复微信群统计排行榜里显示 `@a5a383...`、`@03ee...` 等 WeChaty 内部联系人 ID 的问题。
+- 排行榜姓名来源改为优先读取微信群内昵称，其次读取微信备注/别名，再读取微信昵称，最后才兜底为“未知成员”。
+- Wechaty 接入目标群或收到群消息后，会在后台刷新群成员列表，把旧统计表 `wechat_group_activity.sender_name` 中的内部 ID 自动回填为真实昵称。
+- 排行榜聚合逻辑改为按 `sender_id` 合并，避免同一个人因为“旧内部 ID + 新昵称”被拆成两个人。
+- 最近统计记录、链接列表和日报重点线索同步清洗成员名，避免继续把内部 ID 展示到 UI 或群总结里。
+
+### 验证结果
+
+- `node --check src/social/wechat-group-stats.js` 通过。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
+### 部署注意事项
+
+- 更新后重启白龙马/Electron。
+- 微信群助手保持登录后，进入已勾选群或群里有新消息时会自动刷新成员昵称并回填旧排行榜。
+- 如果某个成员从未出现在当前 Wechaty 可解析的群成员列表中，旧数据会暂时显示“未知成员”；等该群成员信息刷新成功后会自动补齐。
+
+
 
 ## v0.4.1 - 2026-05-28
 
@@ -31,6 +57,7 @@
 - `node --check src/social/wechat-group-digest.js` 通过。
 - `node --check src/social/wechat-group-memory.js` 通过。
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `node --check src/social/wechat-clawbot.js` 通过。
 - `node --check src/ui/brain-ui/app.js` 通过。
 - `node --check src/ui/brain-ui/app-shell.js` 通过。
@@ -86,6 +113,7 @@
 - `node --check src/api.js` 通过。
 - `node --check src/social/index.js` 通过。
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `node --check src/social/wechat-clawbot.js` 通过。
 - `node --check src/social/wechat-group-memory.js` 通过。
 - `node --check src/ui/brain-ui/app.js` 通过。
@@ -150,6 +178,7 @@
 ### 验证结果
 
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `npm run test:wechat-memory` 通过。
 - 完整 v0.3.8 检查集继续通过。
 
@@ -191,6 +220,7 @@
 - `node --check src/social/wechat-group-memory.js` 通过。
 - `node --check src/social/wechat-memory-extractor.js` 通过。
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `node --check src/social/wechat-clawbot.js` 通过。
 - `node --check src/ui/brain-ui/app.js` 通过。
 - `node --check src/ui/brain-ui/app-shell.js` 通过。
@@ -228,6 +258,7 @@
 - `node --check src/social/wechat-command-guard.js` 通过。
 - `node --check src/social/wechat-clawbot.js` 通过。
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `git diff --check` 通过。
 
 ### 部署注意事项
@@ -342,6 +373,7 @@
 ### 验证结果
 
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `node --check src/api.js` 通过。
 - `node --check src/config.js` 通过。
 - `node --check src/ui/brain-ui/app.js` 通过。
@@ -403,6 +435,7 @@
 ### 验证结果
 
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 
 ### 部署注意事项
 
@@ -433,6 +466,7 @@
 
 - `node --check src/social/wechat-groups.js` 通过。
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `node --check src/social/wechat-clawbot.js` 通过。
 - `node --check src/capabilities/executor.js` 通过。
 - `node --check src/llm.js` 通过。
@@ -513,6 +547,7 @@
 
 - 用户实测：微信群里 @ 登录账号后已经可以正常回复。
 - `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
 - `node --check src/api.js` 通过。
 - `node --check src/config.js` 通过。
 - `node --check src/social/wechat-group-memory.js` 通过。

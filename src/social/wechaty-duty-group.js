@@ -5,7 +5,7 @@ import { FileBox } from 'file-box'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
-import { normalizeWeChatGroupDisplayText, recordWeChatGroupActivity } from './wechat-group-stats.js'
+import { isWeChatInternalIdLike, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, updateWeChatGroupActivitySenderName } from './wechat-group-stats.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -16,6 +16,7 @@ const WECHATY_MEMORY_NAME = path.join(paths.userDir, 'wechaty-duty-group')
 const WECHATY_MEMORY_FILE = `${WECHATY_MEMORY_NAME}.memory-card.json`
 const ROOM_REFRESH_STALE_MS = 2 * 60 * 1000
 const MESSAGE_HEALTH_STALE_MS = 10 * 60 * 1000
+const MEMBER_NAME_REFRESH_STALE_MS = 10 * 60 * 1000
 const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
 const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
 
@@ -39,6 +40,7 @@ let activePuppetName = ''
 let reconnectTimer = null
 let reconnectAttempts = 0
 let suppressReconnectUntil = 0
+const memberNameRefreshAt = new Map()
 
 export function extractPublicImageUrlsFromWechatText(content = '') {
   const text = String(content || '')
@@ -494,7 +496,9 @@ async function resolveTargetRooms() {
       if (room) {
         targetRooms.set(name, room)
         if (!firstRoom) firstRoom = room
-        console.log(`[Wechaty] 已接入群：${await safeTopic(room)} (${room.id})`)
+        const topic = await safeTopic(room)
+        console.log(`[Wechaty] 已接入群：${topic} (${room.id})`)
+        scheduleRoomMemberNameRefresh(room, topic)
       } else {
         console.warn(`[Wechaty] 已登录，但未找到群：${name}。请确认当前微信在该群里，或等群里发一条消息。`)
       }
@@ -546,6 +550,7 @@ async function handleMessage(message) {
     if (!isAllowedGroupTopic(topic)) return
 
     targetRooms.set(topic, room)
+    scheduleRoomMemberNameRefresh(room, topic)
     if (!targetRoomId) {
       targetRoomId = room.id
       targetRoom = room
@@ -559,15 +564,23 @@ async function handleMessage(message) {
     try { messageType = message.type?.() ?? '' } catch {}
     lastMessageAt = new Date().toISOString()
     const talker = message.talker?.()
-    const senderName = isSelf ? '我' : (talker?.name?.() || talker?.id || '未知成员')
+    const senderId = getWechatyContactId(talker)
+    const senderName = isSelf ? '我' : await resolveWechatyMemberDisplayName(room, talker, senderId)
     const groupId = `wechaty:${room.id}`
     const groupExternalId = makeWeChatGroupExternalId(groupId)
+    if (senderId && senderName && senderName !== '未知成员') {
+      try {
+        updateWeChatGroupActivitySenderName({ groupId, groupName: topic, senderId, senderName })
+      } catch (err) {
+        console.warn(`[WechatyStats] 更新成员昵称失败：${err?.message || err}`)
+      }
+    }
     let activity = null
     try {
       activity = recordWeChatGroupActivity({
         groupId,
         groupName: topic,
-        senderId: talker?.id || senderName,
+        senderId: senderId || senderName,
         senderName,
         text: rawText,
         messageType,
@@ -587,7 +600,7 @@ async function handleMessage(message) {
 
     // 群消息先归档并写入当前群专属记忆库；默认不打扰、不回复。
     archiveWeChatGroupMessage({ groupId, senderId: senderName, text })
-    recordWeChatGroupMessage({ groupId, groupName: topic, senderId: talker?.id || senderName, senderName, text, mentionedSelf, source: 'wechaty' }).catch(err => console.warn(`[Honcho] 写入群记忆失败：${err?.message || err}`))
+    recordWeChatGroupMessage({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, mentionedSelf, source: 'wechaty' }).catch(err => console.warn(`[Honcho] 写入群记忆失败：${err?.message || err}`))
     // 只要 @ 了当前扫码登录的微信号，就必须进入大模型。
     // 注意：这里不再做任何关键词/意图/内容二次过滤，也不做硬编码回复。
     if (!wechatyGroupReplyEnabled || !mentionedSelf) return
@@ -597,12 +610,12 @@ async function handleMessage(message) {
     const safety = checkWeChatGroupCommandSafety(text)
     if (!safety.allowed) {
       const refusal = safety.reason
-      await sendWechatyDutyGroupMessage(room.id, refusal, { mentionId: talker?.id })
+      await sendWechatyDutyGroupMessage(room.id, refusal, { mentionId: senderId })
       recordWeChatGroupAssistantReply({ groupId, groupName: topic, reply: refusal, targetMemberName: senderName, source: 'wechaty' }).catch(() => {})
       return
     }
 
-    recordWeChatGroupExplicitMemories({ groupId, groupName: topic, senderId: talker?.id || senderName, senderName, text, source: 'wechaty' })
+    recordWeChatGroupExplicitMemories({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, source: 'wechaty' })
       .then(result => {
         if (result?.count) console.log(`[Honcho] 已沉淀群显式记忆 topic="${topic}" sender="${senderName}" count=${result.count}`)
       })
@@ -613,16 +626,16 @@ async function handleMessage(message) {
       content: formatGroupLine(senderName, text),
       channel: WECHAT_GROUP_CHANNEL,
       external_party_id: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: talker?.id || '', mentioned_self: mentionedSelf, reply_mention_id: talker?.id || '', user_text: text, raw_user_text: rawText || text },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text },
       timestamp: new Date().toISOString(),
     })
 
-    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: talker?.id || senderName, senderName, text, mentionedSelf: true })
+    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, mentionedSelf: true })
     pushMessageRef?.(`wechaty:room:${room.id}`, prompt, WECHAT_GROUP_CHANNEL, {
       noPersist: true,
       externalPartyIdOverride: `wechaty:room:${room.id}`,
       groupArchiveId: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: talker?.id || '', mentioned_self: mentionedSelf, reply_mention_id: talker?.id || '', user_text: text, raw_user_text: rawText || text },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text },
     })
   } catch (err) {
     console.warn(`[Wechaty] 处理群消息失败：${err?.message || err}`)
@@ -630,6 +643,69 @@ async function handleMessage(message) {
 }
 
 
+
+function getWechatyContactId(contact) {
+  const payload = contact?.payload && typeof contact.payload === 'object' ? contact.payload : {}
+  return String(contact?.id || payload?.id || payload?.contactId || payload?.UserName || '').trim()
+}
+
+function pushWechatyCandidate(candidates, value) {
+  const text = String(value || '').trim()
+  if (text) candidates.push(text)
+}
+
+async function resolveWechatyMemberDisplayName(room, contact, fallback = '') {
+  const candidates = []
+  try { pushWechatyCandidate(candidates, await room?.alias?.(contact)) } catch {}
+  try { pushWechatyCandidate(candidates, await contact?.alias?.()) } catch {}
+  try { pushWechatyCandidate(candidates, contact?.name?.()) } catch {}
+  try {
+    const payload = contact?.payload && typeof contact.payload === 'object' ? contact.payload : {}
+    pushWechatyCandidate(candidates, payload?.alias)
+    pushWechatyCandidate(candidates, payload?.remark)
+    pushWechatyCandidate(candidates, payload?.remarkName)
+    pushWechatyCandidate(candidates, payload?.displayName)
+    pushWechatyCandidate(candidates, payload?.name)
+    pushWechatyCandidate(candidates, payload?.NickName)
+    pushWechatyCandidate(candidates, payload?.RemarkName)
+  } catch {}
+  pushWechatyCandidate(candidates, fallback)
+  return candidates.find(value => !isWeChatInternalIdLike(value)) || '未知成员'
+}
+
+function scheduleRoomMemberNameRefresh(room, topic = '') {
+  const roomId = String(room?.id || '').trim()
+  if (!roomId) return
+  const key = `wechaty:${roomId}`
+  const last = memberNameRefreshAt.get(key) || 0
+  if (Date.now() - last < MEMBER_NAME_REFRESH_STALE_MS) return
+  memberNameRefreshAt.set(key, Date.now())
+  refreshRoomMemberDisplayNames(room, topic).catch(err => {
+    console.warn(`[WechatyStats] 刷新群成员昵称失败 topic="${topic}"：${err?.message || err}`)
+  })
+}
+
+async function refreshRoomMemberDisplayNames(room, topic = '') {
+  if (!room?.memberAll) return { ok: false, skipped: true, reason: 'room_member_all_unavailable' }
+  const groupId = `wechaty:${room.id}`
+  const groupName = topic || await safeTopic(room)
+  const members = await room.memberAll()
+  let updated = 0
+  for (const member of members || []) {
+    const senderId = getWechatyContactId(member)
+    if (!senderId) continue
+    const senderName = await resolveWechatyMemberDisplayName(room, member, senderId)
+    if (!senderName || senderName === '未知成员') continue
+    try {
+      const result = updateWeChatGroupActivitySenderName({ groupId, groupName, senderId, senderName })
+      updated += Number(result?.updated || 0)
+    } catch (err) {
+      console.warn(`[WechatyStats] 回填成员昵称失败 sender="${senderId}"：${err?.message || err}`)
+    }
+  }
+  if (updated > 0) console.log(`[WechatyStats] 已回填群成员微信昵称 topic="${groupName}" rows=${updated}`)
+  return { ok: true, group_id: groupId, members: members?.length || 0, updated }
+}
 
 async function safeTopic(room) {
   try { return String(await room?.topic?.() || '').trim() } catch { return '' }
