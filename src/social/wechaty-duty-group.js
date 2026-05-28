@@ -644,12 +644,17 @@ async function handleMessage(message) {
 
     console.log(`[Wechaty] 值班群消息${isSelf ? '（self）' : ''}${mentionedSelf ? '（@我）' : ''} ${senderName}: ${text.slice(0, 100)}`)
 
-    const safety = checkWeChatGroupCommandSafety(text)
+    const adminVerified = isWechatyGroupAdminSender(senderId)
+    const safety = adminVerified ? { allowed: true, adminBypass: true } : checkWeChatGroupCommandSafety(text)
     if (!safety.allowed) {
       const refusal = safety.reason
       await sendWechatyDutyGroupMessage(room.id, refusal, { mentionId: senderId })
       recordWeChatGroupAssistantReply({ groupId, groupName: topic, reply: refusal, targetMemberName: senderName, source: 'wechaty' }).catch(() => {})
       return
+    }
+    if (adminVerified) {
+      console.warn(`[WechatyAdmin] 管理员指令已通过精确 sender_id 验证，跳过微信群黑名单 topic="${topic}" sender="${senderName}" sender_id="${senderId}"`)
+      emitEventRef?.('wechat_admin_command', { group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', text: text.slice(0, 300), timestamp: new Date().toISOString() })
     }
 
     recordWeChatGroupExplicitMemories({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, source: 'wechaty' })
@@ -663,16 +668,18 @@ async function handleMessage(message) {
       content: formatGroupLine(senderName, text),
       channel: WECHAT_GROUP_CHANNEL,
       external_party_id: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text, wechat_admin: adminVerified },
       timestamp: new Date().toISOString(),
     })
 
-    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, mentionedSelf: true })
+    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, mentionedSelf: true, adminVerified })
     pushMessageRef?.(`wechaty:room:${room.id}`, prompt, WECHAT_GROUP_CHANNEL, {
       noPersist: true,
+      noPrune: true,
+      noPreempt: true,
       externalPartyIdOverride: `wechaty:room:${room.id}`,
       groupArchiveId: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text, wechat_admin: adminVerified },
     })
   } catch (err) {
     console.warn(`[Wechaty] 处理群消息失败：${err?.message || err}`)
@@ -941,6 +948,19 @@ function getConfiguredGroupNames() {
     return names.length ? [...new Set(names.map(v => String(v || '').trim()).filter(Boolean))] : [...FALLBACK_GROUP_NAMES]
   } catch {
     return [...FALLBACK_GROUP_NAMES]
+  }
+}
+
+function isWechatyGroupAdminSender(senderId = '') {
+  const sid = String(senderId || '').trim()
+  if (!sid) return false
+  try {
+    const cfg = getWechatyDutyGroupConfig()
+    if (cfg.adminModeEnabled !== true) return false
+    const ids = Array.isArray(cfg.adminWechatIds) ? cfg.adminWechatIds : []
+    return ids.some(id => String(id || '').trim() === sid)
+  } catch {
+    return false
   }
 }
 

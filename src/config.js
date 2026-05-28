@@ -719,6 +719,16 @@ function resolveWechatyPersonaPresetId(prompt = '', preferred = '') {
   return 'custom'
 }
 
+function normalizeWechatyAdminIds(value = []) {
+  const raw = Array.isArray(value)
+    ? value
+    : String(value || '').split(/[，,;；\n\r\t ]+/)
+  return [...new Set(raw
+    .map(v => String(v || '').trim())
+    .filter(Boolean)
+    .slice(0, 100))]
+}
+
 export function getWechatyDutyGroupConfig() {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social?.wechatyDutyGroup || {} } catch {}
@@ -726,11 +736,15 @@ export function getWechatyDutyGroupConfig() {
   const groupNames = [...new Set(rawNames.map(v => String(v || '').trim()).filter(Boolean))]
   const personaPrompt = String(stored.personaPrompt || stored.persona_prompt || DEFAULT_WECHATY_PERSONA_PROMPT).trim() || DEFAULT_WECHATY_PERSONA_PROMPT
   const personaPresetId = resolveWechatyPersonaPresetId(personaPrompt, stored.personaPresetId || stored.persona_preset_id)
+  const adminWechatIds = normalizeWechatyAdminIds(stored.adminWechatIds ?? stored.admin_wechat_ids ?? stored.adminIds ?? stored.admin_ids ?? [])
   return {
     enabled: stored.enabled !== false,
     groupNames: groupNames.length ? groupNames : DEFAULT_WECHATY_DUTY_GROUP_NAMES,
     personaPrompt,
     personaPresetId,
+    adminModeEnabled: stored.adminModeEnabled === true || stored.admin_mode_enabled === true,
+    adminWechatIds,
+    adminIds: adminWechatIds,
     runtime: stored.runtime && typeof stored.runtime === 'object' ? stored.runtime : {},
   }
 }
@@ -756,6 +770,17 @@ export function setWechatyDutyGroupConfig(updates = {}) {
   if (Object.prototype.hasOwnProperty.call(updates, 'personaPresetId') || Object.prototype.hasOwnProperty.call(updates, 'persona_preset_id')) {
     const rawPresetId = String(updates.personaPresetId ?? updates.persona_preset_id ?? '').trim()
     next.personaPresetId = rawPresetId || resolveWechatyPersonaPresetId(next.personaPrompt || DEFAULT_WECHATY_PERSONA_PROMPT)
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'adminModeEnabled') || Object.prototype.hasOwnProperty.call(updates, 'admin_mode_enabled')) {
+    next.adminModeEnabled = (updates.adminModeEnabled ?? updates.admin_mode_enabled) === true
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(updates, 'adminWechatIds')
+    || Object.prototype.hasOwnProperty.call(updates, 'admin_wechat_ids')
+    || Object.prototype.hasOwnProperty.call(updates, 'adminIds')
+    || Object.prototype.hasOwnProperty.call(updates, 'admin_ids')
+  ) {
+    next.adminWechatIds = normalizeWechatyAdminIds(updates.adminWechatIds ?? updates.admin_wechat_ids ?? updates.adminIds ?? updates.admin_ids)
   }
   next.personaPresetId = resolveWechatyPersonaPresetId(next.personaPrompt || DEFAULT_WECHATY_PERSONA_PROMPT, next.personaPresetId)
   const social = { ...(existing.social || {}), wechatyDutyGroup: next }

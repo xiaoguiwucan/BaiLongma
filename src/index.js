@@ -694,6 +694,9 @@ function shouldPreemptFor(entry) {
   if (!entry || !processing || !currentExecution) return true
   const incomingPriority = entry.priority || PRIORITY.background
   if (incomingPriority > currentExecution.priority) return true
+  // 微信群 @ 采用排队模式：新 @ 不打断正在回复的用户消息，避免上一条回复被 100% 中止。
+  // 但如果当前只是后台任务，仍允许用户消息抢占。
+  if ((entry.noPreempt === true || entry.disablePreempt === true) && incomingPriority <= currentExecution.priority) return false
 
   // Allow preemption between concurrent user messages.
   // If the current execution is stuck in a tool call, a new user message can still interrupt immediately.

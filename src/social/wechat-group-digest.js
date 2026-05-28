@@ -96,7 +96,7 @@ export async function sendWeChatGroupDigestNow({ groupId, groupName = '', roomId
   const cfg = getWeChatGroupDigestConfig()
   const now = new Date()
   const range = rangeForMode(mode, cfg, now)
-  const stats = getWeChatGroupStats({ groupId: gid, from: range.from, to: range.to, limit: 8 })
+  const stats = getWeChatGroupStats({ groupId: gid, groupName, from: range.from, to: range.to, limit: 8 })
   const summary = buildWeChatGroupStatsDigest({ ...stats, group_name: groupName || stats.group_name }, { mode, include: includeConfig(cfg) })
   if (!roomId) {
     const groups = resolveWechatyDigestGroups()

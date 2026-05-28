@@ -28,3 +28,9 @@
 - Wechaty 状态已真实 online，但旧昵称逻辑只成功写入扫码账号自己；`room.memberAll()`/`room.alias()` 对“值班群”等群无法稳定返回成员昵称。
 - wechat4u `batchGetContact([{UserName: roomId}])` 能返回群 `MemberList` 的 `NickName`/`DisplayName`；直接拉取后可识别 3 个接入群共 59/59 个成员。
 - 重新扫码后微信群 room_id 会变化，不能把统计唯一绑定到 `wechaty:@@...`；统计查询和入库选择需要按群名兜底合并。
+
+## 2026-05-28 v0.4.5 new findings
+- 多人 @ 被吞的根因是 `src/queue.js` 会按 `(fromId, channel)` 删除同一群尚未处理的旧 user 队列项；Wechaty 群 @ 使用同一个 `fromId=wechaty:room:<room.id>`，所以同群后来的 @ 会覆盖先来的 @。
+- 管理员权限必须以 Wechaty `sender_id` 精确匹配，不能用昵称/群备注/自称；否则群成员改名或提示词注入就能越权。
+- 当前统计页只渲染一个 active 群，多个统计群已选择时用户无法知道排行榜属于哪个群；需要单群标题和多群总览，且排行榜行内带群名。
+- 榜单不自动更新主要是前端只在进入设置或手动点击时刷新；后端消息入库已按已选群统计，需要 UI 轮询或 SSE 触发刷新。

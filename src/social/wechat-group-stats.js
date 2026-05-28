@@ -562,6 +562,46 @@ export function upsertWeChatGroupMemberName({ groupId, groupName = '', senderId 
   return { ok: true, group_id: gid, sender_id: sid, display_name: finalName, updated: updated?.updated || 0 }
 }
 
+export function listWeChatGroupMembers({ groupId = '', groupName = '', q = '', limit = 300 } = {}) {
+  ensureSchema()
+  const db = getDB()
+  const gid = normalizeStatsGroupId(groupId)
+  const cleanGroupName = cleanStatsGroupName(groupName)
+  const filters = []
+  const params = []
+  if (gid) {
+    const groupFilter = groupWhereClause(gid, cleanGroupName)
+    filters.push(groupFilter.sql)
+    params.push(...groupFilter.params)
+  } else if (cleanGroupName) {
+    filters.push('group_name = ?')
+    params.push(cleanGroupName)
+  }
+  const keyword = String(q || '').trim()
+  if (keyword) {
+    filters.push('(display_name LIKE ? OR room_alias LIKE ? OR contact_alias LIKE ? OR contact_name LIKE ? OR sender_id LIKE ? OR group_name LIKE ?)')
+    const like = `%${keyword}%`
+    params.push(like, like, like, like, like, like)
+  }
+  const where = filters.length ? `WHERE ${filters.join(' AND ')}` : ''
+  const rows = db.prepare(`
+    SELECT group_id, group_name, sender_id, display_name, room_alias, contact_alias, contact_name, source, first_seen, last_seen
+    FROM wechat_group_member_names
+    ${where}
+    ORDER BY last_seen DESC, group_name COLLATE NOCASE ASC, display_name COLLATE NOCASE ASC
+    LIMIT ?
+  `).all(...params, Math.min(Math.max(Number(limit || 300), 1), 1000))
+  return {
+    ok: true,
+    total: rows.length,
+    members: rows.map(row => ({
+      ...row,
+      display_name: pickWeChatDisplayName([row.display_name, row.room_alias, row.contact_alias, row.contact_name], row.sender_id),
+      last_seen_display: formatWeChatLocalDateTime(row.last_seen),
+    })),
+  }
+}
+
 function rangeDates({ from = '', to = '', hours = 24, range = '' } = {}) {
   const now = new Date()
   let start = from ? new Date(from) : null

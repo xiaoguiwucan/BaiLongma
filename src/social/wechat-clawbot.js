@@ -172,6 +172,8 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
         : `wechat:clawbot:group:${groupId}`
       pushMessage(groupExternalId, prompt, WECHAT_GROUP_CHANNEL, {
         noPersist: true,
+        noPrune: true,
+        noPreempt: true,
         externalPartyIdOverride: outboundId,
         social: { platform: 'wechat-clawbot', group_id: groupId, sender_id: senderId, context_token: contextToken, user_text: text, raw_user_text: rawText || text },
       })

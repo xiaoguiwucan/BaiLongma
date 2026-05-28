@@ -33,6 +33,8 @@ function resolveQueueName(priority, meta = {}) {
 
 function pruneSupersededUserMessages(entry) {
   if (!entry || entry.queueName !== 'user') return
+  // 微信群 @ 消息必须逐条排队回复，不能按群覆盖前一条。
+  if (entry.noPrune === true || entry.disablePrune === true) return
 
   // 按 (fromId, channel) 联合 key 去重：避免同一用户跨渠道时一个吞掉另一个
   for (let i = queues.user.length - 1; i >= 0; i--) {

@@ -24,7 +24,7 @@ import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWe
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
 import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
-import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listWeChatGroupActivityRecords, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
+import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listWeChatGroupActivityRecords, listWeChatGroupMembers, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -433,6 +433,19 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '10'), 30)
       const groupName = url.searchParams.get('group_name') || url.searchParams.get('groupName') || ''
       return jsonResponse(res, 200, getWeChatGroupStats({ groupId: rawGroupId, groupName, from, to, hours, range, limit }))
+    }
+
+    // GET /social/wechat-groups/members?group_id=xxx
+    // 微信群成员昵称/ID 列表：用于管理员模式精确选择微信 sender_id，不使用昵称授权。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/members') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const result = listWeChatGroupMembers({
+        groupId: url.searchParams.get('group_id') || url.searchParams.get('groupId') || '',
+        groupName: url.searchParams.get('group_name') || url.searchParams.get('groupName') || '',
+        q: url.searchParams.get('q') || '',
+        limit: Math.min(parseInt(url.searchParams.get('limit') || '300'), 1000),
+      })
+      return jsonResponse(res, 200, result)
     }
 
 
@@ -1169,12 +1182,23 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       if (!requireLocalOrToken(req, res, url)) return
       readJsonBody(req).then(async body => {
         try {
-          const cfg = setWechatyDutyGroupConfig({
+          const updates = {
             enabled: body.enabled,
             groupNames: body.group_names || body.groupNames || body.groups,
             personaPrompt: body.persona_prompt ?? body.personaPrompt,
             personaPresetId: body.persona_preset_id ?? body.personaPresetId,
-          })
+          }
+          if (
+            Object.prototype.hasOwnProperty.call(body, 'admin_mode_enabled')
+            || Object.prototype.hasOwnProperty.call(body, 'adminModeEnabled')
+          ) updates.adminModeEnabled = body.admin_mode_enabled ?? body.adminModeEnabled
+          if (
+            Object.prototype.hasOwnProperty.call(body, 'admin_wechat_ids')
+            || Object.prototype.hasOwnProperty.call(body, 'adminWechatIds')
+            || Object.prototype.hasOwnProperty.call(body, 'admin_ids')
+            || Object.prototype.hasOwnProperty.call(body, 'adminIds')
+          ) updates.adminWechatIds = body.admin_wechat_ids ?? body.adminWechatIds ?? body.admin_ids ?? body.adminIds
+          const cfg = setWechatyDutyGroupConfig(updates)
           if (cfg.enabled) {
             // 保存群选择不能重启 Wechaty。重启会破坏刚扫码成功的 Web 微信会话，导致用户保存后立刻掉线。
             configureWechatyDutyGroup({ groupNames: cfg.groupNames, enabled: true })

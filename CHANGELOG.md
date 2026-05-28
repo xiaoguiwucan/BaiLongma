@@ -2,6 +2,59 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.5 - 2026-05-28
+
+### 核心修复
+
+- 修复微信群多人同时 @ 时，后来的 @ 会覆盖前一条待回复消息的问题。
+- 队列层新增微信群 @ 排队模式：`noPrune` 防止同群旧消息被删除，`noPreempt` 防止新 @ 打断正在回复的用户消息；后台任务仍可被用户消息抢占。
+- 修复用户看到“前一个问题不回复/被吞”的根因：同一微信群以前共用 `fromId=wechaty:room:<roomId>`，队列按 `(fromId, channel)` 去重导致旧消息被删。
+
+### 多群统计与排行榜
+
+- 群统计页新增“查看当前群 / 已选统计群总览”切换。
+- 多群总览会把已勾选参与统计/定时总结的群一起展示，总卡片显示总消息、总参与、图片、表情、链接和装逼次数。
+- 多群排行榜每一行都会显示来源群名，避免多个群合并后不知道排行来自哪个群。
+- 新增“按群拆分”概览，每个群单独显示消息数、参与人数、图片/表情/链接数量。
+- 设置页打开并停留在“微信群助手”时，统计榜单每 12 秒自动刷新一次；保存统计群组后也会立即刷新。
+
+### 管理员模式
+
+- 新增“管理员模式（精确微信 ID）”设置面板。
+- 管理员只按 Wechaty `sender_id` 精确识别，不看昵称、不看群备注、不接受“我是管理员”这类自称，防止群成员改名越权。
+- 新增成员 ID 列表：可从最近识别到的群成员里点选加入管理员，避免手填错 ID。
+- 管理员 @ 时会跳过微信群黑名单；普通成员仍然严格执行黑名单拒绝危险电脑/账号/资金/隐私类指令。
+- 管理员消息会在日志里标记 `WechatyAdmin`，便于排查是谁触发了高权限请求。
+
+### API / UI
+
+- 新增 `GET /social/wechat-groups/members`，返回已识别群成员昵称、群名、sender_id、last_seen，用于管理员设置。
+- 设置页群统计标题会明确显示当前查看的是哪个群，或正在看几个群的总览。
+- 多群最近记录里会显示“成员 · 群名”，避免跨群聊天内容混淆。
+- UI 继续保持 Brain UI 暗色玻璃风格，管理员区使用警示色但不破坏整体布局。
+
+### 验证结果
+
+- `node --check src/config.js` 通过。
+- `node --check src/social/wechat-group-stats.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/social/wechat-groups.js` 通过。
+- `node --check src/social/wechat-clawbot.js` 通过。
+- `node --check src/social/wechat-group-digest.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
+### 部署注意事项
+
+- 更新后需要重启白龙马/Electron，让队列和 Wechaty 连接器加载新逻辑。
+- 管理员 ID 建议从设置页成员列表点击添加，不建议凭昵称手填；微信昵称、群昵称、备注名都不是管理员凭据。
+- 多群统计只统计“群统计与定时总结”里已勾选并保存的群，未勾选群不会入库也不会参与总览。
+
+
 
 ## v0.4.4 - 2026-05-28
 
