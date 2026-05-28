@@ -2,6 +2,21 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.19 - 2026-05-28
+
+### 优化管理员设置：界面显示微信昵称
+
+- 管理员设置页不再让用户直接看/填一串 sender_id；已选管理员区域改为显示微信昵称。
+- 管理员搜索框改为按微信昵称搜索，不再要求用户理解 sender_id。
+- 成员卡片隐藏长 ID，只显示昵称和群名；点击昵称卡片添加/取消管理员。
+- 安全逻辑不降低：后台仍保存精确 Wechaty sender_id 做权限判断，昵称相同、改名或自称管理员不会误授权。
+
+### 验证
+
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.18 - 2026-05-28
 
 ### 修复微信群发送失败重试变慢，并发处理多人 @

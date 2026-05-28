@@ -435,26 +435,26 @@ const createSettingsModal = () => `
             <div class="wechaty-admin-panel">
               <div class="wechaty-subsection-head">
                 <div>
-                  <div class="wechaty-subsection-title">管理员模式（精确微信 ID）</div>
-                  <p class="settings-hint">只按 Wechaty sender_id 精确识别管理员，不看昵称、不看群备注、不接受“我是管理员”这类自称。管理员 @ 时会跳过微信群黑名单；普通群友仍严格拦截危险指令。</p>
+                  <div class="wechaty-subsection-title">管理员模式（昵称选择，底层精确 ID）</div>
+                  <p class="settings-hint">界面按微信昵称选择和显示，底层仍只保存 Wechaty sender_id 精确识别管理员；昵称改名或自称管理员都不会获得权限。</p>
                 </div>
-                <button class="settings-save-btn subtle" id="wechaty-refresh-admin-members-btn" type="button">刷新成员 ID</button>
+                <button class="settings-save-btn subtle" id="wechaty-refresh-admin-members-btn" type="button">刷新昵称</button>
               </div>
               <label class="wechaty-master-toggle wechaty-admin-toggle">
                 <input id="wechaty-admin-enabled" type="checkbox">
                 <span>启用管理员模式</span>
               </label>
-              <input class="settings-input wechaty-admin-search" id="wechaty-admin-search" type="search" placeholder="搜索微信昵称 / 群名 / sender_id，点成员卡片即可加入管理员…">
+              <input class="settings-input wechaty-admin-search" id="wechaty-admin-search" type="search" placeholder="搜索微信昵称，点成员卡片即可加入管理员…">
               <div class="wechaty-admin-editor">
-                <textarea class="settings-textarea" id="wechaty-admin-ids" rows="4" placeholder="每行一个微信 sender_id，例如 @xxxx 或 wxid_xxxx。建议从下方成员列表点击添加，避免填错。"></textarea>
+                <textarea class="settings-textarea" id="wechaty-admin-ids" rows="4" readonly placeholder="这里显示已选管理员昵称。请从下方成员列表点击添加/取消，底层会自动保存精确 ID。"></textarea>
                 <div class="wechaty-admin-side">
                   <button class="settings-save-btn primary" id="wechaty-save-admins-btn" type="button">保存管理员</button>
                   <span class="settings-feedback" id="wechaty-admin-feedback"></span>
-                  <small>安全规则：只有这里保存的精确 ID 才能获得管理员权限；昵称相同无效。不要把群聊名、昵称或微信号备注当作 ID。</small>
+                  <small>安全规则：页面显示昵称方便操作；真正授权仍是后台保存的精确 sender_id，昵称相同也不会误授权。</small>
                 </div>
               </div>
               <div class="wechaty-admin-members" id="wechaty-admin-members">
-                <div class="wechaty-empty">登录并刷新昵称后，这里会显示最近识别到的群成员，可一键加入管理员。</div>
+                <div class="wechaty-empty">登录并刷新昵称后，这里会按微信昵称显示群成员，可一键加入管理员。</div>
               </div>
             </div>
             <div class="wechaty-persona-panel">
@@ -975,6 +975,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.19</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">管理员设置页改为昵称显示和昵称搜索，底层仍精确 ID 授权。</p>
+                <ul class="release-note-points">
+                  <li>已选管理员区域显示微信昵称，不再显示长 sender_id。</li>
+                  <li>搜索框按微信昵称搜索，点击成员卡片添加/取消管理员。</li>
+                  <li>后台仍保存精确 sender_id，昵称相同或自称管理员不会获得权限。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.18</span>

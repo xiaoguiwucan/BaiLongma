@@ -103,3 +103,9 @@
 2. [complete] 新增微信群 @ 批量并行处理，默认 3 并发、最大 5。
 3. [complete] 更新版本文档和设置页更新说明。
 4. [complete] 测试、重启、发布 GitHub Release。
+
+## v0.4.19 Hotfix Plan - Admin nickname UI
+1. [complete] 管理员设置页已选区域改为显示昵称，底层保留 sender_id 集合。
+2. [complete] 搜索框改为按微信昵称/备注搜索。
+3. [complete] 成员卡片隐藏长 ID，点击昵称卡片添加/取消管理员。
+4. [complete] 测试、重启、发布 GitHub Release。
