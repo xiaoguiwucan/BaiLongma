@@ -2,10 +2,11 @@
 
 ## Current Version
 
-- `0.4.17`
+- `0.4.18`
 
 ## What This Release Includes
 
+- v0.4.18 修复微信群发送失败和多人 @ 堵塞：真实 sender_id 目标进入本轮发送白名单，避免 target 校验失败；短时间多条 Wechaty 群 @ 默认最多 3 条并行处理。
 - v0.4.17 修复微信群 @ 错人、管理员设置丢失和管理员保护：底层强制使用真实 sender_id；管理员勾选不再被轮询清掉；支持昵称搜索添加管理员；普通群友暗算管理员会被回怼。
 - v0.4.16 修复微信群回答不查聊天记录库导致“记不完整”：@ 回复时从当前群 `wechat_group_activity` 检索相关历史消息并注入证据，优先基于数据库回答。
 - v0.4.15 修复微信群聊天记录页“不更新”：新增查看群组下拉框；默认结束时间自动跟随当前时间；设置页自动刷新聊天记录；摘要显示当前查看群和 DB 最新入库时间。
@@ -37,12 +38,12 @@ npm run build
 
 Installer output:
 
-- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.17.exe`
+- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.18.exe`
 - `D:\claude\BaiLongma\dist\latest.yml`
 
 ## Local Verification Checklist
 
-1. Install `Bailongma Setup 0.4.17.exe`.
+1. Install `Bailongma Setup 0.4.18.exe`.
 2. Launch the app and confirm the activation page appears on first run.
 3. Enter a valid API key and verify the app enters `brain-ui`.
 4. Uninstall the app.
@@ -64,9 +65,9 @@ npm run publish
 
 Published artifacts:
 
-- GitHub Release asset: `Bailongma Setup 0.4.17.exe`
+- GitHub Release asset: `Bailongma Setup 0.4.18.exe`
 - GitHub Release asset: `latest.yml`
-- GitHub Release asset: `Bailongma Setup 0.4.17.exe.blockmap`
+- GitHub Release asset: `Bailongma Setup 0.4.18.exe.blockmap`
 
 ## Notes On First Launch Of The Installer
 

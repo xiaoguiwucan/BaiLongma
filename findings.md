@@ -65,3 +65,7 @@
 ## 2026-05-28 v0.4.17 @ 目标和管理员模式排查
 - @ 错目标风险点：模型仍可传错/拼坏 `target_id`，当前执行器先校验模型 target，再通过 `currentExternalPartyId` 路由；应在 Wechaty 群消息上下文下强制覆盖为本轮真实 sender_id，底层不信任模型选择。
 - 管理员勾选消失根因：5 秒状态轮询调用 `applyWechatyDutyConfig({ enabled, groupNames }, status)`，这个对象不含 admin 字段，但 `applyWechatyAdminConfig({})` 会把 `adminModeEnabled` 当 false 写回 UI。
+
+## 2026-05-28 v0.4.18 发送失败和并发排查
+- 失败日志显示模型会传残缺/房间级/错误 member 的 target_id，执行器虽然覆盖真实 sender_id，但校验仍只看原注入列表，导致工具先失败再让模型重试，表现为 Brain UI 连续“发送消息失败”和回复变慢。
+- 当前主循环一次只处理一条用户队列消息，多人同时 @ 会排队等待；微信群 @ 消息已设置 noPreempt，适合做有限并行批处理。

@@ -725,8 +725,15 @@ async function execSendMessage({ target_id, content, channel = 'AUTO' }, context
     }
   }
 
-  const resolvedId = resolveAllowedTargetId(effectiveTargetId, context.allowedTargetIds)
-  assertVisibleTargetId(resolvedId, context.visibleTargetIds)
+  const wechatForcedTarget = effectiveTargetId !== target_id
+  const allowedTargetIds = wechatForcedTarget
+    ? [...(context.allowedTargetIds || []), effectiveTargetId]
+    : context.allowedTargetIds
+  const visibleTargetIds = wechatForcedTarget
+    ? [...(context.visibleTargetIds || []), effectiveTargetId]
+    : context.visibleTargetIds
+  const resolvedId = resolveAllowedTargetId(effectiveTargetId, allowedTargetIds)
+  assertVisibleTargetId(resolvedId, visibleTargetIds)
   const cleanedContent = trimAssistantFluff(content)
   if (!cleanedContent) return '错误：消息内容为空'
   if (isInvalidWechatMentionSkipReply(cleanedContent, context)) {

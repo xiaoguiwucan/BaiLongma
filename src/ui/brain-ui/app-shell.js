@@ -977,6 +977,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.18</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">修复微信群发送失败导致回复变慢，并支持多人同时 @ 并行处理。</p>
+                <ul class="release-note-points">
+                  <li>真实 sender_id 回复目标会进入本轮发送白名单，避免 target_id 校验先失败再重试。</li>
+                  <li>短时间多条 Wechaty 群 @ 默认最多 3 条并行处理，继续使用同一套性格、安全和记忆逻辑。</li>
+                  <li>并行回复仍分别锁定各自真实提问人，不会串 @。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.17</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

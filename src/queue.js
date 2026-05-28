@@ -96,6 +96,24 @@ export function popMessage() {
   return queues.user.shift() || queues.background.shift() || null
 }
 
+export function drainUserMessages(predicate = () => true, max = 0) {
+  const limit = Number.isFinite(Number(max)) ? Math.max(0, Math.floor(Number(max))) : 0
+  if (!limit) return []
+  const picked = []
+  for (let i = 0; i < queues.user.length && picked.length < limit;) {
+    const item = queues.user[i]
+    let ok = false
+    try { ok = !!predicate(item) } catch { ok = false }
+    if (ok) {
+      picked.push(item)
+      queues.user.splice(i, 1)
+    } else {
+      i += 1
+    }
+  }
+  return picked
+}
+
 // 把消息重新放回队列头部（LLM 失败后重试用），保留原始字段并带上 retryCount
 export function requeueMessage(msg, retryCount) {
   const queueName = msg?.queueName === 'background' ? 'background' : 'user'

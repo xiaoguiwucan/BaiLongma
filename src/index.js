@@ -10,7 +10,7 @@ import { startConsolidationLoop } from './memory/consolidation-loop.js'
 import { gatherContext, formatExtraContext } from './context/gatherer.js'
 import { getDB, getConfig, setConfig, getKnownEntities, getOrInitBirthTime, insertConversation, insertMemory, getRecentConversationPartners, getDueReminders, markReminderFired, advanceReminderDueAt, getNextPendingReminder, getMemoryCount, getRecentConversationTimeline, loadFocusStack, saveFocusStack } from './db.js'
 import { calculateNextDueAt, autoSpeakForVoiceReply } from './capabilities/executor.js'
-import { popMessage, hasMessages, hasUserMessages, getQueueSnapshot, setInterruptCallback, requeueMessage, pushMessage } from './queue.js'
+import { popMessage, drainUserMessages, hasMessages, hasUserMessages, getQueueSnapshot, setInterruptCallback, requeueMessage, pushMessage } from './queue.js'
 import { startTUI } from './tui.js'
 import { startAPI } from './api.js'
 import { emitEvent, emitUICommand, addActiveUICard, hasACUIClient, setStickyEvent, clearStickyEvent } from './events.js'
@@ -1529,6 +1529,21 @@ async function runTurnWithWatchdog(input, label, msg) {
   }
 }
 
+
+function isParallelWechatyDutyGroupMessage(msg) {
+  return !!msg
+    && msg.queueName === 'user'
+    && msg.channel === 'WECHAT_CLAWBOT_GROUP'
+    && msg.social?.platform === 'wechaty-duty-group'
+    && msg.noPreempt === true
+}
+
+function getParallelWechatLimit() {
+  const raw = Number(process.env.BAILONGMA_WECHAT_PARALLEL || 3)
+  if (!Number.isFinite(raw)) return 3
+  return Math.min(5, Math.max(1, Math.floor(raw)))
+}
+
 async function onTick() {
   if (processing) return
   processing = true
@@ -1540,8 +1555,24 @@ async function onTick() {
     enqueueDueReminders()
     if (hasMessages()) {
       const msg = popMessage()
-      const lane = msg.queueName === 'background' ? 'BG' : 'L1'
-      await runTurnWithWatchdog(msg.raw, `${lane} message from ${msg.fromId}`, msg)
+      if (isParallelWechatyDutyGroupMessage(msg)) {
+        const limit = getParallelWechatLimit()
+        const batch = [msg, ...drainUserMessages(isParallelWechatyDutyGroupMessage, limit - 1)]
+        if (batch.length > 1) {
+          console.log(`[WechatyQueue] 并行处理 ${batch.length} 条群 @ 消息（上限 ${limit}）`)
+          emitEvent('wechat_parallel_batch', { count: batch.length, limit })
+          await Promise.allSettled(batch.map((item, index) => runTurnWithWatchdog(
+            item.raw,
+            `L1 wechat parallel #${index + 1} from ${item.fromId}`,
+            item,
+          )))
+        } else {
+          await runTurnWithWatchdog(msg.raw, `L1 message from ${msg.fromId}`, msg)
+        }
+      } else {
+        const lane = msg.queueName === 'background' ? 'BG' : 'L1'
+        await runTurnWithWatchdog(msg.raw, `${lane} message from ${msg.fromId}`, msg)
+      }
     } else {
       autoTick = true
       selfCheckActiveAtStart = !!state.startupSelfCheck?.active

@@ -97,3 +97,9 @@
 3. [complete] 管理员选择 UI 支持按微信昵称/群名/ID 搜索，保存后立即显示已生效状态。
 4. [complete] 管理员保护：非管理员 @ 助手攻击/暗算管理员时，基于已保存管理员 ID/昵称生成犀利但不越界的回怼。
 5. [complete] 测试、重启、文档和 GitHub Release。
+
+## v0.4.18 Hotfix Plan - WeChat send failure and parallel mentions
+1. [complete] 修复 Wechaty target_id 校验失败：真实提问人目标加入本轮 allowed/visible。
+2. [complete] 新增微信群 @ 批量并行处理，默认 3 并发、最大 5。
+3. [complete] 更新版本文档和设置页更新说明。
+4. [complete] 测试、重启、发布 GitHub Release。
