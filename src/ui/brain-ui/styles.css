@@ -1251,6 +1251,10 @@ body.hotspot-mode .hotspot-btn { color: #ffe7a0; border-color: rgba(255, 210, 90
   gap: 10px;
   margin-bottom: 8px;
 }
+.settings-row.compact {
+  align-items: stretch;
+  flex-wrap: wrap;
+}
 
 .settings-label {
   font-size: 11px;
@@ -1388,6 +1392,179 @@ body.hotspot-mode .hotspot-btn { color: #ffe7a0; border-color: rgba(255, 210, 90
 }
 .settings-config-dot.active  { color: var(--cool); }
 .settings-config-dot.inactive { color: var(--dim); }
+
+.llm-active-strip {
+  display: inline-flex;
+  max-width: 100%;
+  padding: 7px 10px;
+  border: 1px solid rgba(87,214,255,0.22);
+  border-radius: 999px;
+  color: #b9f3ff;
+  background:
+    linear-gradient(135deg, rgba(87,214,255,0.12), rgba(114,255,195,0.05)),
+    rgba(0,0,0,0.18);
+  font-size: 11px;
+  line-height: 1.35;
+}
+.llm-failover-panel,
+.llm-profile-list {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255,255,255,0.025);
+  padding: 12px;
+}
+.llm-failover-toggle {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 12px;
+  cursor: pointer;
+}
+.llm-failover-toggle input {
+  margin-top: 3px;
+}
+.llm-failover-toggle b {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  margin-bottom: 3px;
+}
+.llm-failover-toggle em {
+  display: block;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.55;
+  font-style: normal;
+}
+.llm-profile-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.llm-profile-empty {
+  color: var(--dim);
+  font-size: 11px;
+  padding: 8px;
+}
+.llm-profile-card {
+  border: 1px solid rgba(255,255,255,0.10);
+  border-radius: 14px;
+  padding: 12px;
+  background:
+    radial-gradient(circle at top left, rgba(87,214,255,0.10), transparent 34%),
+    rgba(0,0,0,0.16);
+}
+.llm-profile-card.current {
+  border-color: rgba(87,214,255,0.62);
+  box-shadow: 0 0 0 1px rgba(87,214,255,0.12), 0 16px 30px rgba(0,0,0,0.18);
+}
+.llm-profile-card.cooldown {
+  border-color: rgba(255, 212, 121, 0.34);
+}
+.llm-profile-card.disabled {
+  opacity: 0.62;
+}
+.llm-profile-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.llm-profile-title {
+  min-width: 0;
+}
+.llm-profile-title b {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  margin-bottom: 4px;
+}
+.llm-profile-title span {
+  display: block;
+  color: var(--ink2);
+  font-size: 11px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.llm-profile-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  justify-content: flex-end;
+}
+.llm-profile-badge {
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--ink2);
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.08);
+  font-size: 10px;
+  white-space: nowrap;
+}
+.llm-profile-badge.current {
+  color: rgba(9, 20, 28, 0.9);
+  background: linear-gradient(135deg, #57d6ff, #72ffc3);
+  border-color: transparent;
+  font-weight: 700;
+}
+.llm-profile-badge.cooldown {
+  color: #ffd479;
+  background: rgba(255,212,121,0.10);
+  border-color: rgba(255,212,121,0.20);
+}
+.llm-profile-meta {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+.llm-profile-meta div {
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 10px;
+  padding: 7px 8px;
+  background: rgba(255,255,255,0.03);
+}
+.llm-profile-meta small {
+  display: block;
+  color: var(--dim);
+  font-size: 9px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  margin-bottom: 3px;
+}
+.llm-profile-meta span {
+  display: block;
+  color: var(--ink2);
+  font-size: 11px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-profile-error {
+  margin: 7px 0 0;
+  color: #ffd479;
+  font-size: 11px;
+  line-height: 1.45;
+}
+.llm-profile-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.llm-profile-actions .settings-save-btn {
+  height: 25px;
+  padding: 0 10px;
+  font-size: 10px;
+}
+
+@media (max-width: 900px) {
+  .llm-profile-meta {
+    grid-template-columns: 1fr;
+  }
+}
 
 /* ── Settings sidebar body ── */
 .settings-body {

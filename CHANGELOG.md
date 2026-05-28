@@ -2,6 +2,52 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.6 - 2026-05-28
+
+### LLM 模型池
+
+- 新增多 LLM Profile 配置，不再只能保存一个 `provider/apiKey/model/baseURL`。
+- 旧单模型配置会自动迁移为模型池第一项，保留当前模型、API Key 和自定义端点信息。
+- 设置页 `LLM 模型` 改造为：当前模型条、自动切换策略、新增/编辑模型、模型池优先级列表。
+- 每个模型配置支持名称、Provider、模型、API Key、自定义 Base URL、启用/关闭、编辑、删除、上移/下移、设为当前。
+- 前端和 `/settings` API 不返回明文 API Key，只显示“已配置”和尾号提示。
+
+### 自动故障切换
+
+- 新增自动切换策略，默认开启。
+- 当前模型出现额度不足、余额不足、限流、认证失败、模型不可用、服务端 5xx、网络超时等错误时，会按模型池优先级切换到下一个可用模型。
+- 只在回答尚未输出任何内容时切换；如果已经流出内容，则不强行重试，避免回复重复、语音播报断裂或内容拼接错乱。
+- 失败模型会记录 `lastError/lastFailedAt/cooldownUntil` 并进入冷却期，冷却期内优先跳过，避免持续打到没额度的模型。
+- 主界面 SSE 会显示“当前模型不可用，正在无缝切换到备用模型”的状态提示。
+
+### API / 兼容性
+
+- 新增 `POST /settings/llm-profile`：新增或更新模型配置。
+- 新增 `POST /settings/llm-profile/select`：立即切换当前模型。
+- 新增 `POST /settings/llm-profile/delete`：删除模型配置，至少保留一个。
+- 新增 `POST /settings/llm-failover`：保存自动切换开关、失败冷却时长、最多尝试模型数。
+- `/settings` 返回 `llm.profiles`、`llm.activeProfileId`、`llm.failover`，用于设置页真实展示当前状态。
+- 原 `/activate` 和 `/settings/model` 仍保留，旧激活流程会写入模型池并设为当前。
+
+### 验证结果
+
+- `node --check src/config.js` 通过。
+- `node --check src/llm.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/index.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
+### 部署注意事项
+
+- 更新后需要重启白龙马/Electron，让新的 LLM 模型池和故障切换逻辑加载。
+- 进入 `设置 -> LLM 模型`，建议至少配置 2 个启用模型：一个主力模型、一个备用模型。
+- 如果某个模型已经没额度，可以保留在模型池中；它失败后会自动进入冷却，系统会优先使用备用模型。
+- 自定义端点仍要求 OpenAI 兼容 `/chat/completions` 接口。
+
 ## v0.4.5 - 2026-05-28
 
 ### 核心修复

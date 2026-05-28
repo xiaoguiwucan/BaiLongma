@@ -1195,9 +1195,18 @@ function handle({ type, data = {} }) {
       break;
     case "llm_retry": {
       currentStream().startThinkingSession();
+      if (data.type === "llm_failover") {
+        const toProfile = data.toProfile || "备用模型";
+        currentStream().setStatus("当前模型不可用，正在无缝切换到 " + toProfile, "busy");
+        break;
+      }
       const nextAttempt = Number(data.nextAttempt || 2);
       const delayText = formatRetryDelay(Number(data.delayMs || 0));
       currentStream().setStatus("LLM 繁忙，第 " + nextAttempt + " 次重试将于 " + delayText + " 后开始", "busy");
+      break;
+    }
+    case "llm_profiles_updated": {
+      window.dispatchEvent(new CustomEvent("bailongma:llm-profiles-updated", { detail: data }));
       break;
     }
     case "message_requeued": {
@@ -2017,7 +2026,17 @@ function initTTSSettings() {
   const modelSelect     = document.getElementById("settings-model-select");
   const llmKeyInput     = document.getElementById("settings-llm-key");
   const saveLlmBtn      = document.getElementById("settings-save-llm");
+  const saveLlmCurrentBtn = document.getElementById("settings-save-llm-current");
   const llmFeedback     = document.getElementById("settings-llm-feedback");
+  const llmProfileNameInput = document.getElementById("settings-llm-profile-name");
+  const llmEditingIdInput = document.getElementById("settings-llm-editing-id");
+  const llmCurrentProfile = document.getElementById("settings-llm-current-profile");
+  const llmPoolList = document.getElementById("settings-llm-pool-list");
+  const llmFailoverEnabled = document.getElementById("settings-llm-failover-enabled");
+  const llmFailoverCooldown = document.getElementById("settings-llm-failover-cooldown");
+  const llmFailoverAttempts = document.getElementById("settings-llm-failover-attempts");
+  const saveLlmFailoverBtn = document.getElementById("settings-save-llm-failover");
+  const llmFailoverFeedback = document.getElementById("settings-llm-failover-feedback");
   const tempSlider      = document.getElementById("settings-temperature");
   const tempVal         = document.getElementById("settings-temperature-val");
   const saveTempBtn     = document.getElementById("settings-save-temperature");
@@ -2114,6 +2133,8 @@ function initTTSSettings() {
   if (!settingsBtn || !overlay) return;
 
   let cachedProviders = null;
+  let cachedLLMProfiles = [];
+  let cachedLLMFailover = { enabled: true, cooldownSeconds: 180, maxAttempts: 4 };
 
   overlay.querySelectorAll(".settings-nav-item").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2178,17 +2199,143 @@ function initTTSSettings() {
   function applyCustomProviderUI(llm) {
     const customSection = document.getElementById("settings-custom-llm-section");
     const modelRow = document.getElementById("settings-model-row");
-    if (llm?.provider === "custom") {
+    const providerValue = typeof llm === "string" ? llm : llm?.provider;
+    if (providerValue === "custom") {
       if (customSection) customSection.style.display = "";
       if (modelRow) modelRow.style.display = "none";
+      if (typeof llm === "string") return;
       const baseUrlEl = document.getElementById("settings-custom-baseurl");
       const modelEl = document.getElementById("settings-custom-model");
       if (baseUrlEl && llm.baseURL) baseUrlEl.value = llm.baseURL;
       if (modelEl && llm.model) modelEl.value = llm.model;
     } else {
       if (customSection) customSection.style.display = "none";
-      if (modelRow) modelRow.style.display = "";
+      if (modelRow) modelRow.style.display = providerValue === "auto" ? "none" : "";
     }
+  }
+
+  function formatLLMTime(value) {
+    if (!value) return "—";
+    const d = new Date(value);
+    if (Number.isNaN(d.getTime())) return String(value).replace("T", " ").slice(0, 19);
+    return d.toLocaleString("zh-CN", { hour12: false, month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
+  }
+
+  function providerModels(provider) {
+    return cachedProviders?.[provider]?.models || [];
+  }
+
+  function renderLLMFailover(failover = {}) {
+    cachedLLMFailover = { enabled: failover.enabled !== false, cooldownSeconds: failover.cooldownSeconds || 180, maxAttempts: failover.maxAttempts || 4 };
+    if (llmFailoverEnabled) llmFailoverEnabled.checked = cachedLLMFailover.enabled;
+    if (llmFailoverCooldown) llmFailoverCooldown.value = String(cachedLLMFailover.cooldownSeconds);
+    if (llmFailoverAttempts) llmFailoverAttempts.value = String(cachedLLMFailover.maxAttempts);
+  }
+
+  function renderLLMProfiles(profiles = [], llm = {}) {
+    cachedLLMProfiles = Array.isArray(profiles) ? profiles : [];
+    const active = cachedLLMProfiles.find(p => p.current) || cachedLLMProfiles.find(p => p.id === llm.activeProfileId);
+    if (llmCurrentProfile) {
+      const activeProviderModel = active ? `${active.providerLabel || active.provider} · ${active.model}` : "";
+      llmCurrentProfile.textContent = active
+        ? `当前使用：${active.name && active.name !== activeProviderModel ? active.name + " · " : ""}${activeProviderModel}`
+        : `当前使用：${llm.provider || "—"} · ${llm.model || "—"}`;
+    }
+    if (!llmPoolList) return;
+    if (!cachedLLMProfiles.length) {
+      llmPoolList.innerHTML = `<div class="llm-profile-empty">还没有模型配置，先在上方添加一个。保存后会自动加入模型池。</div>`;
+      return;
+    }
+    llmPoolList.innerHTML = cachedLLMProfiles
+      .sort((a, b) => (Number(a.priority) || 0) - (Number(b.priority) || 0))
+      .map((profile, idx) => {
+        const cls = [
+          "llm-profile-card",
+          profile.current ? "current" : "",
+          profile.status === "cooldown" ? "cooldown" : "",
+          profile.enabled === false ? "disabled" : "",
+        ].filter(Boolean).join(" ");
+        const badges = [
+          profile.current ? `<span class="llm-profile-badge current">当前</span>` : "",
+          profile.enabled === false ? `<span class="llm-profile-badge">已关闭</span>` : "",
+          profile.status === "cooldown" ? `<span class="llm-profile-badge cooldown">冷却中</span>` : "",
+          `<span class="llm-profile-badge">#${idx + 1}</span>`,
+        ].filter(Boolean).join("");
+        const last = profile.lastSuccessAt || profile.lastFailedAt;
+        const providerModel = `${profile.providerLabel || profile.provider} · ${profile.model || "—"}`;
+        const subtitle = profile.name && profile.name !== providerModel ? providerModel : `模型池优先级 #${idx + 1}`;
+        return `
+          <div class="${cls}" data-id="${escapeHtml(profile.id)}">
+            <div class="llm-profile-head">
+              <div class="llm-profile-title">
+                <b>${escapeHtml(profile.name || "未命名模型")}</b>
+                <span>${escapeHtml(subtitle)}</span>
+              </div>
+              <div class="llm-profile-badges">${badges}</div>
+            </div>
+            <div class="llm-profile-meta">
+              <div><small>KEY</small><span>${escapeHtml(profile.apiKeyHint || (profile.configured ? "已配置" : "未配置"))}</span></div>
+              <div><small>状态</small><span>${profile.status === "cooldown" ? "冷却到 " + formatLLMTime(profile.cooldownUntil) : (profile.enabled === false ? "不参与切换" : "可用")}</span></div>
+              <div><small>最近</small><span>${escapeHtml(formatLLMTime(last))}</span></div>
+            </div>
+            ${profile.lastError ? `<p class="llm-profile-error">上次错误：${escapeHtml(profile.lastError)}</p>` : ""}
+            <div class="llm-profile-actions">
+              <button class="settings-save-btn" data-action="select" type="button"${profile.current ? " disabled" : ""}>设为当前</button>
+              <button class="settings-save-btn" data-action="edit" type="button">编辑</button>
+              <button class="settings-save-btn" data-action="toggle" type="button">${profile.enabled === false ? "开启" : "关闭"}</button>
+              <button class="settings-save-btn" data-action="up" type="button"${idx === 0 ? " disabled" : ""}>上移</button>
+              <button class="settings-save-btn" data-action="down" type="button"${idx === cachedLLMProfiles.length - 1 ? " disabled" : ""}>下移</button>
+              <button class="settings-save-btn danger" data-action="delete" type="button"${cachedLLMProfiles.length <= 1 ? " disabled" : ""}>删除</button>
+            </div>
+          </div>`;
+      })
+      .join("");
+  }
+
+  function resetLLMProfileEditor() {
+    if (llmEditingIdInput) llmEditingIdInput.value = "";
+    if (llmProfileNameInput) llmProfileNameInput.value = "";
+    if (llmKeyInput) llmKeyInput.value = "";
+    const baseUrlEl = document.getElementById("settings-custom-baseurl");
+    const modelEl = document.getElementById("settings-custom-model");
+    if (baseUrlEl) baseUrlEl.value = "";
+    if (modelEl) modelEl.value = "";
+  }
+
+  function loadProfileIntoEditor(profile = {}) {
+    if (llmEditingIdInput) llmEditingIdInput.value = profile.id || "";
+    if (llmProfileNameInput) llmProfileNameInput.value = profile.name || "";
+    if (providerSelect) providerSelect.value = profile.provider || "deepseek";
+    applyCustomProviderUI(profile.provider || "deepseek");
+    if (profile.provider === "custom") {
+      const baseUrlEl = document.getElementById("settings-custom-baseurl");
+      const modelEl = document.getElementById("settings-custom-model");
+      if (baseUrlEl) baseUrlEl.value = profile.baseURL || "";
+      if (modelEl) modelEl.value = profile.model || "";
+    } else {
+      populateModelSelect(providerModels(profile.provider), profile.model);
+    }
+    if (llmKeyInput) llmKeyInput.value = "";
+    showFeedback(llmFeedback, "已载入编辑，API Key 留空表示不更换");
+  }
+
+  function collectLLMProfilePayload({ setActive = false } = {}) {
+    const provider = providerSelect?.value || "auto";
+    const apiKey = llmKeyInput?.value?.trim() || "";
+    const payload = {
+      id: llmEditingIdInput?.value?.trim() || undefined,
+      name: llmProfileNameInput?.value?.trim() || undefined,
+      provider,
+      apiKey: apiKey || undefined,
+      setActive,
+    };
+    if (provider === "custom") {
+      payload.baseURL = document.getElementById("settings-custom-baseurl")?.value?.trim() || "";
+      payload.model = document.getElementById("settings-custom-model")?.value?.trim() || "";
+    } else if (provider !== "auto") {
+      payload.model = modelSelect?.value || "";
+    }
+    return payload;
   }
 
   async function loadSettings() {
@@ -2201,12 +2348,21 @@ function initTTSSettings() {
       if (providerSelect && llm.provider) providerSelect.value = llm.provider;
       applyCustomProviderUI(llm);
       if (llm.provider !== "custom") populateModelSelect(llm.models, llm.model);
+      renderLLMFailover(llm.failover || {});
+      renderLLMProfiles(llm.profiles || [], llm);
       if (typeof llm.temperature === "number" && tempSlider) {
         tempSlider.value = String(llm.temperature);
         if (tempVal) tempVal.textContent = llm.temperature.toFixed(2);
       }
     } catch {}
   }
+
+  window.addEventListener("bailongma:llm-profiles-updated", (event) => {
+    if (overlay?.hidden !== false) return;
+    const data = event.detail || {};
+    renderLLMFailover(data.failover || cachedLLMFailover);
+    renderLLMProfiles(Array.isArray(data.profiles) ? data.profiles : cachedLLMProfiles, { activeProfileId: data.activeProfileId });
+  });
 
   const SOCIAL_FIELD_MAP = {
     "social-discord-token":  "DISCORD_BOT_TOKEN",
@@ -4023,71 +4179,128 @@ function initTTSSettings() {
   if (providerSelect) {
     providerSelect.addEventListener("change", () => {
       const provider = providerSelect.value;
-      const customSection = document.getElementById("settings-custom-llm-section");
-      const modelRow = document.getElementById("settings-model-row");
-      if (provider === "custom") {
-        if (customSection) customSection.style.display = "";
-        if (modelRow) modelRow.style.display = "none";
-      } else {
-        if (customSection) customSection.style.display = "none";
-        if (modelRow) modelRow.style.display = "";
-        if (cachedProviders?.[provider]) populateModelSelect(cachedProviders[provider].models, null);
-      }
+      applyCustomProviderUI(provider);
+      if (provider !== "custom" && cachedProviders?.[provider]) populateModelSelect(cachedProviders[provider].models, null);
     });
   }
 
-  saveLlmBtn?.addEventListener("click", async () => {
+  async function saveLLMProfileFromEditor({ setActive = false } = {}) {
     const provider = providerSelect?.value || "auto";
-    const apiKey = llmKeyInput.value.trim();
-    saveLlmBtn.disabled = true;
-
-    if (provider === "custom") {
-      const baseURL = document.getElementById("settings-custom-baseurl")?.value?.trim();
-      const model   = document.getElementById("settings-custom-model")?.value?.trim();
-      if (!baseURL || !model) {
-        showFeedback(llmFeedback, "请填入 Base URL 和模型名称", true);
-        saveLlmBtn.disabled = false;
-        return;
-      }
-      try {
-        const res = await fetch(`${API}/activate`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ provider: "custom", baseURL, model, apiKey: apiKey || "none" }),
-        });
-        const data = await res.json();
-        if (data.ok) {
-          showFeedback(llmFeedback, `已连接：${data.model}`);
-          llmKeyInput.value = "";
-          loadSettings();
-        } else {
-          showFeedback(llmFeedback, data.error || "连接失败", true);
-        }
-      } catch { showFeedback(llmFeedback, "请求失败", true); }
-      finally { saveLlmBtn.disabled = false; }
+    const editing = llmEditingIdInput?.value?.trim();
+    const apiKey = llmKeyInput?.value?.trim() || "";
+    if (!editing && provider !== "custom" && !apiKey) {
+      showFeedback(llmFeedback, "新增模型需要填 API Key", true);
       return;
     }
-
-    const model = modelSelect.value;
+    if (provider === "custom") {
+      const baseURL = document.getElementById("settings-custom-baseurl")?.value?.trim();
+      const model = document.getElementById("settings-custom-model")?.value?.trim();
+      if (!baseURL || !model) {
+        showFeedback(llmFeedback, "请填入 Base URL 和模型名称", true);
+        return;
+      }
+    }
+    const buttons = [saveLlmBtn, saveLlmCurrentBtn].filter(Boolean);
+    buttons.forEach(btn => { btn.disabled = true; });
     try {
-      const body = apiKey
-        ? { provider, apiKey, ...(provider === "auto" ? {} : { model }) }
-        : { model };
-      const res = await fetch(apiKey ? `${API}/activate` : `${API}/settings/model`, {
+      const res = await fetch(`${API}/settings/llm-profile`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(collectLLMProfilePayload({ setActive })),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(llmFeedback, data.warning || (setActive ? "已保存并设为当前" : "已保存到模型池"), !!data.warning);
+        resetLLMProfileEditor();
+        loadSettings();
+      } else {
+        showFeedback(llmFeedback, data.error || "保存失败", true);
+      }
+    } catch { showFeedback(llmFeedback, "请求失败", true); }
+    finally { buttons.forEach(btn => { btn.disabled = false; }); }
+  }
+
+  saveLlmBtn?.addEventListener("click", () => saveLLMProfileFromEditor({ setActive: false }));
+  saveLlmCurrentBtn?.addEventListener("click", () => saveLLMProfileFromEditor({ setActive: true }));
+
+  saveLlmFailoverBtn?.addEventListener("click", async () => {
+    saveLlmFailoverBtn.disabled = true;
+    try {
+      const res = await fetch(`${API}/settings/llm-failover`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: !!llmFailoverEnabled?.checked,
+          cooldownSeconds: Number(llmFailoverCooldown?.value || 180),
+          maxAttempts: Number(llmFailoverAttempts?.value || 4),
+        }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(llmFailoverFeedback, "策略已保存");
+        loadSettings();
+      } else {
+        showFeedback(llmFailoverFeedback, data.error || "保存失败", true);
+      }
+    } catch { showFeedback(llmFailoverFeedback, "请求失败", true); }
+    finally { saveLlmFailoverBtn.disabled = false; }
+  });
+
+  llmPoolList?.addEventListener("click", async (event) => {
+    const btn = event.target.closest("button[data-action]");
+    const card = event.target.closest(".llm-profile-card");
+    if (!btn || !card) return;
+    const id = card.dataset.id;
+    const action = btn.dataset.action;
+    const profile = cachedLLMProfiles.find(p => p.id === id);
+    if (!profile) return;
+    if (action === "edit") {
+      loadProfileIntoEditor(profile);
+      return;
+    }
+    btn.disabled = true;
+    try {
+      let endpoint = `${API}/settings/llm-profile`;
+      let body = {};
+      if (action === "select") {
+        endpoint = `${API}/settings/llm-profile/select`;
+        body = { id };
+      } else if (action === "delete") {
+        if (!confirm(`删除模型配置“${profile.name}”？`)) return;
+        endpoint = `${API}/settings/llm-profile/delete`;
+        body = { id };
+      } else if (action === "toggle") {
+        body = { id, provider: profile.provider, model: profile.model, baseURL: profile.baseURL, enabled: profile.enabled === false, validate: false };
+      } else if (action === "up" || action === "down") {
+        const sorted = [...cachedLLMProfiles].sort((a, b) => (Number(a.priority) || 0) - (Number(b.priority) || 0));
+        const idx = sorted.findIndex(p => p.id === id);
+        const swapIdx = action === "up" ? idx - 1 : idx + 1;
+        if (idx < 0 || swapIdx < 0 || swapIdx >= sorted.length) return;
+        const other = sorted[swapIdx];
+        await fetch(`${API}/settings/llm-profile`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ id: other.id, provider: other.provider, model: other.model, baseURL: other.baseURL, priority: profile.priority, validate: false }),
+        });
+        body = { id, provider: profile.provider, model: profile.model, baseURL: profile.baseURL, priority: other.priority, validate: false };
+      }
+      const res = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
       const data = await res.json();
       if (data.ok) {
-        showFeedback(llmFeedback, "已保存");
-        llmKeyInput.value = "";
+        showFeedback(llmFeedback, action === "select" ? "已切换当前模型" : "模型池已更新");
         loadSettings();
       } else {
-        showFeedback(llmFeedback, data.error || "保存失败", true);
+        showFeedback(llmFeedback, data.error || "操作失败", true);
       }
-    } catch { showFeedback(llmFeedback, "请求失败", true); }
-    finally { saveLlmBtn.disabled = false; }
+    } catch {
+      showFeedback(llmFeedback, "请求失败", true);
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   saveMinimaxBtn?.addEventListener("click", async () => {

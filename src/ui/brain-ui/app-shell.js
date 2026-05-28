@@ -193,15 +193,58 @@ const createSettingsModal = () => `
               <span class="settings-config-info" id="settings-cfg-llm">—</span>
               <span class="settings-config-dot" id="settings-cfg-llm-dot"></span>
             </div>
+            <p class="settings-hint">可以配置多个 LLM 模型。当前模型没额度、限流、认证失败或服务异常时，会按优先级自动切换到下一个可用模型。</p>
+            <div class="llm-active-strip" id="settings-llm-current-profile">当前使用：—</div>
           </div>
           <div class="settings-section">
-            <div class="settings-section-label">切换配置</div>
+            <div class="settings-section-label">自动切换策略</div>
+            <div class="llm-failover-panel">
+              <label class="llm-failover-toggle">
+                <input id="settings-llm-failover-enabled" type="checkbox">
+                <span>
+                  <b>额度不足/限流时自动切换备用模型</b>
+                  <em>推荐开启。只在回答尚未输出时切换，避免重复播报和内容断裂。</em>
+                </span>
+              </label>
+              <div class="settings-row compact">
+                <label class="settings-label" for="settings-llm-failover-cooldown">失败冷却</label>
+                <select class="settings-select" id="settings-llm-failover-cooldown">
+                  <option value="60">1 分钟</option>
+                  <option value="180">3 分钟（推荐）</option>
+                  <option value="300">5 分钟</option>
+                  <option value="600">10 分钟</option>
+                </select>
+                <label class="settings-label" for="settings-llm-failover-attempts">最多尝试</label>
+                <select class="settings-select" id="settings-llm-failover-attempts">
+                  <option value="2">2 个模型</option>
+                  <option value="3">3 个模型</option>
+                  <option value="4">4 个模型（推荐）</option>
+                  <option value="6">6 个模型</option>
+                </select>
+              </div>
+              <div class="settings-row-action">
+                <button class="settings-save-btn" id="settings-save-llm-failover" type="button">保存策略</button>
+                <span class="settings-feedback" id="settings-llm-failover-feedback"></span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-label">新增 / 编辑模型</div>
+            <input id="settings-llm-editing-id" type="hidden" value="">
+            <div class="settings-row">
+              <label class="settings-label" for="settings-llm-profile-name">名称</label>
+              <input class="settings-input" id="settings-llm-profile-name" type="text" placeholder="如：主力 DeepSeek、备用 Qwen、公司 OpenAI">
+            </div>
             <div class="settings-row">
               <label class="settings-label" for="settings-provider-select">提供商</label>
               <select class="settings-select" id="settings-provider-select">
                 <option value="auto">自动识别</option>
                 <option value="deepseek">DeepSeek</option>
                 <option value="minimax">MiniMax</option>
+                <option value="openai">OpenAI</option>
+                <option value="qwen">Qwen / 阿里百炼</option>
+                <option value="moonshot">Moonshot</option>
+                <option value="zhipu">智谱</option>
                 <option value="custom">自定义端点（本地/其他）</option>
               </select>
             </div>
@@ -222,11 +265,19 @@ const createSettingsModal = () => `
             </div>
             <div class="settings-row">
               <label class="settings-label" for="settings-llm-key">API Key</label>
-              <input class="settings-input" id="settings-llm-key" type="password" placeholder="自定义端点可留空；其他留空则仅切换模型" autocomplete="new-password">
+              <input class="settings-input" id="settings-llm-key" type="password" placeholder="新增必填；编辑时留空表示继续使用原 Key" autocomplete="new-password">
             </div>
             <div class="settings-row-action">
-              <button class="settings-save-btn" id="settings-save-llm" type="button">保存</button>
+              <button class="settings-save-btn" id="settings-save-llm" type="button">保存到模型池</button>
+              <button class="settings-save-btn" id="settings-save-llm-current" type="button">保存并设为当前</button>
               <span class="settings-feedback" id="settings-llm-feedback"></span>
+            </div>
+          </div>
+          <div class="settings-section">
+            <div class="settings-section-label">模型池优先级</div>
+            <p class="settings-hint">排在上面的优先使用。关闭某个模型后不会参与自动切换；点击“设为当前”可立即切过去。</p>
+            <div class="llm-profile-list" id="settings-llm-pool-list">
+              <div class="llm-profile-empty">还没有模型配置，先在上方添加一个。</div>
             </div>
           </div>
           <div class="settings-section">
@@ -920,6 +971,19 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.6</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">LLM 多模型池与自动故障切换：一个模型没额度或不可用时自动切备用模型。</p>
+                <ul class="release-note-points">
+                  <li>设置页 LLM 模型菜单新增模型池，可添加、编辑、启停、排序、删除和设为当前。</li>
+                  <li>自动切换策略默认开启，支持失败冷却时间和最多尝试模型数。</li>
+                  <li>额度不足、限流、认证失败、模型不可用、5xx、网络超时时会自动切换备用模型。</li>
+                  <li>只在尚未输出内容时切换，避免回复重复、语音断裂；API 不返回明文 Key。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.5</span>

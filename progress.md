@@ -41,3 +41,11 @@
 - v0.4.5：已验证新 API `/social/wechat-groups/members` 返回成员昵称、群名、sender_id；统计 API 仍可按群名/room_id 查询今日榜单。
 - v0.4.5：已用 Browser 打开 Brain UI，进入“设置 -> 微信群助手”，确认管理员模式、保存管理员、已选统计群总览、当前查看提示、群统计与定时总结、聊天记录库均渲染成功。
 - v0.4.5：准备提交并发布 GitHub Release，所有版本文档已更新到 v0.4.5。
+
+- 2026-05-28 v0.4.6：开始实现多 LLM 模型池与额度耗尽/限流自动故障切换；已完成现有配置、API、UI 和 llm.js 调用链审查。
+- v0.4.6：已实现后端 LLM profile 数据结构、旧单模型兼容迁移、`/settings/llm-profile`、`/settings/llm-profile/select`、`/settings/llm-profile/delete`、`/settings/llm-failover` API，并让 `/settings` 返回模型池/自动切换策略。
+- v0.4.6：已改造 `src/llm.js`，流式请求会优先使用当前 profile；额度不足、限流、认证/模型不可用、5xx、网络超时时，在尚未输出内容前自动切换到备用模型并记录冷却。
+- v0.4.6：已改造 Brain UI 的 LLM 模型设置页，新增当前模型条、自动切换策略、模型池卡片、编辑/启停/排序/删除/设为当前交互。
+- v0.4.6：初步 `node --check` 已通过 config、llm、api、index、Brain UI JS 和 app-shell。
+- v0.4.6：已完成临时配置冒烟测试：在备份/恢复 `config.json` 的前提下新增两个假模型 profile、保存 failover 策略、确认 `/settings` 公共 profile 不泄露 `apiKey` 字段，并恢复原配置文件。
+- v0.4.6：最终验证通过：node --check 全部相关文件通过，wechat guard/memory 测试通过，git diff --check 通过；已重启 Electron 并确认 `/settings` 返回模型池 profiles、activeProfileId 和 failover，且不返回明文 API Key。

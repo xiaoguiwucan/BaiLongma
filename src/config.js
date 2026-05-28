@@ -150,6 +150,21 @@ const PROVIDER_CONFIG = {
 
 const AUTO_PROVIDER = 'auto'
 const PROBE_TIMEOUT_MS = 12000
+const LLM_PROFILE_PREFIX = 'llm_'
+
+export const DEFAULT_LLM_FAILOVER = {
+  enabled: true,
+  cooldownSeconds: 180,
+  maxAttempts: 4,
+}
+
+function nowIso() {
+  return new Date().toISOString()
+}
+
+function createLLMProfileId() {
+  return `${LLM_PROFILE_PREFIX}${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+}
 
 function normalizeModel(model, provider = DEEPSEEK_PROVIDER) {
   const pConfig = PROVIDER_CONFIG[provider] || PROVIDER_CONFIG[DEEPSEEK_PROVIDER]
@@ -232,21 +247,158 @@ async function detectProvider(OpenAI, apiKey, requestedModel) {
   })
 }
 
-function readStoredConfig() {
+function readConfigObject() {
   try {
     if (!fs.existsSync(paths.configFile)) return null
     const raw = fs.readFileSync(paths.configFile, 'utf-8')
     const parsed = JSON.parse(raw)
     if (!parsed || typeof parsed !== 'object') return null
+    return parsed
+  } catch {
+    return null
+  }
+}
+
+function normalizeLLMFailoverConfig(value = {}) {
+  const cooldown = Number(value.cooldownSeconds)
+  const maxAttempts = Number(value.maxAttempts)
+  return {
+    enabled: value.enabled !== false,
+    cooldownSeconds: Number.isFinite(cooldown) ? Math.min(3600, Math.max(15, Math.round(cooldown))) : DEFAULT_LLM_FAILOVER.cooldownSeconds,
+    maxAttempts: Number.isFinite(maxAttempts) ? Math.min(10, Math.max(1, Math.round(maxAttempts))) : DEFAULT_LLM_FAILOVER.maxAttempts,
+  }
+}
+
+function getProviderBaseURL(provider, customBaseURL = '') {
+  if (provider === 'custom') return String(customBaseURL || '').trim()
+  return PROVIDER_CONFIG[provider]?.baseURL || ''
+}
+
+function getProviderLabel(provider) {
+  if (provider === 'custom') return 'Custom Endpoint'
+  return PROVIDER_CONFIG[provider]?.label || provider || 'LLM'
+}
+
+function defaultLLMProfileName(provider, model) {
+  return `${getProviderLabel(provider)} · ${model || 'model'}`
+}
+
+function normalizeStoredLLMProfile(raw = {}, index = 0) {
+  if (!raw || typeof raw !== 'object') return null
+  const provider = String(raw.provider || '').trim().toLowerCase()
+  if (provider === 'custom') {
+    const baseURL = String(raw.baseURL || '').trim()
+    const model = String(raw.model || '').trim()
+    if (!baseURL || !model) return null
+    const apiKey = String(raw.apiKey || '').trim() || 'none'
+    return {
+      id: String(raw.id || '').trim() || createLLMProfileId(),
+      name: String(raw.name || '').trim() || defaultLLMProfileName('custom', model),
+      provider: 'custom',
+      model,
+      apiKey,
+      baseURL,
+      enabled: raw.enabled !== false,
+      priority: Number.isFinite(Number(raw.priority)) ? Number(raw.priority) : index + 1,
+      createdAt: raw.createdAt || raw.activatedAt || nowIso(),
+      updatedAt: raw.updatedAt || raw.activatedAt || nowIso(),
+      lastError: String(raw.lastError || '').slice(0, 500),
+      lastFailedAt: raw.lastFailedAt || '',
+      lastSuccessAt: raw.lastSuccessAt || '',
+      cooldownUntil: raw.cooldownUntil || '',
+    }
+  }
+  if (!PROVIDER_CONFIG[provider]) return null
+  const apiKey = String(raw.apiKey || '').trim()
+  if (!apiKey) return null
+  const model = normalizeModel(raw.model, provider)
+  return {
+    id: String(raw.id || '').trim() || createLLMProfileId(),
+    name: String(raw.name || '').trim() || defaultLLMProfileName(provider, model),
+    provider,
+    model,
+    apiKey,
+    baseURL: PROVIDER_CONFIG[provider].baseURL,
+    enabled: raw.enabled !== false,
+    priority: Number.isFinite(Number(raw.priority)) ? Number(raw.priority) : index + 1,
+    createdAt: raw.createdAt || raw.activatedAt || nowIso(),
+    updatedAt: raw.updatedAt || raw.activatedAt || nowIso(),
+    lastError: String(raw.lastError || '').slice(0, 500),
+    lastFailedAt: raw.lastFailedAt || '',
+    lastSuccessAt: raw.lastSuccessAt || '',
+    cooldownUntil: raw.cooldownUntil || '',
+  }
+}
+
+function buildLegacyLLMProfile(parsed = {}) {
+  if (!parsed?.provider) return null
+  return normalizeStoredLLMProfile({
+    id: parsed.activeLLMProfileId || 'llm_legacy_current',
+    name: parsed.llmProfileName || defaultLLMProfileName(parsed.provider, parsed.model),
+    provider: parsed.provider,
+    apiKey: parsed.apiKey,
+    model: parsed.model,
+    baseURL: parsed.baseURL,
+    enabled: true,
+    priority: 1,
+    activatedAt: parsed.activatedAt,
+  }, 0)
+}
+
+function normalizeStoredLLMProfiles(parsed = {}) {
+  const profiles = Array.isArray(parsed.llmProfiles)
+    ? parsed.llmProfiles.map((item, idx) => normalizeStoredLLMProfile(item, idx)).filter(Boolean)
+    : []
+  if (profiles.length === 0) {
+    const legacy = buildLegacyLLMProfile(parsed)
+    if (legacy) profiles.push(legacy)
+  }
+  profiles.sort((a, b) => (Number(a.priority) || 0) - (Number(b.priority) || 0))
+  return profiles
+}
+
+function chooseActiveLLMProfile(parsed = {}, profiles = []) {
+  if (!profiles.length) return null
+  const activeId = String(parsed.activeLLMProfileId || '').trim()
+  const byId = activeId ? profiles.find(p => p.id === activeId) : null
+  if (byId) return byId
+  if (parsed.provider) {
+    const legacyMatch = profiles.find(p =>
+      p.provider === parsed.provider
+      && (!parsed.model || p.model === parsed.model)
+      && (parsed.provider !== 'custom' || !parsed.baseURL || p.baseURL === parsed.baseURL)
+    )
+    if (legacyMatch) return legacyMatch
+  }
+  return profiles.find(p => p.enabled) || profiles[0]
+}
+
+function readStoredConfig(parsed = readConfigObject()) {
+  try {
+    if (!parsed || typeof parsed !== 'object') return null
+    const profiles = normalizeStoredLLMProfiles(parsed)
+    const activeProfile = chooseActiveLLMProfile(parsed, profiles)
+    if (activeProfile) {
+      return {
+        ...parsed,
+        provider: activeProfile.provider,
+        apiKey: activeProfile.apiKey,
+        model: activeProfile.model,
+        baseURL: activeProfile.baseURL,
+        activeLLMProfileId: activeProfile.id,
+        llmProfiles: profiles,
+        llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover),
+      }
+    }
     if (!parsed.provider) return null
     if (parsed.provider === 'custom') {
       if (!parsed.baseURL || typeof parsed.baseURL !== 'string') return null
       if (!parsed.model || typeof parsed.model !== 'string') return null
-      return parsed
+      return { ...parsed, llmProfiles: [], llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover) }
     }
     if (!PROVIDER_CONFIG[parsed.provider]) return null
     if (!parsed.apiKey || typeof parsed.apiKey !== 'string') return null
-    return parsed
+    return { ...parsed, llmProfiles: [], llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover) }
   } catch {
     return null
   }
@@ -316,6 +468,9 @@ export const config = {
   model: null,
   apiKey: null,
   baseURL: null,
+  activeLLMProfileId: null,
+  llmProfiles: [],
+  llmFailover: { ...DEFAULT_LLM_FAILOVER },
   needsActivation: true,
   temperature: 0.5,
   security: {
@@ -325,20 +480,40 @@ export const config = {
   },
 }
 
-const stored = readStoredConfig()
+const storedRaw = readConfigObject()
+const stored = readStoredConfig(storedRaw)
 if (stored) {
+  config.llmProfiles = Array.isArray(stored.llmProfiles) ? stored.llmProfiles : []
+  config.activeLLMProfileId = stored.activeLLMProfileId || config.llmProfiles[0]?.id || null
+  config.llmFailover = normalizeLLMFailoverConfig(stored.llmFailover)
   applyConfig(stored.provider, stored.apiKey, stored.model, stored.baseURL)
-  if (typeof stored.temperature === 'number' && stored.temperature >= 0 && stored.temperature <= 2) {
-    config.temperature = stored.temperature
-  }
-  if (stored.security && typeof stored.security === 'object') {
-    if (typeof stored.security.fileSandbox === 'boolean') config.security.fileSandbox = stored.security.fileSandbox
-    if (typeof stored.security.execSandbox === 'boolean') config.security.execSandbox = stored.security.execSandbox
-    if (Array.isArray(stored.security.blockedTools)) config.security.blockedTools = stored.security.blockedTools
-  }
 } else if (shouldAllowEnvFallback()) {
   const fromEnv = loadFromEnv()
-  if (fromEnv) applyConfig(fromEnv.provider, fromEnv.apiKey, fromEnv.model)
+  if (fromEnv) {
+    const envProfile = normalizeStoredLLMProfile({
+      id: 'llm_env_current',
+      name: `${getProviderLabel(fromEnv.provider)} · env`,
+      provider: fromEnv.provider,
+      apiKey: fromEnv.apiKey,
+      model: fromEnv.model,
+      enabled: true,
+      priority: 1,
+    }, 0)
+    if (envProfile) {
+      config.llmProfiles = [envProfile]
+      config.activeLLMProfileId = envProfile.id
+    }
+    applyConfig(fromEnv.provider, fromEnv.apiKey, fromEnv.model)
+  }
+}
+
+if (typeof storedRaw?.temperature === 'number' && storedRaw.temperature >= 0 && storedRaw.temperature <= 2) {
+  config.temperature = storedRaw.temperature
+}
+if (storedRaw?.security && typeof storedRaw.security === 'object') {
+  if (typeof storedRaw.security.fileSandbox === 'boolean') config.security.fileSandbox = storedRaw.security.fileSandbox
+  if (typeof storedRaw.security.execSandbox === 'boolean') config.security.execSandbox = storedRaw.security.execSandbox
+  if (Array.isArray(storedRaw.security.blockedTools)) config.security.blockedTools = storedRaw.security.blockedTools
 }
 
 // At startup, copy social credentials from the config file into process.env so connectors can read them
@@ -354,106 +529,171 @@ if (stored) {
   } catch {}
 })()
 
-export async function activate({ provider = AUTO_PROVIDER, apiKey, model, baseURL }) {
-  const p = String(provider || AUTO_PROVIDER).toLowerCase()
+function getActiveLLMProfile() {
+  return config.llmProfiles.find(p => p.id === config.activeLLMProfileId) || null
+}
 
-  if (p === 'custom') {
-    const normalizedBaseURL = String(baseURL || '').trim()
-    if (!normalizedBaseURL) throw new Error('Custom endpoint requires a Base URL')
-    const normalizedModel = String(model || '').trim()
-    if (!normalizedModel) throw new Error('Custom endpoint requires a model name')
-    const normalizedKey = String(apiKey || '').trim() || 'none'
+function maskApiKey(apiKey = '') {
+  const value = String(apiKey || '')
+  if (!value || value === 'none') return ''
+  return value.length <= 8 ? '已配置' : `••••${value.slice(-4)}`
+}
 
-    const { default: OpenAI } = await import('openai')
-    const client = new OpenAI({ apiKey: normalizedKey, baseURL: normalizedBaseURL, timeout: PROBE_TIMEOUT_MS })
-    try {
-      await withTimeout(
-        client.chat.completions.create({
-          model: normalizedModel,
-          messages: [{ role: 'user', content: 'Reply with exactly: hello' }],
-          max_tokens: 16,
-          temperature: 0,
-          stream: false,
-        }),
-        PROBE_TIMEOUT_MS,
-        'custom',
-      )
-    } catch (err) {
-      const message = err?.message || String(err)
-      throw new Error(`Custom endpoint connection failed: ${message}`)
-    }
-
-    applyConfig('custom', normalizedKey, normalizedModel, normalizedBaseURL)
-    writeStoredConfig({
-      provider: 'custom',
-      apiKey: normalizedKey,
-      model: normalizedModel,
-      baseURL: normalizedBaseURL,
-      activatedAt: new Date().toISOString(),
-    })
-    return {
-      provider: 'custom',
-      model: normalizedModel,
-      models: [{ id: normalizedModel, label: normalizedModel, deprecated: false }],
-    }
+function publicLLMProfile(profile = {}) {
+  const cooldownAt = profile.cooldownUntil ? Date.parse(profile.cooldownUntil) : 0
+  const coolingDown = Number.isFinite(cooldownAt) && cooldownAt > Date.now()
+  return {
+    id: profile.id,
+    name: profile.name || defaultLLMProfileName(profile.provider, profile.model),
+    provider: profile.provider,
+    providerLabel: getProviderLabel(profile.provider),
+    model: profile.model,
+    baseURL: profile.provider === 'custom' ? profile.baseURL : undefined,
+    enabled: profile.enabled !== false,
+    priority: profile.priority,
+    current: profile.id === config.activeLLMProfileId,
+    configured: !!profile.apiKey,
+    apiKeyHint: maskApiKey(profile.apiKey),
+    status: coolingDown ? 'cooldown' : (profile.enabled === false ? 'disabled' : 'ready'),
+    lastError: profile.lastError || '',
+    lastFailedAt: profile.lastFailedAt || '',
+    lastSuccessAt: profile.lastSuccessAt || '',
+    cooldownUntil: profile.cooldownUntil || '',
+    createdAt: profile.createdAt || '',
+    updatedAt: profile.updatedAt || '',
   }
+}
 
-  const pConfig = PROVIDER_CONFIG[p]
-  if (p !== AUTO_PROVIDER && !pConfig) {
-    throw new Error(`Unsupported provider: "${p}". Available: ${Object.keys(PROVIDER_CONFIG).join(', ')}`)
+function persistLLMState(extra = {}) {
+  const existing = readConfigObject() || {}
+  const active = getActiveLLMProfile()
+  const next = {
+    ...existing,
+    ...extra,
+    provider: active?.provider || config.provider || existing.provider,
+    apiKey: active?.apiKey || config.apiKey || existing.apiKey,
+    model: active?.model || config.model || existing.model,
+    baseURL: active?.baseURL || config.baseURL || existing.baseURL,
+    activeLLMProfileId: config.activeLLMProfileId,
+    llmProfiles: config.llmProfiles,
+    llmFailover: normalizeLLMFailoverConfig(config.llmFailover),
   }
+  writeStoredConfig(next)
+}
 
-  const normalizedKey = String(apiKey || '').trim()
-  const normalizedModel = normalizeModel(model, p)
-  if (normalizedKey.length < 8) {
-    throw new Error(`${p} key is invalid`)
+function upsertRuntimeLLMProfile(profile, { setActive = false, persist = true } = {}) {
+  const normalized = normalizeStoredLLMProfile(profile, config.llmProfiles.length)
+  if (!normalized) throw new Error('模型配置不完整')
+  const idx = config.llmProfiles.findIndex(p => p.id === normalized.id)
+  if (idx >= 0) config.llmProfiles[idx] = { ...config.llmProfiles[idx], ...normalized, updatedAt: nowIso() }
+  else config.llmProfiles.push({ ...normalized, createdAt: normalized.createdAt || nowIso(), updatedAt: nowIso() })
+  config.llmProfiles.sort((a, b) => (Number(a.priority) || 0) - (Number(b.priority) || 0))
+  if (setActive || !config.activeLLMProfileId) {
+    config.activeLLMProfileId = normalized.id
+    applyConfig(normalized.provider, normalized.apiKey, normalized.model, normalized.baseURL)
   }
+  if (persist) persistLLMState()
+  return config.llmProfiles.find(p => p.id === normalized.id)
+}
 
+function isAuthenticationConfigError(err) {
+  const status = err?.status ?? err?.response?.status
+  const msg = err?.message || String(err || '')
+  return status === 401 || status === 403 || /unauthoriz|authentication|invalid.*api.*key|api key.*invalid|forbidden|权限|鉴权|认证失败|无效.*key/i.test(msg)
+}
+
+function shouldSaveProfileWithWarning(err) {
+  const status = err?.status ?? err?.response?.status
+  const msg = err?.message || String(err || '')
+  if (status === 429 || (status && status >= 500 && status < 600) || status === 408) return true
+  return /quota|billing|insufficient|exceeded|rate.?limit|too many requests|余额|额度|欠费|限流|超限|过载|timeout|timed out|network|fetch failed|upstream|temporarily/i.test(msg)
+}
+
+async function validateLLMProfileConnection(profile) {
   const { default: OpenAI } = await import('openai')
-  if (p === AUTO_PROVIDER) {
-    const detected = await detectProvider(OpenAI, normalizedKey, model)
-    applyConfig(detected.provider, normalizedKey, detected.model)
-    writeStoredConfig({
-      provider: detected.provider,
-      apiKey: normalizedKey,
-      model: detected.model,
-      activatedAt: new Date().toISOString(),
-    })
+  const provider = String(profile.provider || '').toLowerCase()
+  if (provider === 'custom') {
+    const normalizedBaseURL = String(profile.baseURL || '').trim()
+    const normalizedModel = String(profile.model || '').trim()
+    if (!normalizedBaseURL) throw new Error('Custom endpoint requires a Base URL')
+    if (!normalizedModel) throw new Error('Custom endpoint requires a model name')
+    const normalizedKey = String(profile.apiKey || '').trim() || 'none'
+    const client = new OpenAI({ apiKey: normalizedKey, baseURL: normalizedBaseURL, timeout: PROBE_TIMEOUT_MS })
+    await withTimeout(
+      client.chat.completions.create({
+        model: normalizedModel,
+        messages: [{ role: 'user', content: 'Reply with exactly: hello' }],
+        max_tokens: 16,
+        temperature: 0,
+        stream: false,
+      }),
+      PROBE_TIMEOUT_MS,
+      'custom',
+    )
+    return { provider: 'custom', model: normalizedModel, apiKey: normalizedKey, baseURL: normalizedBaseURL }
+  }
+
+  const normalizedKey = String(profile.apiKey || '').trim()
+  if (normalizedKey.length < 8) throw new Error(`${provider || 'LLM'} key is invalid`)
+  if (provider === AUTO_PROVIDER) {
+    const detected = await detectProvider(OpenAI, normalizedKey, profile.model)
     return {
       provider: detected.provider,
       model: detected.model,
-      models: detected.pConfig.models,
+      apiKey: normalizedKey,
+      baseURL: detected.pConfig.baseURL,
     }
   }
-
+  const pConfig = PROVIDER_CONFIG[provider]
+  if (!pConfig) throw new Error(`Unsupported provider: "${provider}". Available: ${Object.keys(PROVIDER_CONFIG).join(', ')}`)
+  const normalizedModel = normalizeModel(profile.model, provider)
   const client = new OpenAI({ apiKey: normalizedKey, baseURL: pConfig.baseURL, timeout: PROBE_TIMEOUT_MS })
+  await withTimeout(
+    client.chat.completions.create(buildPingParams(provider, normalizedModel)),
+    PROBE_TIMEOUT_MS,
+    provider,
+  )
+  return { provider, model: normalizedModel, apiKey: normalizedKey, baseURL: pConfig.baseURL }
+}
 
+export async function activate({ provider = AUTO_PROVIDER, apiKey, model, baseURL }) {
   try {
-    await withTimeout(
-      client.chat.completions.create(buildPingParams(p, normalizedModel)),
-      PROBE_TIMEOUT_MS,
-      p,
-    )
+    const validated = await validateLLMProfileConnection({ provider, apiKey, model, baseURL })
+    const active = getActiveLLMProfile()
+    const profile = upsertRuntimeLLMProfile({
+      id: active?.provider === validated.provider ? active.id : createLLMProfileId(),
+      name: active?.provider === validated.provider ? active.name : defaultLLMProfileName(validated.provider, validated.model),
+      provider: validated.provider,
+      apiKey: validated.apiKey,
+      model: validated.model,
+      baseURL: validated.baseURL,
+      enabled: true,
+      priority: active?.provider === validated.provider ? active.priority : (config.llmProfiles.length + 1),
+      lastError: '',
+      lastFailedAt: '',
+      cooldownUntil: '',
+      lastSuccessAt: nowIso(),
+    }, { setActive: true, persist: false })
+    persistLLMState({ activatedAt: nowIso() })
+    const pConfig = validated.provider !== 'custom' ? PROVIDER_CONFIG[validated.provider] : null
+    return {
+      provider: validated.provider,
+      model: validated.model,
+      baseURL: validated.provider === 'custom' ? validated.baseURL : undefined,
+      models: pConfig ? pConfig.models : [{ id: validated.model, label: validated.model, deprecated: false }],
+      profile: publicLLMProfile(profile),
+      profiles: config.llmProfiles.map(publicLLMProfile),
+      failover: getLLMFailoverConfig(),
+    }
   } catch (err) {
     const message = err?.message || String(err)
     if (/401|unauthoriz|invalid.*api.*key|authentication/i.test(message)) {
-      throw new Error(`${p} key validation failed — please check that the key is correct`)
+      throw new Error(`${provider} key validation failed — please check that the key is correct`)
     }
-    throw new Error(`${p} validation failed: ${message}`)
-  }
-
-  applyConfig(p, normalizedKey, normalizedModel)
-  writeStoredConfig({
-    provider: p,
-    apiKey: normalizedKey,
-    model: normalizedModel,
-    activatedAt: new Date().toISOString(),
-  })
-
-  return {
-    provider: p,
-    model: normalizedModel,
-    models: pConfig.models,
+    if (String(provider || '').toLowerCase() === 'custom') {
+      throw new Error(`Custom endpoint connection failed: ${message}`)
+    }
+    throw new Error(`${provider} validation failed: ${message}`)
   }
 }
 
@@ -467,6 +707,9 @@ export function getActivationStatus() {
     baseURL: config.provider === 'custom' ? config.baseURL : undefined,
     models: pConfig ? pConfig.models : customModels,
     defaultModel: pConfig ? pConfig.defaultModel : (config.model || DEFAULT_DEEPSEEK_MODEL),
+    activeProfileId: config.activeLLMProfileId,
+    profiles: config.llmProfiles.map(publicLLMProfile),
+    failover: getLLMFailoverConfig(),
   }
 }
 
@@ -483,34 +726,232 @@ export function getProviderSummaries() {
   return result
 }
 
+export function getLLMFailoverConfig() {
+  return normalizeLLMFailoverConfig(config.llmFailover)
+}
+
+export function setLLMFailoverConfig(updates = {}) {
+  config.llmFailover = normalizeLLMFailoverConfig({ ...config.llmFailover, ...updates })
+  persistLLMState()
+  return getLLMFailoverConfig()
+}
+
+export function getLLMProfiles() {
+  return config.llmProfiles.map(publicLLMProfile)
+}
+
+export function getLLMFailoverCandidates() {
+  const profiles = config.llmProfiles
+    .filter(p => p && p.enabled !== false && p.apiKey && p.model && p.provider)
+    .sort((a, b) => (Number(a.priority) || 0) - (Number(b.priority) || 0))
+  if (!profiles.length && config.apiKey && config.provider && config.model) {
+    const fallback = normalizeStoredLLMProfile({
+      id: 'llm_runtime_current',
+      name: defaultLLMProfileName(config.provider, config.model),
+      provider: config.provider,
+      model: config.model,
+      apiKey: config.apiKey,
+      baseURL: config.baseURL,
+      enabled: true,
+      priority: 1,
+    }, 0)
+    return fallback ? [fallback] : []
+  }
+  const active = config.activeLLMProfileId
+    ? profiles.find(p => p.id === config.activeLLMProfileId)
+    : null
+  const ordered = active
+    ? [active, ...profiles.filter(p => p.id !== active.id)]
+    : profiles
+  const now = Date.now()
+  const available = ordered.filter(p => {
+    const until = p.cooldownUntil ? Date.parse(p.cooldownUntil) : 0
+    return !Number.isFinite(until) || until <= now
+  })
+  return available.length ? available : ordered
+}
+
+export function selectLLMProfile(id, { persist = true, reason = 'manual' } = {}) {
+  const profile = config.llmProfiles.find(p => p.id === id)
+  if (!profile) throw new Error('未找到这个模型配置')
+  if (profile.enabled === false && reason !== 'manual') throw new Error('模型配置已停用')
+  if (reason === 'manual' && profile.enabled === false) profile.enabled = true
+  config.activeLLMProfileId = profile.id
+  applyConfig(profile.provider, profile.apiKey, profile.model, profile.baseURL)
+  profile.lastSelectedAt = nowIso()
+  if (persist) persistLLMState()
+  return publicLLMProfile(profile)
+}
+
+export function recordLLMProfileFailure(id, err, options = {}) {
+  if (String(id || '').startsWith('llm_env_') || String(id || '').startsWith('llm_runtime_')) return null
+  const profile = config.llmProfiles.find(p => p.id === id)
+  if (!profile) return null
+  const failover = normalizeLLMFailoverConfig({ ...config.llmFailover, ...options })
+  const message = getProviderErrorMessage(err).slice(0, 500)
+  const cooldownSeconds = Number(options.cooldownSeconds || failover.cooldownSeconds || DEFAULT_LLM_FAILOVER.cooldownSeconds)
+  profile.lastError = message
+  profile.lastFailedAt = nowIso()
+  profile.cooldownUntil = new Date(Date.now() + Math.max(15, cooldownSeconds) * 1000).toISOString()
+  persistLLMState()
+  return publicLLMProfile(profile)
+}
+
+export function recordLLMProfileSuccess(id) {
+  if (String(id || '').startsWith('llm_env_') || String(id || '').startsWith('llm_runtime_')) return null
+  const profile = config.llmProfiles.find(p => p.id === id)
+  if (!profile) return null
+  profile.lastSuccessAt = nowIso()
+  profile.cooldownUntil = ''
+  profile.lastError = ''
+  persistLLMState()
+  return publicLLMProfile(profile)
+}
+
+export async function upsertLLMProfile(updates = {}) {
+  const existing = updates.id ? config.llmProfiles.find(p => p.id === updates.id) : null
+  const provider = String(updates.provider || existing?.provider || '').trim().toLowerCase()
+  if (!provider) throw new Error('请选择模型提供商')
+  const shouldValidate = updates.validate !== false && (
+    !existing
+    || updates.apiKey
+    || updates.baseURL
+    || updates.model
+    || updates.provider
+  )
+  const apiKey = Object.prototype.hasOwnProperty.call(updates, 'apiKey')
+    ? (String(updates.apiKey || '').trim() || (provider === 'custom' ? 'none' : ''))
+    : (existing?.apiKey || '')
+  let normalized = {
+    id: existing?.id || String(updates.id || '').trim() || createLLMProfileId(),
+    name: String(updates.name || existing?.name || '').trim(),
+    provider,
+    apiKey,
+    model: provider === 'custom'
+      ? String(updates.model || existing?.model || '').trim()
+      : normalizeModel(updates.model || existing?.model, provider === AUTO_PROVIDER ? DEEPSEEK_PROVIDER : provider),
+    baseURL: provider === 'custom'
+      ? String(updates.baseURL || existing?.baseURL || '').trim()
+      : getProviderBaseURL(provider, updates.baseURL || existing?.baseURL),
+    enabled: Object.prototype.hasOwnProperty.call(updates, 'enabled') ? updates.enabled !== false : (existing?.enabled !== false),
+    priority: Number.isFinite(Number(updates.priority)) ? Number(updates.priority) : (existing?.priority || config.llmProfiles.length + 1),
+    createdAt: existing?.createdAt || nowIso(),
+    updatedAt: nowIso(),
+    lastError: existing?.lastError || '',
+    lastFailedAt: existing?.lastFailedAt || '',
+    lastSuccessAt: existing?.lastSuccessAt || '',
+    cooldownUntil: existing?.cooldownUntil || '',
+  }
+  if (!normalized.name) normalized.name = defaultLLMProfileName(provider, normalized.model)
+
+  let warning = ''
+  if (shouldValidate) {
+    try {
+      const validated = await validateLLMProfileConnection(normalized)
+      normalized = {
+        ...normalized,
+        provider: validated.provider,
+        model: validated.model,
+        apiKey: validated.apiKey,
+        baseURL: validated.baseURL,
+        name: updates.name ? normalized.name : defaultLLMProfileName(validated.provider, validated.model),
+        lastError: '',
+        lastFailedAt: '',
+        cooldownUntil: '',
+        lastSuccessAt: nowIso(),
+      }
+    } catch (err) {
+      if (isAuthenticationConfigError(err) || !shouldSaveProfileWithWarning(err)) {
+        throw err
+      }
+      warning = `已保存，但当前测试未通过：${getProviderErrorMessage(err).slice(0, 180)}`
+      normalized.lastError = getProviderErrorMessage(err).slice(0, 500)
+      normalized.lastFailedAt = nowIso()
+      normalized.cooldownUntil = new Date(Date.now() + getLLMFailoverConfig().cooldownSeconds * 1000).toISOString()
+    }
+  }
+
+  const setActive = updates.setActive === true || (!config.activeLLMProfileId && normalized.enabled !== false)
+  const saved = upsertRuntimeLLMProfile(normalized, { setActive, persist: false })
+  persistLLMState()
+  return {
+    profile: publicLLMProfile(saved),
+    profiles: getLLMProfiles(),
+    failover: getLLMFailoverConfig(),
+    warning,
+  }
+}
+
+export function deleteLLMProfile(id) {
+  const idx = config.llmProfiles.findIndex(p => p.id === id)
+  if (idx < 0) throw new Error('未找到这个模型配置')
+  if (config.llmProfiles.length <= 1) throw new Error('至少保留一个模型配置')
+  const removed = config.llmProfiles.splice(idx, 1)[0]
+  if (config.activeLLMProfileId === removed.id) {
+    const next = config.llmProfiles.find(p => p.enabled !== false) || config.llmProfiles[0]
+    config.activeLLMProfileId = next?.id || null
+    if (next) applyConfig(next.provider, next.apiKey, next.model, next.baseURL)
+    else {
+      config.provider = null
+      config.model = null
+      config.apiKey = null
+      config.baseURL = null
+      config.needsActivation = true
+    }
+  }
+  persistLLMState()
+  return { removedId: removed.id, profiles: getLLMProfiles(), activeProfileId: config.activeLLMProfileId }
+}
+
 export function deactivate() {
   try {
-    if (fs.existsSync(paths.configFile)) fs.unlinkSync(paths.configFile)
+    const existing = readConfigObject() || {}
+    const {
+      provider: _provider,
+      apiKey: _apiKey,
+      model: _model,
+      baseURL: _baseURL,
+      activeLLMProfileId: _activeLLMProfileId,
+      llmProfiles: _llmProfiles,
+      llmFailover: _llmFailover,
+      activatedAt: _activatedAt,
+      ...rest
+    } = existing
+    writeStoredConfig(rest)
   } catch {}
   config.provider = null
   config.model = null
   config.apiKey = null
   config.baseURL = null
+  config.activeLLMProfileId = null
+  config.llmProfiles = []
   config.needsActivation = true
 }
 
 export function switchModel(model) {
   if (!config.apiKey) throw new Error('Not activated — cannot switch model')
+  const activeProfile = getActiveLLMProfile()
   if (config.provider === 'custom') {
     const trimmed = String(model || '').trim()
     if (!trimmed) throw new Error('Model name cannot be empty')
     config.model = trimmed
+    if (activeProfile) {
+      activeProfile.model = trimmed
+      activeProfile.updatedAt = nowIso()
+    }
     try {
-      const existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))
-      writeStoredConfig({ ...existing, model: trimmed })
+      persistLLMState()
     } catch {}
     return { provider: 'custom', model: trimmed }
   }
   const normalized = normalizeModel(model, config.provider)
   config.model = normalized
+  if (activeProfile) {
+    activeProfile.model = normalized
+    activeProfile.updatedAt = nowIso()
+  }
   try {
-    const existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))
-    writeStoredConfig({ ...existing, model: normalized })
+    persistLLMState()
   } catch {}
   return { provider: config.provider, model: normalized }
 }

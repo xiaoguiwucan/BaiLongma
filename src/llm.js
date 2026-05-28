@@ -1,22 +1,35 @@
 import OpenAI from 'openai'
-import { config } from './config.js'
+import {
+  config,
+  getLLMFailoverCandidates,
+  getLLMFailoverConfig,
+  recordLLMProfileFailure,
+  recordLLMProfileSuccess,
+  selectLLMProfile,
+} from './config.js'
 import { executeTool } from './capabilities/executor.js'
 import { getToolSchemas } from './capabilities/schemas.js'
 import { recordUsage, shouldThrottle } from './quota.js'
 import { insertActionLog } from './db.js'
 
-// 延迟创建 OpenAI 客户端：激活流程把 key 写入 config 后再调用这里，
-// 避免模块加载阶段就锁死尚未填入的 apiKey/baseURL。
-let client = null
-let clientKey = null
-function getClient() {
-  const signature = `${config.provider}|${config.baseURL}|${config.apiKey}`
-  if (client && clientKey === signature) return client
-  if (!config.apiKey) {
+// 延迟创建 OpenAI 客户端：激活流程把 key 写入 config 后再调用这里。
+// v0.4.6 起支持多个 LLM profile，所以按 profile/baseURL/apiKey 缓存客户端。
+const clients = new Map()
+function getClient(profile = null) {
+  const runtime = profile || {
+    id: 'current',
+    provider: config.provider,
+    baseURL: config.baseURL,
+    apiKey: config.apiKey,
+  }
+  const signature = `${runtime.id || runtime.provider}|${runtime.provider}|${runtime.baseURL}|${runtime.apiKey}`
+  if (clients.has(signature)) return clients.get(signature)
+  if (!runtime.apiKey) {
     throw new Error('LLM 尚未激活，请先通过激活页填入 API Key')
   }
-  client = new OpenAI({ apiKey: config.apiKey, baseURL: config.baseURL })
-  clientKey = signature
+  const client = new OpenAI({ apiKey: runtime.apiKey, baseURL: runtime.baseURL })
+  clients.set(signature, client)
+  if (clients.size > 12) clients.delete(clients.keys().next().value)
   return client
 }
 
@@ -41,16 +54,49 @@ function sanitizeForProviderJson(value) {
   return value
 }
 
-function shouldEnableDeepSeekThinking(thinking) {
+function shouldEnableDeepSeekThinking(thinking, model = config.model) {
   if (!thinking) return false
-  if (config.model === 'deepseek-chat') return false
+  if (model === 'deepseek-chat') return false
   return true
 }
 
-// 单次流式调用，返回 { content, toolCalls, aborted }
-async function streamOnce({ messages, toolSchemas, temperature, topP, maxTokens, thinking = true, signal, onStream }) {
-  const requestParams = {
+function getProfileLabel(profile = {}) {
+  return `${profile.name || profile.provider || 'LLM'} / ${profile.model || 'model'}`
+}
+
+function isAbortError(err, signal) {
+  return err?.name === 'AbortError' || signal?.aborted
+}
+
+function isQuotaOrRateLimitError(err) {
+  const status = err?.status ?? err?.response?.status
+  const msg = err?.message || String(err || '')
+  return status === 429 || /quota|billing|insufficient|exceeded|rate.?limit|too many requests|余额|额度|欠费|限流|超限|次数用完|用量不足/i.test(msg)
+}
+
+function isFailoverEligibleError(err) {
+  if (!err) return false
+  const status = err.status ?? err.response?.status
+  if ([401, 403, 404, 408, 409, 429].includes(status)) return true
+  if (status && status >= 500 && status < 600) return true
+  const code = err.code || err.cause?.code
+  if (code && ['ECONNRESET', 'ECONNREFUSED', 'ETIMEDOUT', 'EAI_AGAIN', 'ENOTFOUND', 'EPIPE'].includes(code)) return true
+  const msg = err.message || ''
+  return /quota|billing|insufficient|exceeded|rate.?limit|too many requests|余额|额度|欠费|限流|超限|unauthoriz|authentication|invalid.*api.*key|forbidden|model.*not.*found|not found|模型不存在|timeout|timed out|socket hang up|fetch failed|network error|upstream|overloaded|unavailable|temporar/i.test(msg)
+}
+
+// 单个 profile 的流式调用，返回 { content, toolCalls, aborted }
+async function streamOnceWithProfile({ messages, toolSchemas, temperature, topP, maxTokens, thinking = true, signal, onStream }, profile) {
+  const runtime = profile || {
+    id: config.activeLLMProfileId || 'current',
+    provider: config.provider,
     model: config.model,
+    apiKey: config.apiKey,
+    baseURL: config.baseURL,
+    name: '当前模型',
+  }
+  const requestParams = {
+    model: runtime.model,
     temperature,
     messages: sanitizeForProviderJson(messages),
     stream: true,
@@ -58,8 +104,8 @@ async function streamOnce({ messages, toolSchemas, temperature, topP, maxTokens,
   }
 
   if (typeof topP === 'number' && topP > 0) requestParams.top_p = topP
-  if (config.provider === 'deepseek') {
-    const thinkingEnabled = shouldEnableDeepSeekThinking(thinking)
+  if (runtime.provider === 'deepseek') {
+    const thinkingEnabled = shouldEnableDeepSeekThinking(thinking, runtime.model)
     if (thinkingEnabled) {
       requestParams.reasoning_effort = 'high'
       requestParams.thinking = { type: 'enabled' }
@@ -76,7 +122,7 @@ async function streamOnce({ messages, toolSchemas, temperature, topP, maxTokens,
     requestParams.tool_choice = 'auto'
   }
 
-  const stream = await getClient().chat.completions.create(requestParams, { signal })
+  const stream = await getClient(runtime).chat.completions.create(requestParams, { signal })
 
   let fullContent = ''
   let fullReasoningContent = ''
@@ -221,6 +267,62 @@ async function streamOnce({ messages, toolSchemas, temperature, topP, maxTokens,
   }
 }
 
+// 带模型池故障切换的单次调用：
+// - 当前 profile 优先；
+// - 额度不足/限流/认证失败/服务不可用/网络超时等在尚未输出内容时切到下一个启用模型；
+// - 已经输出过内容就不切换，避免 UI/语音重复和回答断裂。
+async function streamOnce(args) {
+  const failover = getLLMFailoverConfig()
+  const candidates = getLLMFailoverCandidates()
+  if (!candidates.length) {
+    throw new Error('LLM 尚未激活，请先在设置里添加至少一个模型')
+  }
+  const maxAttempts = failover.enabled
+    ? Math.min(candidates.length, Math.max(1, Number(failover.maxAttempts || candidates.length)))
+    : 1
+  const selected = candidates.slice(0, maxAttempts)
+  let lastErr = null
+
+  for (let i = 0; i < selected.length; i++) {
+    const profile = selected[i]
+    if (args.signal?.aborted) throw Object.assign(new Error('Aborted'), { name: 'AbortError' })
+    try {
+      const result = await streamOnceWithProfile(args, profile)
+      if (!result?.aborted) {
+        recordLLMProfileSuccess(profile.id)
+        if (profile.id && profile.id !== config.activeLLMProfileId) {
+          selectLLMProfile(profile.id, { persist: true, reason: 'failover' })
+          console.warn(`[LLM] 已自动切换到备用模型：${getProfileLabel(profile)}`)
+        }
+      }
+      return result
+    } catch (err) {
+      if (isAbortError(err, args.signal)) throw err
+      if (err.hadContent) throw err
+      lastErr = err
+      const canSwitch = failover.enabled && isFailoverEligibleError(err) && i < selected.length - 1
+      if (!canSwitch) break
+      recordLLMProfileFailure(profile.id, err, { cooldownSeconds: failover.cooldownSeconds })
+      const next = selected[i + 1]
+      args.onRetry?.({
+        type: 'llm_failover',
+        attempt: i + 1,
+        nextAttempt: i + 2,
+        maxAttempts: selected.length,
+        delayMs: 0,
+        error: err.message || String(err),
+        reason: isQuotaOrRateLimitError(err) ? 'quota_or_rate_limit' : 'provider_error',
+        fromProfile: getProfileLabel(profile),
+        toProfile: getProfileLabel(next),
+      })
+      console.warn(`[LLM] ${getProfileLabel(profile)} 调用失败，自动切到 ${getProfileLabel(next)}：${(err.message || String(err)).slice(0, 180)}`)
+    }
+  }
+
+  if (lastErr && failover.enabled && selected.length > 1) lastErr.failoverExhausted = true
+  throw lastErr || new Error('LLM 调用失败')
+}
+
 // 判断是否为瞬时错误（5xx / 网络抖动 / 超时），429 交给外层 setRateLimited
 function isTransientError(err) {
   const status = err.status ?? err.response?.status
@@ -253,6 +355,7 @@ async function streamOnceWithRetry(args) {
     } catch (err) {
       if (err.name === 'AbortError' || args.signal?.aborted) throw err
       if (err.hadContent) throw err
+      if (err.failoverExhausted) throw err
       if (!isTransientError(err)) throw err
       lastErr = err
       if (attempt < MAX_ATTEMPTS - 1) {

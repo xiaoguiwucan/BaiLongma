@@ -1201,8 +1201,9 @@ async function runTurn(input, label, msg = null) {
           if (cleanedContent && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(cleanedContent, { voiceTurnId: msg?.voiceTurnId || null })
         }
       },
-      onRetry: ({ attempt, nextAttempt, maxAttempts, delayMs, error }) => {
-        emitEvent('llm_retry', { attempt, nextAttempt, maxAttempts, delayMs, error })
+      onRetry: (retryInfo = {}) => {
+        const { attempt, nextAttempt, maxAttempts, delayMs, error, ...rest } = retryInfo
+        emitEvent('llm_retry', { attempt, nextAttempt, maxAttempts, delayMs, error, ...rest })
       },
       onToolExecute: (name) => {
         emitEvent('tool_executing', { name })
