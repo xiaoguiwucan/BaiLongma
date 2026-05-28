@@ -5346,3 +5346,33 @@ body.person-card-mode .person-card-panel,
 @media (max-width: 900px) {
   .wechaty-meme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+.llm-signal {
+  display: inline-flex !important;
+  align-items: center;
+  gap: 7px;
+  min-width: 0;
+  font-weight: 700;
+}
+.llm-signal i {
+  position: relative;
+  width: 15px;
+  height: 12px;
+  display: inline-block;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  background:
+    linear-gradient(to top, currentColor 0 35%, transparent 35%) 0 0 / 3px 100% no-repeat,
+    linear-gradient(to top, currentColor 0 55%, transparent 55%) 6px 0 / 3px 100% no-repeat,
+    linear-gradient(to top, currentColor 0 78%, transparent 78%) 12px 0 / 3px 100% no-repeat;
+  filter: drop-shadow(0 0 6px currentColor);
+}
+.llm-signal b {
+  font-size: 11px;
+  line-height: 1;
+}
+.llm-signal-up { color: #72ffc3 !important; }
+.llm-signal-down { color: #ff6b6b !important; }
+.llm-signal-warn { color: #ffd479 !important; }
+.llm-signal-unknown { color: #9eb2c4 !important; }
+.llm-signal-off { color: #66788a !important; }

@@ -2,6 +2,18 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.34 - 2026-05-29
+
+### 优化
+- LLM 模型池新增直观连通状态显示。
+- 模型卡片的「状态」改为「连通状态」，使用信号条图标区分：绿色=连通，红色=不通，黄色=冷却中，灰色=未知/已关闭。
+- 如果最近失败时间晚于最近成功时间，会显示红色「不通」，并继续保留上次错误文本，便于判断哪个模型不可用。
+
+### 验证
+- 通过 node --check：src/ui/brain-ui/app.js。
+- 通过 npm run test:wechat-guard。
+- 通过 npm run test:wechat-record-all。
+
 ## v0.4.33 - 2026-05-29
 
 ### 优化

@@ -2299,6 +2299,17 @@ function initTTSSettings() {
           `<span class="llm-profile-badge">#${idx + 1}</span>`,
         ].filter(Boolean).join("");
         const last = profile.lastSuccessAt || profile.lastFailedAt;
+        const lastSuccessMs = profile.lastSuccessAt ? Date.parse(profile.lastSuccessAt) : 0;
+        const lastFailedMs = profile.lastFailedAt ? Date.parse(profile.lastFailedAt) : 0;
+        const connectivity = profile.enabled === false
+          ? { state: 'off', label: '已关闭', detail: '不参与切换' }
+          : profile.status === 'cooldown'
+            ? { state: 'warn', label: '冷却中', detail: `冷却到 ${formatLLMTime(profile.cooldownUntil)}` }
+            : (lastFailedMs && lastFailedMs >= lastSuccessMs)
+              ? { state: 'down', label: '不通', detail: profile.lastError || '最近检测/调用失败' }
+              : (lastSuccessMs
+                ? { state: 'up', label: '连通', detail: '最近调用成功' }
+                : { state: 'unknown', label: '未知', detail: '尚未检测' });
         const providerModel = `${profile.providerLabel || profile.provider} · ${profile.model || "—"}`;
         const subtitle = profile.name && profile.name !== providerModel ? providerModel : `模型池优先级 #${idx + 1}`;
         return `
@@ -2312,7 +2323,7 @@ function initTTSSettings() {
             </div>
             <div class="llm-profile-meta">
               <div><small>KEY</small><span>${escapeHtml(profile.apiKeyHint || (profile.configured ? "已配置" : "未配置"))}</span></div>
-              <div><small>状态</small><span>${profile.status === "cooldown" ? "冷却到 " + formatLLMTime(profile.cooldownUntil) : (profile.enabled === false ? "不参与切换" : "可用")}</span></div>
+              <div><small>连通状态</small><span class="llm-signal llm-signal-${connectivity.state}" title="${escapeHtml(connectivity.detail)}"><i></i><b>${escapeHtml(connectivity.label)}</b></span></div>
               <div><small>最近</small><span>${escapeHtml(formatLLMTime(last))}</span></div>
             </div>
             ${profile.lastError ? `<p class="llm-profile-error">上次错误：${escapeHtml(profile.lastError)}</p>` : ""}
