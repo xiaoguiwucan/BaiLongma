@@ -704,7 +704,7 @@ function isInvalidWechatMentionSkipReply(content = '', context = {}) {
   // 防止模型在 Wechaty 已确认 @ 当前账号后，仍按文本昵称误判“没叫我”。
   // 只拦截短的跳过式回复，避免用户讨论这个 bug 时正常解释被误杀。
   if (compact.length > 90) return false
-  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip)/iu.test(compact)
+  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip|已(?:经)?回复|回复(?:已)?完成|回复完毕|发送(?:已)?完成|发送完毕|无(?:需|须)(?:额外|再次|继续|进一步)?(?:回复|操作|补充)|不用再回|本轮结束|对话已(?:完成|结束))/iu.test(compact)
 }
 
 // send_message：投递到指定渠道（本地 SSE 或外部平台），并写入 conversations 表
@@ -717,7 +717,7 @@ async function execSendMessage({ target_id, content, channel = 'AUTO' }, context
   const cleanedContent = trimAssistantFluff(content)
   if (!cleanedContent) return '错误：消息内容为空'
   if (isInvalidWechatMentionSkipReply(cleanedContent, context)) {
-    return '错误：微信平台已经确认当前群消息 @ 了你，不能回复“没叫我/跳过/无需回应”。请重新调用 send_message，直接回答用户去掉 @ 后的实际请求。'
+    return '错误：微信平台已经确认当前群消息 @ 了你，不能回复“没叫我/跳过/已回复/回复完毕/无需回应”等内部状态。请重新调用 send_message，直接回答用户去掉 @ 后的实际请求。'
   }
 
   const delivery = resolveDeliveryTarget(resolvedId, channel, context)

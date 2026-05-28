@@ -2,6 +2,29 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.14 - 2026-05-28
+
+### 修复微信群重复回复和内部结束语外发
+
+- 修复微信群里同一条 @ 后连续回复多条的问题，典型表现为先正常回答，然后又发“已经回复过了”“回复完毕”“本轮结束”等内部状态。
+- 根因：主 LLM 在 `send_message` 成功后仍会进入下一轮工具循环，提示词里的“如果还需要可以继续 send_message，否则结束”被部分模型理解成需要再发一条状态确认；一旦后续循环卡住触发 watchdog，还可能把已经回复过的消息重新排队，造成重复外发。
+- 微信群 @ 回合现在启用“一次成功发送即结束”：`send_message` 成功后本轮立即停止，不再让模型继续生成“已回复/无需补充”之类状态。
+- 出站保护扩展：微信群回复内容如果是“已回复/回复完毕/发送完毕/无需补充/本轮结束”等内部状态，会被 `send_message` 拦截，不能发到群里。
+- fallback 保护扩展：如果模型没调用 `send_message` 却输出内部完成状态，运行时会直接丢弃，不再兜底投递到微信群。
+- 失败重试保护：如果本轮已经成功 `send_message`，后续 LLM 报错/超时不会重新排队该消息，避免“已经回复了还又答一遍”。
+
+### 验证
+
+- `node --check src/llm.js` 通过。
+- `node --check src/index.js` 通过。
+- `node --check src/capabilities/executor.js` 通过。
+- `npm run test:tool-router` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.13 - 2026-05-28
 
 ### 清理后台内部 skip 日志显示

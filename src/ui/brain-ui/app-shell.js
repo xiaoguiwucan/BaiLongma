@@ -973,6 +973,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.14</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">修复微信群重复回复：成功回复一次后立即结束，不再外发内部结束语。</p>
+                <ul class="release-note-points">
+                  <li>微信群 @ 回合成功 send_message 后本轮立即停止，避免继续生成第二条/第三条。</li>
+                  <li>拦截“已回复/回复完毕/发送完毕/本轮结束/无需补充”等内部状态外发。</li>
+                  <li>如果已成功回复，后续 LLM 超时或报错不会重新排队该消息，避免重复刷屏。</li>
+                  <li>模型收到更明确的微信群回复规则：只发一条自然回答，不发协议状态。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.13</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

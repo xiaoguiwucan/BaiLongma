@@ -348,6 +348,29 @@ function hasNonMessageToolCall(toolCallLog = []) {
   return toolCallLog.some(t => t.name && t.name !== 'send_message')
 }
 
+function isSuccessfulSendMessageResult(result = '') {
+  const value = String(result || '').trim()
+  return /^消息已发送至/u.test(value) && !/(消息发送失败|错误|未成功|permission denied|执行失败)/iu.test(value)
+}
+
+function hasSuccessfulSendMessage(toolCallLog = []) {
+  return toolCallLog.some(t => t?.name === 'send_message' && t.ok !== false && isSuccessfulSendMessageResult(t.result || ''))
+}
+
+function isWechatyDutyGroupTurn(msg = null) {
+  return msg?.social?.platform === 'wechaty-duty-group'
+}
+
+function isWechatyDutyGroupMentionTurn(msg = null) {
+  return isWechatyDutyGroupTurn(msg) && msg?.social?.mentioned_self === true
+}
+
+function isInternalCompletionStatusReply(content = '') {
+  const compact = String(content || '').trim().replace(/[\s\u2005\u2006\u2007\u2008\u2009\u200a]/g, '')
+  if (!compact || compact.length > 180) return false
+  return /(?:已(?:经)?回复|回复(?:已)?完成|回复完毕|回复(?:已经)?成功|发送(?:已)?完成|发送完毕|成功投递|无(?:需|须)(?:额外|再次|继续|进一步)?(?:回复|操作|补充)|不需要额外操作|不用再回|本轮(?:结束|完成)|对话已(?:完成|结束)|没有额外需要发送|无需补充)/iu.test(compact)
+}
+
 const RUNTIME_ONLY_TICK_TOOLS = new Set([
   'set_tick_interval',
   'complete_startup_self_check',
@@ -392,7 +415,7 @@ function isInvalidWechatMentionSkipFallback(content = '', msg = null) {
   if (social.platform !== 'wechaty-duty-group' || social.mentioned_self !== true) return false
   const compact = String(content || '').trim().replace(/[\s\u2005\u2006\u2007\u2008\u2009\u200a]/g, '')
   if (!compact || compact.length > 120) return false
-  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip|已(?:经)?回复|回复完毕|无(?:需|须)补充|无需进一步|对话已(?:完成|结束)|没有额外需要|无新内容需要处理|不用再回)/iu.test(compact)
+  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip|已(?:经)?回复|回复(?:已)?完成|回复完毕|发送(?:已)?完成|发送完毕|无(?:需|须)(?:额外|再次|继续|进一步)?(?:回复|操作|补充)|无需进一步|对话已(?:完成|结束)|没有额外需要|无新内容需要处理|不用再回|本轮结束)/iu.test(compact)
 }
 
 function buildWechatMentionSkipFallbackCorrection(msg = null) {
@@ -792,11 +815,16 @@ function enqueueDueReminders() {
 }
 
 // Common LLM failure handler: set rate-limit on 429, requeue message, drop after max retries
-function handleLLMFailure(err, label, msg) {
+function handleLLMFailure(err, label, msg, { alreadyReplied = false } = {}) {
   console.error('LLM call failed:', err.message)
   if (err.message?.includes('429') || err.status === 429) setRateLimited()
   emitEvent('error', { label, error: err.message })
   if (msg) {
+    if (alreadyReplied) {
+      console.warn(`[system] Message already replied before failure; not requeueing to avoid duplicate social replies. from=${msg.fromId}`)
+      emitEvent('message_not_requeued_after_reply', { fromId: msg.fromId, error: err.message })
+      return
+    }
     const nextRetry = (msg.retryCount || 0) + 1
     if (nextRetry <= MAX_MESSAGE_RETRIES) {
       console.log(`[system] Message requeued (retry ${nextRetry}/${MAX_MESSAGE_RETRIES})`)
@@ -1002,6 +1030,9 @@ async function runTurn(input, label, msg = null) {
     }
     if (fastUserPath) {
       directions.unshift('Current turn is a real-time external user message. Understand it quickly and reply directly with send_message before doing slow tools or deep context gathering. Use heavier tools only when the reply depends on them. During execution, whenever there is meaningful progress or a useful finding, send_message to keep the user in the loop. Do not ask for permission for actions you can safely perform; act, and speak when there is something worth saying.')
+    }
+    if (isWechatyDutyGroupMentionTurn(msg)) {
+      directions.unshift('微信群 @ 回复硬规则：本轮只发送一条真正给群友看的最终回复。不要发送“已回复/回复完毕/无需补充/本轮结束/已经发送”这类内部状态；不要把工具执行协议、结束语或自检语发到群里。回复应直接回答 @ 后的真实问题，简短自然。')
     }
     if (isVoiceChannel(msg?.channel)) {
       directions.unshift('IMPORTANT voice reply protocol: this is a direct voice conversation. Reply in your normal assistant message content immediately. Do NOT call send_message for this local voice channel unless a separate external/social delivery is explicitly required. The runtime will show and speak your assistant message automatically.')
@@ -1214,6 +1245,7 @@ async function runTurn(input, label, msg = null) {
       signal: controller.signal,
       toolContext,
       mustReply: !!msg?.fromId,
+      stopAfterSuccessfulSendMessage: isWechatyDutyGroupMentionTurn(msg),
       onToolCall: (name, args, result) => {
         const resultText = String(result)
         let ok = true
@@ -1263,7 +1295,7 @@ async function runTurn(input, label, msg = null) {
       console.log('[system] LLM processing interrupted (new message arrived)')
       llmResult = { content: '', toolResult: null, aborted: true }
     } else {
-      handleLLMFailure(err, label, msg)
+      handleLLMFailure(err, label, msg, { alreadyReplied: hasSuccessfulSendMessage(toolCallLog) })
       return
     }
   } finally {
@@ -1305,7 +1337,15 @@ async function runTurn(input, label, msg = null) {
     )
 
     const intentText = msg?.social?.user_text || msg?.social?.raw_user_text || msg?.content || input
-    if (fallbackContent && (requiresToolForUserMessage(intentText) || isInternalToolProtocolFallback(fallbackContent)) && !hasNonMessageToolCall(toolCallLog)) {
+    if (fallbackContent && isWechatyDutyGroupTurn(msg) && isInternalCompletionStatusReply(fallbackContent)) {
+      console.warn(`[protocol fallback] Dropped internal WeChat completion-status text instead of sending it to group. from=${msg.fromId}`)
+      emitEvent('protocol_violation', {
+        label,
+        reason: 'dropped_internal_wechat_completion_status',
+        fromId: msg.fromId,
+        content: fallbackContent.slice(0, 500),
+      })
+    } else if (fallbackContent && (requiresToolForUserMessage(intentText) || isInternalToolProtocolFallback(fallbackContent)) && !hasNonMessageToolCall(toolCallLog)) {
       const timestamp = nowTimestamp()
       const blockedContent = '这条请求需要实际工具结果才能确认，我刚才没有拿到可靠结果，所以不能假装完成。请重新发一次，我会按安全规则处理。'
       console.warn(`[protocol fallback] Blocked a text reply that required a tool call but made none. from=${msg.fromId}`)

@@ -503,7 +503,7 @@ function isInvalidWechatMentionSkipContent(content = '', toolContext = {}) {
   if (social.platform !== 'wechaty-duty-group' || social.mentioned_self !== true) return false
   const compact = String(content || '').trim().replace(/[\s\u2005\u2006\u2007\u2008\u2009\u200a]/g, '')
   if (!compact || compact.length > 120) return false
-  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip)/iu.test(compact)
+  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip|已(?:经)?回复|回复(?:已)?完成|回复完毕|发送(?:已)?完成|发送完毕|无(?:需|须)(?:额外|再次|继续|进一步)?(?:回复|操作|补充)|不用再回|本轮结束|对话已(?:完成|结束))/iu.test(compact)
 }
 
 const TOOL_LOOP_LIMITS = {
@@ -723,6 +723,7 @@ export async function callLLM({
   maxToolRounds = TOOL_LOOP_LIMITS.maxRounds,
   stopAfterTools = [],
   suppressToolLogs = false,
+  stopAfterSuccessfulSendMessage = false,
 }) {
   const toolSchemas = getToolSchemas(tools)
   const roundLimit = Math.max(1, Math.min(TOOL_LOOP_LIMITS.maxRounds, Number(maxToolRounds) || TOOL_LOOP_LIMITS.maxRounds))
@@ -927,12 +928,20 @@ export async function callLLM({
           toolResults.push({ id: result.id, name: result.name, result: result.result })
           toolLoopStopReason = result.stopReason
           callIndex += 1
+          if (stopAfterSuccessfulSendMessage && result.name === 'send_message' && isSuccessfulSendMessageResult(result.result)) {
+            callIndex = effectiveToolCalls.length
+            break
+          }
         }
       } else {
         const result = await runPreparedToolCall(firstPrepared)
         toolResults.push({ id: result.id, name: result.name, result: result.result })
         toolLoopStopReason = result.stopReason
         callIndex += 1
+        if (stopAfterSuccessfulSendMessage && result.name === 'send_message' && isSuccessfulSendMessageResult(result.result)) {
+          callIndex = effectiveToolCalls.length
+          break
+        }
       }
 
       if (toolLoopStopReason) {
@@ -959,6 +968,9 @@ export async function callLLM({
     if (stopAfterToolSet.size > 0 && toolResults.some(tr => stopAfterToolSet.has(tr.name))) {
       break
     }
+    if (stopAfterSuccessfulSendMessage && toolResults.some(tr => tr.name === 'send_message' && isSuccessfulSendMessageResult(tr.result))) {
+      break
+    }
 
     // 将本轮 assistant 消息（含工具调用）加入对话
     // 若是 XML 解析的工具调用，assistant 消息用文本形式（避免 MiniMax 不支持 tool_calls 格式回放）
@@ -974,7 +986,7 @@ export async function callLLM({
       messages.push({
         role: 'user',
         content: sentMessage
-          ? `Tool execution results:\n${resultSummary}\n\nMessage sent. If you still need to send additional separate messages, call send_message again now. Otherwise end this round.`
+          ? `Tool execution results:\n${resultSummary}\n\nMessage sent successfully. Do not call send_message again for status/confirmation. End this round now unless the user explicitly requested multiple separate messages.`
           : toolLoopStopReason
             ? buildToolLoopStopNudge(toolLoopStopReason, lastToolResult)
             : `Tool execution results:\n${resultSummary}\n\nContinue completing the task. If this is a user message and the information is sufficient, call send_message to give the user a final reply. If a tool failed, explain the failure and available clues; do not end silently.`,
@@ -1012,7 +1024,7 @@ export async function callLLM({
       } else if (sentMessage) {
         messages.push({
           role: 'user',
-          content: 'Message sent. If you still need to send additional separate messages to the user, call send_message again now. Otherwise end this round.',
+          content: 'Message sent successfully. Do not call send_message again for status/confirmation. End this round now unless the user explicitly requested multiple separate messages.',
         })
       } else if (mustReply) {
         messages.push({
