@@ -54,6 +54,21 @@ const ADMIN_TOOLS       = [
   'set_location', 'set_agent_name', 'manage_app',
 ]
 
+// 这些是记忆识别器/整合器内部工具，不属于主对话回合。
+// 如果它们从 action_logs 被“保活”进主 LLM，模型会把真实用户消息也当成
+// “识别器任务”来 skip_recognition，表现就是前端一直显示“跳过识别”且不回复。
+const INTERNAL_MEMORY_TOOLS = new Set([
+  'skip_recognition',
+  'skip_consolidation',
+  'merge_memories',
+  'downgrade_memory',
+  'upsert_memory',
+])
+
+export function isInternalMemoryTool(name = '') {
+  return INTERNAL_MEMORY_TOOLS.has(String(name || '').trim())
+}
+
 // 多模态生成（按 mmCaps gate；关键词命中后才注入对应工具）
 const MM_GEN_TOOLS = {
   tts:    'speak',
@@ -247,6 +262,7 @@ export function selectTools(ctx = {}) {
   if (Array.isArray(recentActionLog)) {
     for (const entry of recentActionLog) {
       const name = entry?.tool
+      if (isInternalMemoryTool(name)) continue
       if (typeof name === 'string' && name) out.add(name)
     }
   }

@@ -973,6 +973,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.11</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">修复一直“跳过识别”不回复：记忆识别器内部工具不再污染主对话。</p>
+                <ul class="release-note-points">
+                  <li>主对话工具列表强制过滤 skip_recognition 等记忆识别/整理内部工具。</li>
+                  <li>recent action log 注入也会过滤这些内部工具，避免历史 skip 状态影响新消息。</li>
+                  <li>微信群 @ 消息即使模型返回“已回复/无需补充”，也会被 fallback 纠正，不再静默跳过。</li>
+                  <li>新增 tool-router 测试，覆盖内部记忆工具不能通过 action log 保活进主对话。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.10</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

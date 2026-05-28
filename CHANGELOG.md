@@ -2,6 +2,29 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.11 - 2026-05-28
+
+### 修复一直“跳过识别”不回复
+
+- 修复微信群真实 @ 消息偶发被主对话模型调用 `skip_recognition` 跳过的问题。
+- 根因：`skip_recognition` 是记忆识别器内部工具，但它会进入 action log；工具路由器又会把最近 action log 里的工具“保活”进下一轮主对话，导致主模型把真实用户消息误当成“记忆识别任务”来跳过。
+- 现在主对话工具注入会强制过滤记忆识别/整理内部工具：`skip_recognition`、`skip_consolidation`、`merge_memories`、`downgrade_memory`、`upsert_memory`。
+- 注入给主模型的 recent action log 也会过滤这些内部工具，避免“最近一直 skip”的历史状态继续污染判断。
+- 微信群 @ fallback 扩展拦截“已回复/无需补充/对话结束”等错误兜底文本，避免把内部判断原样发到群里。
+
+### 验证
+
+- 新增 `npm run test:tool-router`。
+- `npm run test:tool-router` 通过，覆盖 action log 中的 `skip_recognition/upsert_memory/merge_memories` 不会注入主对话。
+- `node --check src/index.js` 通过。
+- `node --check src/memory/injector.js` 通过。
+- `node --check src/memory/tool-router.js` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.10 - 2026-05-28
 
 ### Wechaty 启动卡住自恢复修复

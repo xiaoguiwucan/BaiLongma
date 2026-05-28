@@ -17,7 +17,7 @@ import { getInstalledToolNames } from '../capabilities/marketplace/index.js'
 import { PRIMARY_USER_ID } from '../identity.js'
 import { extractKeywords } from './keywords.js'
 import { parseTemporalHints, stripTemporalWords } from './temporal-parser.js'
-import { selectTools } from './tool-router.js'
+import { isInternalMemoryTool, selectTools } from './tool-router.js'
 
 // 旧 import 路径兼容：focus.js / 其他模块也能从 injector 拿到 extractKeywords
 export { extractKeywords }
@@ -353,7 +353,7 @@ export async function runInjector({ message, state, hint = '' }) {
   // —— 按需注入工具（动态上下文记忆池第 4 步）——
   // 之前把 ~35 个工具全量注入，每轮 6-9K token 大头在这。改成按意图分组：
   // tool-router.js 看消息正文 + 上下文标志 + ActionLog 保活 + Fallback 安全网。
-  const actionLog = getRecentActionLogs(10)
+  const actionLog = getRecentActionLogs(10).filter(item => !isInternalMemoryTool(item?.tool))
   const prefetchedItems = getValidPrefetchCache()
 
   const uiSignals = getUnconsumedUISignals(60_000)

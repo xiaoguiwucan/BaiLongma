@@ -348,6 +348,23 @@ function hasNonMessageToolCall(toolCallLog = []) {
   return toolCallLog.some(t => t.name && t.name !== 'send_message')
 }
 
+const MAIN_TURN_BLOCKED_TOOLS = new Set([
+  // 这些工具只属于记忆识别器/整合器。主对话回合不能暴露，否则模型会把用户消息
+  // 误当成“记忆识别任务”并调用 skip_recognition，造成真实 @ 消息不回复。
+  'skip_recognition',
+  'skip_consolidation',
+  'merge_memories',
+  'downgrade_memory',
+  'upsert_memory',
+])
+
+function sanitizeMainTurnTools(tools = []) {
+  const list = Array.isArray(tools) && tools.length ? tools : ['send_message']
+  const filtered = list.filter(name => !MAIN_TURN_BLOCKED_TOOLS.has(String(name || '').trim()))
+  if (!filtered.includes('send_message')) filtered.unshift('send_message')
+  return [...new Set(filtered)]
+}
+
 function isInternalToolProtocolFallback(content = '') {
   const value = String(content || '').trim()
   return /I did not actually call the required tool|cannot claim the operation completed|execute the tool first|required tool/i.test(value)
@@ -358,12 +375,13 @@ function isInvalidWechatMentionSkipFallback(content = '', msg = null) {
   if (social.platform !== 'wechaty-duty-group' || social.mentioned_self !== true) return false
   const compact = String(content || '').trim().replace(/[\s\u2005\u2006\u2007\u2008\u2009\u200a]/g, '')
   if (!compact || compact.length > 120) return false
-  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip)/iu.test(compact)
+  return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip|已(?:经)?回复|回复完毕|无(?:需|须)补充|无需进一步|对话已(?:完成|结束)|没有额外需要|无新内容需要处理|不用再回)/iu.test(compact)
 }
 
 function buildWechatMentionSkipFallbackCorrection(msg = null) {
   const sender = msg?.social?.sender_name ? `${msg.social.sender_name}，` : ''
-  return `${sender}我在。刚才把这条 @ 消息误判成“没叫我”了；现在已改成只要微信元数据确认 @ 我就必回，不再看昵称。你刚才那句我重新处理一下。`
+  const userText = String(msg?.social?.user_text || msg?.content || '').replace(/\s+/g, ' ').trim()
+  return `${sender}我在。刚才把这条 @ 消息误判成“已处理/不用回”了；现在已改成只要微信元数据确认 @ 我就必回。${userText ? `你刚才说的是：${userText.slice(0, 80)}` : '你刚才那句再发我会直接处理。'}`
 }
 
 // Fallback 投递：当模型未按协议调 send_message 时由主循环代为投递。
@@ -1173,7 +1191,7 @@ async function runTurn(input, label, msg = null) {
       systemPrompt,
       message: input,
       messages: llmMessages,
-      tools: injection.tools || ['send_message'],
+      tools: sanitizeMainTurnTools(injection.tools),
       maxTokens: undefined,
       temperature: config.temperature,
       signal: controller.signal,

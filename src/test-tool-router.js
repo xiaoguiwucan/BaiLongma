@@ -163,6 +163,25 @@ function hasNone(tools, names) {
     `9) actionLog保活：上轮用过的工具被强制注入 (got: ${tools.join(',')})`)
 }
 
+// ====== 9b) 记忆识别/整理内部工具不能通过 ActionLog 污染主对话 ======
+{
+  const tools = selectTools({
+    messageBody: '@小风 现在用的啥模型',
+    isTick: false,
+    senderId: 'wechaty:room:test:member:a',
+    recentActionLog: [
+      { tool: 'skip_recognition', timestamp: '2026-05-28T10:00:00Z' },
+      { tool: 'upsert_memory', timestamp: '2026-05-28T10:01:00Z' },
+      { tool: 'merge_memories', timestamp: '2026-05-28T10:02:00Z' },
+      { tool: 'fetch_url', timestamp: '2026-05-28T10:03:00Z' },
+    ],
+  })
+  assert(!has(tools, 'skip_recognition') && !has(tools, 'upsert_memory') && !has(tools, 'merge_memories'),
+    `9b) 内部记忆工具不能注入主对话 (got: ${tools.join(',')})`)
+  assert(has(tools, 'fetch_url'),
+    `9b) 普通工具仍可通过 actionLog 保活 (got: ${tools.join(',')})`)
+}
+
 // ====== 10) 多模态生成 gate：mmCaps 没配 → 不注入 ======
 {
   const tools = selectTools({
