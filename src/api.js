@@ -11,7 +11,7 @@ import { getQuotaStatus } from './quota.js'
 import { isRunning, stopLoop, startLoop } from './control.js'
 import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
-import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, getWeChatGroupDigestConfig, setWeChatGroupDigestConfig, WECHATY_PERSONA_PRESETS, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig, upsertLLMProfile, deleteLLMProfile, selectLLMProfile, setLLMFailoverConfig, getWechatMemeConfig, setWechatMemeConfig, getSkillsConfig, setSkillImageConfig } from './config.js'
+import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, getWeChatGroupDigestConfig, setWeChatGroupDigestConfig, WECHATY_PERSONA_PRESETS, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig, upsertLLMProfile, deleteLLMProfile, selectLLMProfile, testLLMProfileConnection, setLLMFailoverConfig, getWechatMemeConfig, setWechatMemeConfig, getSkillsConfig, setSkillImageConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
@@ -1103,6 +1103,24 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           emitEvent('model_switched', { provider: status.provider, model: status.model, profile })
           emitEvent('llm_profiles_updated', { activeProfileId: status.activeProfileId, profiles: status.profiles, failover: status.failover })
           jsonResponse(res, 200, { ok: true, profile, llm: status })
+        } catch (err) {
+          jsonResponse(res, 400, { ok: false, error: err.message })
+        }
+      })
+      return
+    }
+
+    // POST /settings/llm-profile/test — test connectivity for one saved model
+    if (req.method === 'POST' && url.pathname === '/settings/llm-profile/test') {
+      const chunks = []
+      req.on('data', chunk => chunks.push(chunk))
+      req.on('end', async () => {
+        try {
+          const { id } = JSON.parse(Buffer.concat(chunks).toString('utf-8') || '{}')
+          const result = await testLLMProfileConnection(id)
+          const status = getActivationStatus()
+          emitEvent('llm_profiles_updated', { activeProfileId: status.activeProfileId, profiles: status.profiles, failover: status.failover })
+          jsonResponse(res, 200, { ...result, llm: status })
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
         }

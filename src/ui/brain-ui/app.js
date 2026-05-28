@@ -2329,6 +2329,7 @@ function initTTSSettings() {
             ${profile.lastError ? `<p class="llm-profile-error">上次错误：${escapeHtml(profile.lastError)}</p>` : ""}
             <div class="llm-profile-actions">
               <button class="settings-save-btn" data-action="select" type="button"${profile.current ? " disabled" : ""}>设为当前</button>
+              <button class="settings-save-btn" data-action="test" type="button">测试连通</button>
               <button class="settings-save-btn" data-action="edit" type="button">编辑</button>
               <button class="settings-save-btn" data-action="toggle" type="button">${profile.enabled === false ? "开启" : "关闭"}</button>
               <button class="settings-save-btn" data-action="up" type="button"${idx === 0 ? " disabled" : ""}>上移</button>
@@ -4029,6 +4030,7 @@ function initTTSSettings() {
     } catch {
       showFeedback(wechatyDutyFeedback, "删除请求失败", true);
     } finally {
+      if (action === "test") btn.textContent = "测试连通";
       btn.disabled = false;
     }
   });
@@ -4574,6 +4576,10 @@ function initTTSSettings() {
       if (action === "select") {
         endpoint = `${API}/settings/llm-profile/select`;
         body = { id };
+      } else if (action === "test") {
+        endpoint = `${API}/settings/llm-profile/test`;
+        body = { id };
+        btn.textContent = "测试中…";
       } else if (action === "delete") {
         if (!confirm(`删除模型配置“${profile.name}”？`)) return;
         endpoint = `${API}/settings/llm-profile/delete`;
@@ -4600,10 +4606,14 @@ function initTTSSettings() {
       });
       const data = await res.json();
       if (data.ok) {
-        showFeedback(llmFeedback, action === "select" ? "已切换当前模型" : "模型池已更新");
+        showFeedback(llmFeedback, action === "test" ? `连通成功（${Math.round((data.latencyMs || 0) / 1000)} 秒）` : (action === "select" ? "已切换当前模型" : "模型池已更新"));
         loadSettings();
       } else {
-        showFeedback(llmFeedback, data.error || "操作失败", true);
+        showFeedback(llmFeedback, action === "test" ? `连通失败：${data.error || "未知错误"}` : (data.error || "操作失败"), true);
+        if (data.llm) {
+          renderLLMFailover(data.llm.failover || cachedLLMFailover);
+          renderLLMProfiles(data.llm.profiles || cachedLLMProfiles, data.llm);
+        } else loadSettings();
       }
     } catch {
       showFeedback(llmFeedback, "请求失败", true);

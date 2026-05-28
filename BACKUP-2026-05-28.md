@@ -1,4 +1,20 @@
 
+## v0.4.35 - 2026-05-29
+
+### 新增
+- LLM 模型池每个模型卡片新增「测试连通」按钮。
+- 点击后后端会用该模型发起一次轻量聊天补全检测，成功后状态变为绿色「连通」，失败后状态变为红色「不通」并显示错误原因。
+- 测试过程中按钮会显示「测试中…」，完成后显示连通耗时。
+
+### 后端
+- 新增 `POST /settings/llm-profile/test` 接口。
+- 测试成功会更新 `lastSuccessAt` 并清空 `lastError`；测试失败会更新 `lastFailedAt` 和 `lastError`，但不会把模型加入自动冷却，避免手动检测影响故障切换策略。
+
+### 验证
+- 通过 node --check：src/config.js、src/api.js、src/ui/brain-ui/app.js。
+- 通过 npm run test:wechat-guard。
+- 通过 npm run test:wechat-record-all。
+
 ## v0.4.34 - 2026-05-29
 
 ### 优化

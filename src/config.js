@@ -882,6 +882,34 @@ export async function upsertLLMProfile(updates = {}) {
   }
 }
 
+
+export async function testLLMProfileConnection(id) {
+  const profile = config.llmProfiles.find(p => p.id === id)
+  if (!profile) throw new Error('未找到这个模型配置')
+  const startedAt = Date.now()
+  try {
+    const validated = await validateLLMProfileConnection(profile)
+    profile.provider = validated.provider
+    profile.model = validated.model
+    profile.apiKey = validated.apiKey
+    profile.baseURL = validated.baseURL
+    profile.lastError = ''
+    profile.lastFailedAt = ''
+    profile.cooldownUntil = ''
+    profile.lastSuccessAt = nowIso()
+    profile.updatedAt = nowIso()
+    persistLLMState()
+    return { ok: true, latencyMs: Date.now() - startedAt, profile: publicLLMProfile(profile), profiles: getLLMProfiles(), failover: getLLMFailoverConfig() }
+  } catch (err) {
+    profile.lastError = getProviderErrorMessage(err).slice(0, 500)
+    profile.lastFailedAt = nowIso()
+    profile.cooldownUntil = ''
+    profile.updatedAt = nowIso()
+    persistLLMState()
+    return { ok: false, latencyMs: Date.now() - startedAt, error: profile.lastError, profile: publicLLMProfile(profile), profiles: getLLMProfiles(), failover: getLLMFailoverConfig() }
+  }
+}
+
 export function deleteLLMProfile(id) {
   const idx = config.llmProfiles.findIndex(p => p.id === id)
   if (idx < 0) throw new Error('未找到这个模型配置')
