@@ -6,7 +6,7 @@ import { paths } from '../paths.js'
 
 const LIMIT_FILE = path.join(paths.dataDir, 'skill-image-generation-limits.json')
 const OUTPUT_DIR = path.join(paths.dataDir, 'generated-images')
-const IMAGE_REQUEST_RE = /(?:生成|画|绘制|做|制作|出|来|给).{0,8}(?:图片|图像|插画|海报|头像|壁纸|图|照片)|(?:生图|画图|生成图|生成图片|AI图|ai图|出图)/iu
+const IMAGE_REQUEST_RE = /(?:生成|画|绘制|做|制作|出|来|给|设计|创作).{0,40}(?:图片|图像|插画|海报|头像|壁纸|封面|logo|图标|照片|图)|(?:生图|画图|生成图|生成图片|AI图|ai图|出图)/iu
 const HIGH_QUALITY_RE = /(?:高清|高质量|精细|2k|4k|8k|超清|大图|高分辨率|高分辨)/iu
 
 function readLimits() {

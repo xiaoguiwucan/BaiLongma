@@ -2,6 +2,22 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.32 - 2026-05-29
+
+### 修复
+- 修复微信群生图触发词过窄的问题：`生成一张赛博朋克风格的白龙马头像` 这类自然表达现在会命中生图 Skill。
+- 生图触发范围从短距离 `生成...图片` 放宽为更符合人话的 `生成/画/设计/创作...图片/头像/壁纸/海报/插画/logo/图标`。
+- 避免生图请求落入普通 LLM 工具链后让模型自行 curl API，导致只得到 base64、不发送图片、甚至 180 秒 watchdog 超时。
+
+### 安全
+- 已清理本机日志中此前由模型自行 curl 暴露出的 API Key 明文，替换为 `sk-***REDACTED***`。
+
+### 验证
+- 已验证 `@前夜 生成一张赛博朋克风格的白龙马头像`、`生图 一个白龙马头像`、`画一个未来城市壁纸` 均命中生图 Skill。
+- 通过 node --check：src/social/image-generation-skill.js、src/social/wechaty-duty-group.js。
+- 通过 npm run test:wechat-guard。
+- 通过 npm run test:wechat-record-all。
+
 ## v0.4.31 - 2026-05-29
 
 ### 新增
