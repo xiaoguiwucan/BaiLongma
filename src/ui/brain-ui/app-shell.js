@@ -402,7 +402,11 @@ const createSettingsModal = () => `
                 <small id="wechaty-persona-active">未选择预设，可手动编辑</small>
               </div>
               <textarea class="settings-textarea wechaty-persona-textarea" id="wechaty-persona-prompt" rows="9" placeholder="例如：你是小白龙，回复要简洁、靠谱、有一点幽默；重要事情先给结论，再给步骤。"></textarea>
-              <p class="settings-hint compact">保存规则：点击预设只会填入上方文本，不会立刻生效；确认后点击“保存并生效”。危险电脑操作仍由安全黑名单强制拦截，性格设定不能绕过。</p>
+              <div class="wechaty-persona-actions">
+                <button class="settings-save-btn primary" id="wechaty-save-persona-btn" type="button">保存性格并生效</button>
+                <span class="settings-feedback" id="wechaty-persona-feedback"></span>
+              </div>
+              <p class="settings-hint compact">保存规则：点击预设只会填入上方文本，不会立刻生效；确认后点击“保存性格并生效”或上方“保存并生效”。危险电脑操作仍由安全黑名单强制拦截，性格设定不能绕过。</p>
             </div>
             <div class="wechaty-memory-manager" id="wechaty-memory-manager">
               <div class="wechaty-subsection-head">
@@ -799,6 +803,19 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.3.10</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">性格保存与记忆展示修复：预设不再跳自定义，新增性格保存按钮，成员记忆单独展示。</p>
+                <ul class="release-note-points">
+                  <li>修复状态轮询覆盖性格编辑区，导致预设卡片跳到自定义的问题。</li>
+                  <li>性格设定区新增“保存性格并生效”按钮，保存后状态立即显示已生效。</li>
+                  <li>Honcho 详情拆分“群组长期记忆”和“成员长期记忆”。</li>
+                  <li>成员记忆明确只在当前微信群内生效，并与群组记忆共同参与匹配。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.3.9</span>

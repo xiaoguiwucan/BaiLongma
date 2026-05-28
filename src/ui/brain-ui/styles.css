@@ -4157,12 +4157,29 @@ body.person-card-mode .person-card-panel,
 .wechaty-persona-textarea {
   min-height: 172px;
 }
+.wechaty-persona-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 10px;
+  flex-wrap: wrap;
+}
 .settings-save-btn.subtle {
   width: auto;
   padding: 0 12px;
   background: transparent;
   border: 1px solid var(--line);
   color: var(--ink2);
+}
+.settings-save-btn.primary {
+  width: auto;
+  min-width: 132px;
+  background: linear-gradient(135deg, rgba(87,214,255,0.22), rgba(114,255,195,0.18));
+  border-color: rgba(87,214,255,0.55);
+  color: var(--ink);
+}
+.settings-save-btn.primary:hover {
+  background: linear-gradient(135deg, rgba(87,214,255,0.32), rgba(114,255,195,0.24));
 }
 .settings-hint.compact {
   margin-top: 8px;
@@ -4291,6 +4308,12 @@ body.person-card-mode .person-card-panel,
   font-weight: 700;
   margin: 6px 0;
 }
+.wechaty-memory-section-sub {
+  color: var(--ink3);
+  font-size: 11px;
+  line-height: 1.5;
+  margin: -2px 0 8px;
+}
 .wechaty-memory-item {
   color: var(--ink2);
   font-size: 11px;
@@ -4303,6 +4326,14 @@ body.person-card-mode .person-card-panel,
 .wechaty-memory-item p { margin: 4px 0 0; white-space: pre-wrap; }
 .wechaty-memory-item.summary b { color: var(--warm); }
 .wechaty-memory-item.conclusion b { color: #b6f3c1; }
+.wechaty-memory-item.conclusion.member {
+  border-top-color: rgba(255,212,121,0.20);
+  background: rgba(255,212,121,0.035);
+  border-radius: 10px;
+  padding-left: 8px;
+  padding-right: 8px;
+}
+.wechaty-memory-item.conclusion.member b { color: #ffd479; }
 .wechaty-memory-item span { display:block; color: var(--dim); font-size: 10px; margin-top: 2px; }
 .wechaty-memory-delete {
   margin-top: 6px;

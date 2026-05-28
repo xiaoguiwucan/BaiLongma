@@ -2048,6 +2048,8 @@ function initTTSSettings() {
   const wechatyPersonaCurrentName = document.getElementById("wechaty-persona-current-name");
   const wechatyPersonaCurrentState = document.getElementById("wechaty-persona-current-state");
   const wechatyPersonaResetBtn = document.getElementById("wechaty-persona-reset-btn");
+  const wechatySavePersonaBtn = document.getElementById("wechaty-save-persona-btn");
+  const wechatyPersonaFeedback = document.getElementById("wechaty-persona-feedback");
   const wechatyRefreshMemoryBtn = document.getElementById("wechaty-refresh-memory-btn");
   const wechatyClearGroupMemoryBtn = document.getElementById("wechaty-clear-group-memory-btn");
   const wechatyMemoryGroups = document.getElementById("wechaty-memory-groups");
@@ -2383,11 +2385,12 @@ function initTTSSettings() {
 
   function applyWechatyDutyConfig(config = {}, status = {}) {
     if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
-    if (Object.prototype.hasOwnProperty.call(config, "personaPrompt")) {
+    const hasPersonaPrompt = Object.prototype.hasOwnProperty.call(config, "personaPrompt");
+    if (hasPersonaPrompt) {
       wechatySavedPersonaPrompt = config.personaPrompt || "";
       wechatySavedPersonaPresetId = config.personaPresetId || describeWechatyPersona(wechatySavedPersonaPrompt).id;
     }
-    if (wechatyPersonaPrompt && document.activeElement !== wechatyPersonaPrompt) {
+    if (hasPersonaPrompt && wechatyPersonaPrompt && document.activeElement !== wechatyPersonaPrompt) {
       wechatyPersonaPrompt.value = config.personaPrompt || "";
       updateWechatyPersonaActiveLabel(wechatyPersonaPrompt.value);
     } else {
@@ -2543,18 +2546,27 @@ function initTTSSettings() {
       if (Array.isArray(data.errors) && data.errors.length) parts.push(`有 ${data.errors.length} 个读取提示`);
       wechatyMemoryStat.textContent = parts.join(" · ");
     }
-    const summaryHtml = summaries.length ? `<section class="wechaty-memory-section">
-      <div class="wechaty-memory-section-title">自动摘要</div>
-      ${summaries.map(item => `<article class="wechaty-memory-item summary"><b>${escapeHtml(item.type || "summary")}</b><p>${escapeHtml(item.content || "")}</p><span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span></article>`).join("")}
-    </section>` : "";
-    const conclusionHtml = conclusions.length ? `<section class="wechaty-memory-section">
-      <div class="wechaty-memory-section-title">长期结论 / 知识</div>
-      ${conclusions.map(item => `<article class="wechaty-memory-item conclusion">
+    const groupConclusions = conclusions.filter(item => item.scope !== "member");
+    const memberConclusions = conclusions.filter(item => item.scope === "member");
+    const renderConclusionItem = (item) => `<article class="wechaty-memory-item conclusion ${escapeHtml(item.scope || "group")}">
         <b>${escapeHtml(item.scope === "member" ? "成员记忆" : "群组记忆")}</b>
         <p>${escapeHtml(item.content || "")}</p>
         <span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span>
         <button class="wechaty-memory-delete" type="button" data-kind="conclusion" data-item-id="${escapeHtml(item.id)}" data-observer-id="${escapeHtml(item.observerId || "bailongma_assistant")}" data-observed-id="${escapeHtml(item.observedId || "")}">删除这条结论</button>
-      </article>`).join("")}
+      </article>`;
+    const summaryHtml = summaries.length ? `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">自动摘要</div>
+      ${summaries.map(item => `<article class="wechaty-memory-item summary"><b>${escapeHtml(item.type || "summary")}</b><p>${escapeHtml(item.content || "")}</p><span>${escapeHtml(String(item.createdAt || "").slice(0, 16))}</span></article>`).join("")}
+    </section>` : "";
+    const groupConclusionHtml = groupConclusions.length ? `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">群组长期记忆</div>
+      <div class="wechaty-memory-section-sub">当前微信群通用的规则、背景、群设定和公共结论，只在这个群内使用。</div>
+      ${groupConclusions.map(renderConclusionItem).join("")}
+    </section>` : "";
+    const memberConclusionHtml = memberConclusions.length ? `<section class="wechaty-memory-section">
+      <div class="wechaty-memory-section-title">成员长期记忆</div>
+      <div class="wechaty-memory-section-sub">按当前微信群里的成员单独隔离；和群组记忆一起参与匹配，但不会串到其他群。</div>
+      ${memberConclusions.map(renderConclusionItem).join("")}
     </section>` : "";
     const messageHtml = messages.length ? `<section class="wechaty-memory-section">
       <div class="wechaty-memory-section-title">原始消息记录（Honcho session）</div>
@@ -2563,8 +2575,8 @@ function initTTSSettings() {
     const errorHtml = Array.isArray(data.errors) && data.errors.length
       ? `<div class="wechaty-memory-warning">${data.errors.map(err => `<div>${escapeHtml(err)}</div>`).join("")}</div>`
       : "";
-    wechatyMemoryPreview.innerHTML = errorHtml + (summaryHtml || conclusionHtml || messageHtml
-      ? [summaryHtml, conclusionHtml, messageHtml].filter(Boolean).join("")
+    wechatyMemoryPreview.innerHTML = errorHtml + (summaryHtml || groupConclusionHtml || memberConclusionHtml || messageHtml
+      ? [summaryHtml, groupConclusionHtml, memberConclusionHtml, messageHtml].filter(Boolean).join("")
       : '<div class="wechaty-empty">Honcho 当前没有这个群的可展示记忆。只有程序真实收到群消息、@ 回复或你手动添加记忆后才会出现。</div>');
   }
 
@@ -2859,13 +2871,15 @@ function initTTSSettings() {
     }
   });
 
-  wechatySaveGroupsBtn?.addEventListener("click", async () => {
-    const groupNames = collectWechatySelectedRooms();
-    if (wechatyDutyEnabled?.checked && groupNames.length === 0) {
-      showFeedback(wechatyDutyFeedback, "请至少选择一个群", true);
+  async function saveWechatyDutySettings({ requireGroups = true, feedbackEl = wechatyDutyFeedback } = {}) {
+    let groupNames = collectWechatySelectedRooms();
+    if (!groupNames.length && !requireGroups) groupNames = [...wechatyConfiguredGroupNames];
+    if (wechatyDutyEnabled?.checked && requireGroups && groupNames.length === 0) {
+      showFeedback(feedbackEl, "请至少选择一个群", true);
       return;
     }
-    wechatySaveGroupsBtn.disabled = true;
+    if (wechatySaveGroupsBtn) wechatySaveGroupsBtn.disabled = true;
+    if (wechatySavePersonaBtn) wechatySavePersonaBtn.disabled = true;
     try {
       const res = await fetch(`${API}/settings/social/wechaty-duty-group`, {
         method: "POST",
@@ -2880,18 +2894,22 @@ function initTTSSettings() {
       const data = await res.json();
       if (data.ok) {
         applyWechatyDutyConfig(data.wechatyDutyGroup, data.status);
-        showFeedback(wechatyDutyFeedback, data.wechatyDutyGroup?.enabled === false ? "已关闭" : "已保存并生效");
+        showFeedback(feedbackEl, data.wechatyDutyGroup?.enabled === false ? "已关闭" : "已保存并生效");
         setTimeout(() => refreshWechatyRooms({ autoStart: false }), 1200);
         setTimeout(() => refreshWechatyMemoryOverview(), 1400);
       } else {
-        showFeedback(wechatyDutyFeedback, data.error || "保存失败", true);
+        showFeedback(feedbackEl, data.error || "保存失败", true);
       }
     } catch {
-      showFeedback(wechatyDutyFeedback, "请求失败", true);
+      showFeedback(feedbackEl, "请求失败", true);
     } finally {
-      wechatySaveGroupsBtn.disabled = false;
+      if (wechatySaveGroupsBtn) wechatySaveGroupsBtn.disabled = false;
+      if (wechatySavePersonaBtn) wechatySavePersonaBtn.disabled = false;
     }
-  });
+  }
+
+  wechatySaveGroupsBtn?.addEventListener("click", () => saveWechatyDutySettings({ requireGroups: true, feedbackEl: wechatyDutyFeedback }));
+  wechatySavePersonaBtn?.addEventListener("click", () => saveWechatyDutySettings({ requireGroups: false, feedbackEl: wechatyPersonaFeedback || wechatyDutyFeedback }));
 
   const fileSandboxToggle = document.getElementById("security-file-sandbox");
   const execSandboxToggle = document.getElementById("security-exec-sandbox");
