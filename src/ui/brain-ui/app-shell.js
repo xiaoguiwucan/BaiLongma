@@ -392,6 +392,11 @@ const createSettingsModal = () => `
               <div class="wechaty-persona-presets" id="wechaty-persona-presets">
                 <div class="wechaty-empty">正在读取性格预设…</div>
               </div>
+              <div class="wechaty-persona-current" id="wechaty-persona-current">
+                <span class="wechaty-persona-current-label">当前生效</span>
+                <b id="wechaty-persona-current-name">—</b>
+                <em id="wechaty-persona-current-state">读取中</em>
+              </div>
               <div class="wechaty-persona-editor-head">
                 <span>当前提示词</span>
                 <small id="wechaty-persona-active">未选择预设，可手动编辑</small>
@@ -794,6 +799,20 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.3.8</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群体验增强：网络梗理解、网络图边界、性格状态更明显、称呼身份即时记忆。</p>
+                <ul class="release-note-points">
+                  <li>v我50 / vw50 / 疯狂星期四等中文网络梗会按群聊语境理解。</li>
+                  <li>允许公开网络图片/表情包链接，禁止本机文件、桌面文件、截图、相册外发。</li>
+                  <li>性格设定显示“当前生效 / 已生效 / 有未保存修改”，并加入自定义性格卡片。</li>
+                  <li>“以后叫我大哥 / 我是你大哥 / 我叫xxx”会即时写入本群 Honcho 长期记忆。</li>
+                  <li>新增 test:wechat-memory 自动测试。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.3.7</span>

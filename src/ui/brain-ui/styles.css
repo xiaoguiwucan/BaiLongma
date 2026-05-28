@@ -4027,7 +4027,7 @@ body.person-card-mode .person-card-panel,
 }
 .wechaty-persona-presets {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 10px;
   margin: 10px 0 12px;
 }
@@ -4052,6 +4052,11 @@ body.person-card-mode .person-card-panel,
   border-color: rgba(87,214,255,0.72);
   background:
     linear-gradient(135deg, rgba(87,214,255,0.18), rgba(90,255,185,0.08)),
+    rgba(0,0,0,0.16);
+}
+.wechaty-persona-preset.custom {
+  background:
+    linear-gradient(135deg, rgba(255, 212, 121, 0.12), rgba(255,255,255,0.025)),
     rgba(0,0,0,0.16);
 }
 .wechaty-persona-preset-top {
@@ -4079,6 +4084,55 @@ body.person-card-mode .person-card-panel,
   color: var(--ink2);
   font-size: 11px;
   line-height: 1.55;
+}
+.wechaty-persona-live-badge {
+  display: inline-flex;
+  min-height: 16px;
+  margin-top: 8px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #72ffc3;
+  background: rgba(114,255,195,0.10);
+  font-size: 10px;
+  font-weight: 700;
+}
+.wechaty-persona-live-badge:empty {
+  display: none;
+}
+.wechaty-persona-current {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(114,255,195,0.24);
+  border-radius: 12px;
+  padding: 9px 11px;
+  margin: 0 0 11px;
+  background: linear-gradient(135deg, rgba(114,255,195,0.10), rgba(87,214,255,0.05));
+}
+.wechaty-persona-current-label {
+  color: var(--ink3);
+  font-size: 10px;
+  letter-spacing: .12em;
+}
+.wechaty-persona-current b {
+  color: var(--ink);
+  font-size: 13px;
+}
+.wechaty-persona-current em {
+  margin-left: auto;
+  font-style: normal;
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 10px;
+  font-weight: 800;
+}
+.wechaty-persona-current em.saved {
+  color: #72ffc3;
+  background: rgba(114,255,195,0.12);
+}
+.wechaty-persona-current em.dirty {
+  color: #ffd479;
+  background: rgba(255,212,121,0.13);
 }
 .wechaty-persona-editor-head {
   display: flex;

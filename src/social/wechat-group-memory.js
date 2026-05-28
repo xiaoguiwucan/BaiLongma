@@ -2,6 +2,7 @@ import { Honcho } from '@honcho-ai/sdk'
 import { nowTimestamp } from '../time.js'
 import { getHonchoConfig } from '../config.js'
 import { extractWeChatGroupId } from './wechat-groups.js'
+import { extractWeChatExplicitMemories } from './wechat-memory-extractor.js'
 
 let client = null
 let cachedKey = ''
@@ -328,6 +329,42 @@ export async function createWeChatGroupManualMemory({ groupId, groupName = '', c
     category,
     items: created.map(item => normalizeConclusionItem(item, memberPeer ? 'member' : 'group')),
   }
+}
+
+export async function recordWeChatGroupExplicitMemories({ groupId, groupName = '', senderId = '', senderName = '', text = '', source = 'wechaty' } = {}) {
+  const memories = extractWeChatExplicitMemories({ text, senderName, senderId })
+  if (!memories.length) return { ok: true, skipped: true, count: 0, memories: [] }
+  const written = []
+  const errors = []
+  for (const memory of memories) {
+    try {
+      const memberResult = await createWeChatGroupManualMemory({
+        groupId,
+        groupName,
+        senderId,
+        senderName,
+        content: memory.content,
+        category: memory.category || 'explicit',
+      })
+      written.push({ scope: 'member', category: memory.category, result: memberResult })
+    } catch (err) {
+      errors.push(`member:${err?.message || err}`)
+    }
+    if (memory.groupContent && memory.groupContent !== memory.content) {
+      try {
+        const groupResult = await createWeChatGroupManualMemory({
+          groupId,
+          groupName,
+          content: memory.groupContent,
+          category: memory.category || 'explicit',
+        })
+        written.push({ scope: 'group', category: memory.category, result: groupResult })
+      } catch (err) {
+        errors.push(`group:${err?.message || err}`)
+      }
+    }
+  }
+  return { ok: errors.length === 0, source, count: written.length, memories, written, errors }
 }
 
 export async function getWeChatGroupMemoryContext({ groupId, senderId = '', senderName = '', query = '', limit = 16 } = {}) {

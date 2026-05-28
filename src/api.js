@@ -1015,6 +1015,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
             enabled: body.enabled,
             groupNames: body.group_names || body.groupNames || body.groups,
             personaPrompt: body.persona_prompt ?? body.personaPrompt,
+            personaPresetId: body.persona_preset_id ?? body.personaPresetId,
           })
           if (cfg.enabled) {
             // 保存群选择不能重启 Wechaty。重启会破坏刚扫码成功的 Web 微信会话，导致用户保存后立刻掉线。

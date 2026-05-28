@@ -42,6 +42,21 @@ export function shouldWakeInWeChatGroup(text = '', { mentionedSelf = false } = {
   return !!mentionedSelf
 }
 
+export function buildWeChatMemeHints(text = '') {
+  const value = String(text || '').trim()
+  const hints = []
+  if (/(?:^|[^\w])(?:v|V|微|薇|喂|w|W)\s*(?:我|wo)?\s*50(?:元|块|￥)?|vw50|v我50|V我50|疯狂星期四|肯德基|kfc/iu.test(value)) {
+    hints.push('“v我50 / V我50 / vw50 / 疯狂星期四”通常是中文互联网梗，意思是开玩笑让对方微信/转账 50 元或接 KFC 疯狂星期四梗；不要误判为站点种子编号、图片缩写或需要查看本机文件。')
+  }
+  if (/(尊嘟假嘟|栓q|泰裤辣|绝绝子|蚌埠住|绷不住|典|急了|赢麻了|乐|吃瓜|破防|上强度|抽象|整活|电子榨菜|遥遥领先)/u.test(value)) {
+    hints.push('用户可能在说中文网络梗/玩笑；优先按群聊语境轻松接话，不要一本正经要求对方解释。')
+  }
+  if (/(表情包|梗图|配图|斗图|发个图|来张图|找张图|图片)/u.test(value)) {
+    hints.push('群聊里允许使用公开网络图片、网络表情包或图片链接；禁止读取、上传或发送本机文件、桌面文件、file:// 路径、截图、相册和私有图片。')
+  }
+  return hints.length ? `<wechat-meme-and-media-hints>\n${hints.map(h => `- ${h}`).join('\n')}\n</wechat-meme-and-media-hints>` : ''
+}
+
 export function archiveWeChatGroupMessage({ groupId, senderId = '', text, timestamp = nowTimestamp() } = {}) {
   const groupExternalId = makeWeChatGroupExternalId(groupId)
   const content = String(text || '').trim()
@@ -147,6 +162,7 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
   const personaPrompt = String(getWechatyDutyGroupConfig().personaPrompt || '').trim()
   const rawText = String(text || '').trim()
   const commandText = stripLeadingWechatMentions(rawText) || rawText
+  const memeHints = buildWeChatMemeHints(commandText || rawText)
   const verifiedMentionBlock = mentionedSelf
     ? [
         '<wechat-mention-verification>',
@@ -164,7 +180,11 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     `用户原文：${rawText}`,
     `去掉开头 @ 后的实际请求：${commandText}`,
     '',
+    memeHints,
+    '',
     '请基于用户的实际请求回复。群聊场景下要简洁自然；如果用户只是玩笑/吐槽/骂人，也要正常接话或简短化解，不要说没叫你。',
+    '微信群媒体边界：可以理解、搜索和发送公开网络图片/表情包链接；绝对不能读取、上传、转发或描述本机文件、桌面文件、file:// 路径、截图、相册、私有图片或任何本机隐私资料。',
+    '如果用户让你“发图/找表情包”，优先找公开网络图或给网络关键词/链接；如果请求本机图片或本机文件，必须拒绝。',
     '如果是总结群聊，给出「结论/重点/待办/风险」；不要编造记录里没有的信息。注意：不同微信群的记忆必须严格隔离，只能使用当前群的记忆。',
     '',
     memoryContext || '<group-long-term-memory>（暂无当前群长期记忆）</group-long-term-memory>',

@@ -3,7 +3,7 @@ import { getClawbotCredentials, setClawbotCredentials, clearClawbotCredentials }
 import { upsertClawbotToken, getAllClawbotTokens } from '../db.js'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, shouldWakeInWeChatGroup, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
-import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply } from './wechat-group-memory.js'
+import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
 
 let client = null
 let currentQrUrl = null   // set during login, cleared after scan
@@ -151,6 +151,12 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
         console.warn(`[ClawBot] 群高危请求已拦截 group=${groupId} sender=${senderId} rules=${safety.hits.map(h => h.id).join(',')}`)
         return
       }
+
+      recordWeChatGroupExplicitMemories({ groupId, senderId, senderName: senderId, text, source: 'clawbot' })
+        .then(result => {
+          if (result?.count) console.log(`[Honcho] 已沉淀 ClawBot 群显式记忆 group=${groupId} sender=${senderId} count=${result.count}`)
+        })
+        .catch(err => console.warn(`[Honcho] ClawBot 显式群记忆写入失败：${err?.message || err}`))
 
       const prompt = await buildWeChatGroupCommandPrompt({ groupId, senderId, senderName: senderId, text, mentionedSelf: true })
       // 无 token 时仍可入队让本地窗口显示/处理；出站回群可能失败并在日志中提示。

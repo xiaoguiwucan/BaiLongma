@@ -2045,6 +2045,8 @@ function initTTSSettings() {
   const wechatyPersonaPrompt = document.getElementById("wechaty-persona-prompt");
   const wechatyPersonaPresets = document.getElementById("wechaty-persona-presets");
   const wechatyPersonaActive = document.getElementById("wechaty-persona-active");
+  const wechatyPersonaCurrentName = document.getElementById("wechaty-persona-current-name");
+  const wechatyPersonaCurrentState = document.getElementById("wechaty-persona-current-state");
   const wechatyPersonaResetBtn = document.getElementById("wechaty-persona-reset-btn");
   const wechatyRefreshMemoryBtn = document.getElementById("wechaty-refresh-memory-btn");
   const wechatyClearGroupMemoryBtn = document.getElementById("wechaty-clear-group-memory-btn");
@@ -2222,6 +2224,8 @@ function initTTSSettings() {
   let wechatyRoomsAreStale = false;
   let wechatyStatusPollTimer = null;
   let wechatyPersonaPresetCache = [];
+  let wechatySavedPersonaPrompt = "";
+  let wechatySavedPersonaPresetId = "custom";
 
   function formatWechatyTime(value) {
     if (!value) return '';
@@ -2262,16 +2266,41 @@ function initTTSSettings() {
     return wechatyPersonaPresetCache.find(preset => normalizePersonaPrompt(preset.prompt) === normalized) || null;
   }
 
+  function describeWechatyPersona(prompt = "", presetId = "") {
+    const matched = getActiveWechatyPersonaPreset(prompt);
+    if (matched) return { id: matched.id, name: matched.name, matched: true };
+    const savedPreset = wechatyPersonaPresetCache.find(preset => preset.id === presetId);
+    if (savedPreset && normalizePersonaPrompt(prompt) === normalizePersonaPrompt(savedPreset.prompt)) {
+      return { id: savedPreset.id, name: savedPreset.name, matched: true };
+    }
+    return { id: "custom", name: "自定义性格", matched: false };
+  }
+
+  function updateWechatyPersonaCurrentStatus() {
+    const prompt = wechatyPersonaPrompt?.value || "";
+    const current = describeWechatyPersona(wechatySavedPersonaPrompt || prompt, wechatySavedPersonaPresetId);
+    const dirty = normalizePersonaPrompt(prompt) !== normalizePersonaPrompt(wechatySavedPersonaPrompt);
+    if (wechatyPersonaCurrentName) wechatyPersonaCurrentName.textContent = current.name;
+    if (wechatyPersonaCurrentState) {
+      wechatyPersonaCurrentState.textContent = dirty ? "有未保存修改" : "已生效";
+      wechatyPersonaCurrentState.className = dirty ? "dirty" : "saved";
+    }
+  }
+
   function updateWechatyPersonaActiveLabel(prompt = wechatyPersonaPrompt?.value || "") {
     if (!wechatyPersonaActive) return;
     const active = getActiveWechatyPersonaPreset(prompt);
-    wechatyPersonaActive.textContent = active ? `已套用：${active.name}` : "自定义提示词";
+    const dirty = normalizePersonaPrompt(prompt) !== normalizePersonaPrompt(wechatySavedPersonaPrompt);
+    wechatyPersonaActive.textContent = active ? `编辑中：${active.name}${dirty ? "（未保存）" : ""}` : `编辑中：自定义性格${dirty ? "（未保存）" : ""}`;
     wechatyPersonaActive.className = active ? "matched" : "custom";
     wechatyPersonaPresets?.querySelectorAll(".wechaty-persona-preset").forEach(btn => {
-      const isActive = active?.id === btn.dataset.presetId;
+      const isActive = active?.id === btn.dataset.presetId || (!active && btn.dataset.presetId === "custom");
       btn.classList.toggle("active", isActive);
       btn.setAttribute("aria-pressed", isActive ? "true" : "false");
+      const badge = btn.querySelector?.(".wechaty-persona-live-badge");
+      if (badge) badge.textContent = isActive ? (dirty ? "待保存" : "正在使用") : "";
     });
+    updateWechatyPersonaCurrentStatus();
   }
 
   function renderWechatyPersonaPresets(presets = [], currentPrompt = "") {
@@ -2282,16 +2311,31 @@ function initTTSSettings() {
       updateWechatyPersonaActiveLabel(currentPrompt);
       return;
     }
-    wechatyPersonaPresets.innerHTML = wechatyPersonaPresetCache.map(preset => `
+    const presetCards = wechatyPersonaPresetCache.map(preset => `
       <button class="wechaty-persona-preset" type="button" data-preset-id="${escapeHtml(preset.id)}" aria-pressed="false">
         <span class="wechaty-persona-preset-top"><b>${escapeHtml(preset.name)}</b><em>${escapeHtml(preset.badge || "预设")}</em></span>
         <span class="wechaty-persona-preset-summary">${escapeHtml(preset.summary || "点击套用这个微信群助手性格。")}</span>
+        <span class="wechaty-persona-live-badge"></span>
       </button>
-    `).join("");
+    `);
+    presetCards.push(`
+      <button class="wechaty-persona-preset custom" type="button" data-preset-id="custom" aria-pressed="false">
+        <span class="wechaty-persona-preset-top"><b>自定义性格</b><em>自定义</em></span>
+        <span class="wechaty-persona-preset-summary">保留下方手写提示词，可自由设定说话风格、边界和群聊人设。</span>
+        <span class="wechaty-persona-live-badge"></span>
+      </button>
+    `);
+    wechatyPersonaPresets.innerHTML = presetCards.join("");
     updateWechatyPersonaActiveLabel(currentPrompt);
   }
 
   function applyWechatyPersonaPreset(presetId = "") {
+    if (presetId === "custom") {
+      wechatyPersonaPrompt?.focus?.();
+      updateWechatyPersonaActiveLabel(wechatyPersonaPrompt?.value || "");
+      showFeedback(wechatyDutyFeedback, "已切到自定义性格，编辑后点击保存并生效");
+      return;
+    }
     const preset = wechatyPersonaPresetCache.find(item => item.id === presetId);
     if (!preset || !wechatyPersonaPrompt) return;
     wechatyPersonaPrompt.value = preset.prompt || "";
@@ -2339,9 +2383,15 @@ function initTTSSettings() {
 
   function applyWechatyDutyConfig(config = {}, status = {}) {
     if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
+    if (Object.prototype.hasOwnProperty.call(config, "personaPrompt")) {
+      wechatySavedPersonaPrompt = config.personaPrompt || "";
+      wechatySavedPersonaPresetId = config.personaPresetId || describeWechatyPersona(wechatySavedPersonaPrompt).id;
+    }
     if (wechatyPersonaPrompt && document.activeElement !== wechatyPersonaPrompt) {
       wechatyPersonaPrompt.value = config.personaPrompt || "";
       updateWechatyPersonaActiveLabel(wechatyPersonaPrompt.value);
+    } else {
+      updateWechatyPersonaCurrentStatus();
     }
     wechatyConfiguredGroupNames = new Set((config.groupNames || status.group_names || []).map(v => String(v || '').trim()).filter(Boolean));
     wechatyRoomsAreStale = !!status.rooms_stale || (!!status.rooms?.length && status.online === false);
@@ -2820,7 +2870,12 @@ function initTTSSettings() {
       const res = await fetch(`${API}/settings/social/wechaty-duty-group`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ enabled: !!wechatyDutyEnabled?.checked, group_names: groupNames, persona_prompt: wechatyPersonaPrompt?.value || "" }),
+        body: JSON.stringify({
+          enabled: !!wechatyDutyEnabled?.checked,
+          group_names: groupNames,
+          persona_prompt: wechatyPersonaPrompt?.value || "",
+          persona_preset_id: describeWechatyPersona(wechatyPersonaPrompt?.value || "").id,
+        }),
       });
       const data = await res.json();
       if (data.ok) {

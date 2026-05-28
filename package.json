@@ -1,7 +1,7 @@
 {
   "name": "bailongma",
   "productName": "Bailongma",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "description": "A continuously running digital consciousness framework",
   "type": "module",
   "main": "electron/main.cjs",
@@ -20,7 +20,8 @@
     "smoke:tools": "node scripts/smoke-tools.mjs",
     "smoke:brain-ui": "node scripts/smoke-brain-ui.mjs",
     "smoke:social": "node scripts/smoke-social.mjs",
-    "test:wechat-guard": "node scripts/test-wechat-command-guard.mjs"
+    "test:wechat-guard": "node scripts/test-wechat-command-guard.mjs",
+    "test:wechat-memory": "node scripts/test-wechat-memory-extractor.mjs"
   },
   "dependencies": {
     "@honcho-ai/sdk": "^2.1.2",

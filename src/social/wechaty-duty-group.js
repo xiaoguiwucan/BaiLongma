@@ -3,7 +3,7 @@ import { WechatyBuilder, ScanStatus } from 'wechaty'
 import { PuppetWechat4u } from 'wechaty-puppet-wechat4u'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
-import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply } from './wechat-group-memory.js'
+import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -534,6 +534,12 @@ async function handleMessage(message) {
       recordWeChatGroupAssistantReply({ groupId, groupName: topic, reply: refusal, targetMemberName: senderName, source: 'wechaty' }).catch(() => {})
       return
     }
+
+    recordWeChatGroupExplicitMemories({ groupId, groupName: topic, senderId: talker?.id || senderName, senderName, text, source: 'wechaty' })
+      .then(result => {
+        if (result?.count) console.log(`[Honcho] 已沉淀群显式记忆 topic="${topic}" sender="${senderName}" count=${result.count}`)
+      })
+      .catch(err => console.warn(`[Honcho] 显式群记忆写入失败：${err?.message || err}`))
 
     emitEventRef?.('message_in', {
       from_id: groupExternalId,
