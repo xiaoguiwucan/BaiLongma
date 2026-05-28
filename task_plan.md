@@ -84,3 +84,9 @@
 - 不修改 AiMaMi 本地代理配置。
 - 聊天记录库必须独立于是否启用日报/统计榜单：只要 Wechaty 收到已接入群消息，就必须尝试入库。
 - 查询页面要按群名合并旧 room_id，避免重登后看起来“数据丢失”。
+
+## v0.4.16 Hotfix Plan - WeChat replies must search full chat archive
+1. [complete] 确认微信群 @ 回复目前只注入 Honcho 记忆 + conversations 最近 100 条，没有把 `wechat_group_activity` 全量聊天记录库作为证据检索。
+2. [complete] 新增当前群聊天记录库证据检索：按关键词/称呼/被问对象搜索本群历史流水，并限制条数避免全库塞进 prompt。
+3. [pending] 将检索结果注入微信群 @ 回复 prompt，要求回答聊天历史问题时优先基于证据，不知道就说明没查到。
+4. [in_progress] 补测试、重启验证、更新 v0.4.16 文档并发布 GitHub Release。

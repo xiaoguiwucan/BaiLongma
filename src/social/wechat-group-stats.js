@@ -121,6 +121,46 @@ function normalizeSearchDateInput(value = '', boundary = 'start') {
   return Number.isNaN(parsed.getTime()) ? normalized : toLocalTimestamp(parsed)
 }
 
+function extractArchiveSearchTerms(query = '') {
+  const value = String(query || '').trim()
+  const stop = new Set('这个 那个 什么 怎么 为啥 为什么 是否 是谁 哪个 哪里 之前 现在 当前 聊天 记录 数据 忘了 你们 我们 他们 还有 一下 说是 有没有 帮我 看看 查询 记得 不记得 知道 不知道'.split(' '))
+  const terms = []
+  for (const match of value.matchAll(/[“"「『']([^”"」』']{1,24})[”"」』']/gu)) {
+    const term = match[1]?.trim()
+    if (term) terms.push(term)
+  }
+  // 不把开头 @ 助手账号当检索词，否则群里每条 @ 助手的消息都会命中，淹没真正关键词。
+  const withoutMentions = value.replace(/[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、?？!！]{1,24}/gu, ' ')
+  for (const token of withoutMentions.match(/[\u4e00-\u9fa5A-Za-z0-9_]{2,16}/gu) || []) {
+    if (!stop.has(token) && !/^\d+$/.test(token)) terms.push(token)
+  }
+  for (const special of ['老登', '大哥', '义父', '老板', '群主', '管理', '管理员', '向量记忆', '称呼', '外号']) {
+    if (value.includes(special)) terms.push(special)
+  }
+  return [...new Set(terms.map(item => item.trim()).filter(item => item && item.length <= 24))].slice(0, 8)
+}
+
+function escapeRegex(value = '') {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function scoreArchiveEvidenceRow(row = {}, terms = [], query = '') {
+  const text = `${row.display_text || ''}\n${row.raw_text || ''}`
+  const sender = String(row.sender_name || '')
+  let score = 0
+  for (const term of terms) {
+    if (!term) continue
+    if (text.includes(term)) score += 8
+    if (sender.includes(term)) score += 5
+    const safeTerm = escapeRegex(term)
+    if (new RegExp(`${safeTerm}.{0,12}(?:就是|是|指|意思|叫|称呼|代表)|(?:就是|是|指|意思|叫|称呼).{0,12}${safeTerm}`, 'u').test(text)) score += 30
+  }
+  if (/(?:是谁|什么|啥意思|什么意思|叫谁|哪个|哪位)/u.test(query) && /(?:就是|是|指|意思|叫|称呼|代表)/u.test(text)) score += 12
+  if (row.mentioned_self) score += 2
+  score += Math.min(Number(row.id || 0) / 1000000, 1)
+  return score
+}
+
 function getMemberDisplayNameMap(db, gid, groupName = '') {
   ensureSchema()
   const name = cleanStatsGroupName(groupName)
@@ -716,6 +756,83 @@ export function getWeChatGroupStats({ groupId, groupName = '', from = '', to = '
     links,
     recent,
     db_path: paths.dbFile,
+  }
+}
+
+export function getWeChatGroupArchiveEvidence({ groupId, groupName = '', query = '', limit = 36, recentLimit = 12, days = 30 } = {}) {
+  const gid = normalizeStatsGroupId(groupId)
+  if (!gid) return { ok: false, error: 'group_id required', text: '' }
+  ensureSchema()
+  const db = getDB()
+  const resolvedGroupName = resolveQueryGroupName(db, gid, groupName)
+  const groupFilter = groupWhereClause(gid, resolvedGroupName)
+  const nameMap = getMemberDisplayNameMap(db, gid, resolvedGroupName)
+  const safeLimit = Math.min(Math.max(Number(limit || 36), 6), 80)
+  const safeRecentLimit = Math.min(Math.max(Number(recentLimit || 12), 0), 40)
+  const from = toLocalTimestamp(new Date(Date.now() - Math.min(Math.max(Number(days || 30), 1), 365) * 24 * 3600 * 1000))
+  const terms = extractArchiveSearchTerms(query)
+  const seen = new Set()
+  const matched = []
+  if (terms.length) {
+    const termWhere = terms.map(() => '(display_text LIKE ? OR raw_text LIKE ? OR sender_name LIKE ? OR sender_id LIKE ?)').join(' OR ')
+    const params = [...groupFilter.params, from]
+    for (const term of terms) {
+      const like = `%${term}%`
+      params.push(like, like, like, like)
+    }
+    const rows = db.prepare(`
+      SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, raw_text,
+             image_count, emoji_count, link_count, mentioned_self, source, timestamp, created_at
+      FROM wechat_group_activity
+      WHERE ${groupFilter.sql} AND timestamp >= ? AND (${termWhere})
+      ORDER BY id DESC
+      LIMIT ?
+    `).all(...params, Math.max(safeLimit * 6, 120))
+    const ranked = rows
+      .map(row => ({ row, score: scoreArchiveEvidenceRow(row, terms, query) }))
+      .sort((a, b) => b.score - a.score || Number(b.row.id || 0) - Number(a.row.id || 0))
+      .slice(0, safeLimit)
+      .map(item => item.row)
+      .sort((a, b) => Number(a.id || 0) - Number(b.id || 0))
+    for (const row of ranked) {
+      if (seen.has(row.id)) continue
+      seen.add(row.id)
+      matched.push(rowWithDisplayName(row, nameMap))
+    }
+  }
+  const recent = safeRecentLimit > 0 ? db.prepare(`
+    SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, raw_text,
+           image_count, emoji_count, link_count, mentioned_self, source, timestamp, created_at
+    FROM wechat_group_activity
+    WHERE ${groupFilter.sql}
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(...groupFilter.params, safeRecentLimit).reverse()
+    .filter(row => {
+      if (seen.has(row.id)) return false
+      seen.add(row.id)
+      return true
+    })
+    .map(row => rowWithDisplayName(row, nameMap)) : []
+  const rows = [...matched, ...recent].slice(-safeLimit)
+  const lines = rows.map(row => {
+    const media = [
+      row.image_count ? `图${row.image_count}` : '',
+      row.emoji_count ? `表${row.emoji_count}` : '',
+      row.link_count ? `链${row.link_count}` : '',
+    ].filter(Boolean).join('/')
+    return `${row.timestamp_display || formatWeChatLocalDateTime(row.timestamp)} ${row.sender_display_name || row.sender_name || row.sender_id || '未知成员'}: ${row.display_text || row.raw_text || ''}${media ? `（${media}）` : ''}`
+  })
+  return {
+    ok: true,
+    group_id: gid,
+    group_name: resolvedGroupName,
+    terms,
+    count: rows.length,
+    matched_count: matched.length,
+    recent_count: recent.length,
+    records: rows,
+    text: lines.join('\n'),
   }
 }
 

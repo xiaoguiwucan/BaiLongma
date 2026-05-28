@@ -976,6 +976,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.16</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">修复微信群回答不查聊天记录库导致“记不完整”：历史问题会先查当前群 SQLite 流水。</p>
+                <ul class="release-note-points">
+                  <li>微信群 @ 回复新增聊天记录库证据检索，按问题关键词、@ 对象和称呼词查当前群历史消息。</li>
+                  <li>新增 <code>wechat-group-archive-evidence</code> 证据区，回答“谁说过/老登是谁/称呼关系/之前记录”时优先基于数据库。</li>
+                  <li>检索严格按当前微信群隔离，不把其他群记录混进来。</li>
+                  <li>证据里没有时要求明确说明没查到，避免靠常识或最近上下文瞎猜。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.15</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

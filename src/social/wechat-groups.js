@@ -2,6 +2,7 @@ import { nowTimestamp } from '../time.js'
 import { getDB, insertConversation, normalizeConversationPartyId, upsertEntity } from '../db.js'
 import { getWechatyDutyGroupConfig } from '../config.js'
 import { getWeChatGroupMemoryContext } from './wechat-group-memory.js'
+import { getWeChatGroupArchiveEvidence } from './wechat-group-stats.js'
 
 export const WECHAT_GROUP_CHANNEL = 'WECHAT_CLAWBOT_GROUP'
 
@@ -159,6 +160,7 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
   const transcript = messages.map(row => `${row.timestamp?.slice(5, 16) || ''} ${row.content}`).join('\n')
   const quickSummary = buildWeChatGroupSummary(messages)
   const memoryContext = await getWeChatGroupMemoryContext({ groupId, senderId, senderName, query: text, limit: 18 })
+  const archiveEvidence = getWeChatGroupArchiveEvidence({ groupId, groupName, query: text, limit: 48, recentLimit: 16, days: 90 })
   const personaPrompt = String(getWechatyDutyGroupConfig().personaPrompt || '').trim()
   const rawText = String(text || '').trim()
   const commandText = stripLeadingWechatMentions(rawText) || rawText
@@ -204,8 +206,15 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     mediaBoundaryLine,
     imageRequestLine,
     '如果是总结群聊，给出「结论/重点/待办/风险」；不要编造记录里没有的信息。注意：不同微信群的记忆必须严格隔离，只能使用当前群的记忆。',
+    '如果用户问“谁说过什么 / 某个词是什么意思 / 之前记录 / 老登是谁 / 谁是大哥 / 群里有没有提到某事”，必须优先使用下面的 <wechat-group-archive-evidence>，它来自当前微信群本机 SQLite 全量聊天记录库。不要只靠最近上下文或泛泛常识回答；证据里没有就说“当前聊天记录库没查到”。',
     '',
     memoryContext || '<group-long-term-memory>（暂无当前群长期记忆）</group-long-term-memory>',
+    '',
+    '<wechat-group-archive-evidence>',
+    archiveEvidence?.text
+      ? `检索词：${(archiveEvidence.terms || []).join('、') || '无'}；命中 ${archiveEvidence.matched_count || 0} 条，附带最近 ${archiveEvidence.recent_count || 0} 条。\n${archiveEvidence.text}`
+      : '（当前群聊天记录库没有查到相关证据）',
+    '</wechat-group-archive-evidence>',
     '',
     '<recent-wechat-group-transcript>',
     transcript || '（暂无最近聊天记录）',
