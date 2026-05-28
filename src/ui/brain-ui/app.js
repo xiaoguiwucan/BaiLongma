@@ -2167,9 +2167,18 @@ function initTTSSettings() {
   const guardList = document.getElementById("wechaty-guard-list");
   const dbTotalSize = document.getElementById("db-total-size");
   const dbPathHint = document.getElementById("db-path-hint");
+  const dbHealthGrid = document.getElementById("db-health-grid");
   const dbOverviewGrid = document.getElementById("db-overview-grid");
   const dbTableList = document.getElementById("db-table-list");
   const dbRefreshBtn = document.getElementById("db-refresh-btn");
+  const dbVectorBackfillBtn = document.getElementById("db-vector-backfill-btn");
+  const dbMemoryExtractBtn = document.getElementById("db-memory-extract-btn");
+  const dbHonchoSyncBtn = document.getElementById("db-honcho-sync-btn");
+  const dbExportAllBtn = document.getElementById("db-export-all-btn");
+  const dbImportFile = document.getElementById("db-import-file");
+  const dbSearchInput = document.getElementById("db-search-input");
+  const dbSearchBtn = document.getElementById("db-search-btn");
+  const dbSearchResults = document.getElementById("db-search-results");
   const dbFeedback = document.getElementById("db-feedback");
 
   if (!settingsBtn || !overlay) return;
@@ -3248,6 +3257,15 @@ function initTTSSettings() {
   function renderDatabaseOverview(data = {}) {
     if (dbTotalSize) dbTotalSize.textContent = formatBytes(data.totals?.totalBytes || 0);
     if (dbPathHint) dbPathHint.textContent = data.paths?.userDir ? `本机目录：${data.paths.userDir}` : "本机数据库目录";
+    if (dbHealthGrid) {
+      const vector = data.vectorStats || {};
+      const honcho = data.honcho || {};
+      const honchoHealth = honcho.health || {};
+      dbHealthGrid.innerHTML = `
+        <div class="db-health-card ${honchoHealth.ok ? 'ok' : 'warn'}"><b>Honcho</b><span>${honcho.enabled ? (honchoHealth.ok ? `已连接 · 已同步 ${honcho.syncedMessages || 0}/${honcho.localMessages || 0}` : `未连通：${escapeHtml(honchoHealth.error || '等待检测')}`) : '未启用，使用本地兜底'}</span></div>
+        <div class="db-health-card ok"><b>向量搜索</b><span>${vector.configured ? `${escapeHtml(vector.provider || '')} · ${escapeHtml(vector.model || '')}` : '本地轻量向量兜底已启用'}</span></div>
+        <div class="db-health-card"><b>已向量化</b><span>核心 ${vector.coreMemoryEmbedded || 0}/${vector.coreMemoryTotal || 0} · 群聊 ${vector.groupMessagesEmbedded || 0}/${vector.groupMessagesTotal || 0} · 群记忆 ${vector.groupMemoryEmbedded || 0}/${vector.groupMemoryTotal || 0}</span></div>`;
+    }
     const categories = Array.isArray(data.categories) ? data.categories : [];
     if (dbOverviewGrid) {
       dbOverviewGrid.innerHTML = categories.length ? categories.map(item => `
@@ -3268,6 +3286,31 @@ function initTTSSettings() {
     }
   }
 
+  async function exportDatabaseBackup() {
+    try {
+      const data = await fetch(`${API}/settings/database/export`).then(r => r.json());
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `bailongma-database-backup-${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      showFeedback(dbFeedback, '数据库备份已导出');
+    } catch { showFeedback(dbFeedback, '导出失败', true); }
+  }
+
+  async function importDatabaseBackup(file) {
+    if (!file) return;
+    if (!confirm('确定导入这个数据库 JSON？会跳过重复记录，但建议先导出现有备份。')) return;
+    try {
+      const payload = JSON.parse(await file.text());
+      const data = await fetch(`${API}/settings/database/import`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }).then(r => r.json());
+      if (data.ok) { showFeedback(dbFeedback, '导入完成'); loadDatabaseSettings(); }
+      else showFeedback(dbFeedback, data.error || '导入失败', true);
+    } catch { showFeedback(dbFeedback, '导入文件解析失败', true); }
+  }
+
   async function loadDatabaseSettings() {
     if (dbOverviewGrid) dbOverviewGrid.innerHTML = '<div class="wechaty-empty">正在加载数据库统计…</div>';
     try {
@@ -3276,6 +3319,43 @@ function initTTSSettings() {
       else showFeedback(dbFeedback, data.error || "数据库统计加载失败", true);
     } catch {
       showFeedback(dbFeedback, "数据库统计请求失败", true);
+    }
+  }
+
+  async function runDatabaseAction(btn, url, successText) {
+    try {
+      if (btn) btn.disabled = true;
+      showFeedback(dbFeedback, "正在处理，请稍等…");
+      const data = await fetch(`${API}${url}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ limit: 5000 }) }).then(r => r.json());
+      if (!data.ok) throw new Error(data.error || (data.errors && data.errors[0]) || '执行失败');
+      showFeedback(dbFeedback, `${successText}：${JSON.stringify(data)}`.slice(0, 240));
+      loadDatabaseSettings();
+    } catch (err) {
+      showFeedback(dbFeedback, err?.message || "执行失败", true);
+    } finally {
+      if (btn) btn.disabled = false;
+    }
+  }
+
+  async function searchDatabaseMemory() {
+    const q = dbSearchInput?.value?.trim() || "";
+    if (!q) { showFeedback(dbFeedback, "请输入要查询的内容", true); return; }
+    if (dbSearchResults) dbSearchResults.innerHTML = '<div class="wechaty-empty">正在搜索…</div>';
+    try {
+      const data = await fetch(`${API}/settings/database/search?q=${encodeURIComponent(q)}&limit=40`).then(r => r.json());
+      if (!data.ok) throw new Error(data.error || "搜索失败");
+      const rows = Array.isArray(data.items) ? data.items : [];
+      if (dbSearchResults) {
+        dbSearchResults.innerHTML = rows.length ? rows.map(row => `
+          <div class="db-search-item">
+            <div><b>${escapeHtml(row.group_name || "未知群")}</b><span>${escapeHtml(row.member_name || row.member_id || "群记忆")}</span><em>${escapeHtml((row.created_at || "").slice(0, 19))}</em></div>
+            <p>${escapeHtml(row.content || "")}</p>
+            <small>${escapeHtml(row.source_type || "record")} · 相关度 ${Number(row.score || 0).toFixed(2)}</small>
+          </div>`).join("") : '<div class="wechaty-empty">没有查到匹配内容。</div>';
+      }
+    } catch (err) {
+      if (dbSearchResults) dbSearchResults.innerHTML = '<div class="wechaty-empty">搜索失败</div>';
+      showFeedback(dbFeedback, err?.message || "搜索失败", true);
     }
   }
 
@@ -3835,6 +3915,13 @@ function initTTSSettings() {
   wechatySaveMemeBtn?.addEventListener("click", saveWechatyMemeConfig);
   skillImageSaveBtn?.addEventListener("click", saveSkillImageConfig);
   dbRefreshBtn?.addEventListener("click", loadDatabaseSettings);
+  dbVectorBackfillBtn?.addEventListener("click", () => runDatabaseAction(dbVectorBackfillBtn, "/settings/database/backfill-vectors", "向量补齐完成"));
+  dbMemoryExtractBtn?.addEventListener("click", () => runDatabaseAction(dbMemoryExtractBtn, "/settings/database/extract-wechat-memories", "成员记忆提取完成"));
+  dbHonchoSyncBtn?.addEventListener("click", () => runDatabaseAction(dbHonchoSyncBtn, "/settings/database/sync-honcho", "Honcho 同步完成"));
+  dbExportAllBtn?.addEventListener("click", exportDatabaseBackup);
+  dbImportFile?.addEventListener("change", () => { importDatabaseBackup(dbImportFile.files?.[0]); dbImportFile.value = ""; });
+  dbSearchBtn?.addEventListener("click", searchDatabaseMemory);
+  dbSearchInput?.addEventListener("keydown", e => { if (e.key === "Enter") searchDatabaseMemory(); });
   wechatyStartBtn?.addEventListener("click", async () => {
     wechatyStartBtn.disabled = true;
     setWechatyStatus("正在连接/恢复微信…", false);

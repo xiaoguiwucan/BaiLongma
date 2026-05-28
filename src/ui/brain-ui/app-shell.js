@@ -407,10 +407,24 @@ const createSettingsModal = () => `
                 <strong id="db-total-size">—</strong>
                 <span id="db-path-hint">正在读取本机数据库…</span>
               </div>
-              <button class="settings-save-btn primary" id="db-refresh-btn" type="button">刷新容量</button>
+              <div class="db-hero-actions"><button class="settings-save-btn primary" id="db-refresh-btn" type="button">刷新容量</button><button class="settings-save-btn" id="db-vector-backfill-btn" type="button">补齐向量</button><button class="settings-save-btn" id="db-memory-extract-btn" type="button">提取成员记忆</button><button class="settings-save-btn" id="db-honcho-sync-btn" type="button">同步 Honcho</button><button class="settings-save-btn" id="db-export-all-btn" type="button">导出备份 JSON</button><label class="settings-save-btn"><input id="db-import-file" type="file" accept="application/json" hidden>导入 JSON</label></div>
             </div>
+            <div class="db-health-grid" id="db-health-grid"></div>
             <div class="db-overview-grid" id="db-overview-grid">
               <div class="wechaty-empty">正在加载数据库统计…</div>
+            </div>
+            <div class="db-search-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">聊天记录 / 长期记忆混合搜索</div>
+                  <p class="settings-hint compact">同时搜微信群逐条聊天记录和长期记忆；未配置云端 embedding 时自动使用本地轻量向量兜底，不会因为 Honcho 不通而失忆。</p>
+                </div>
+              </div>
+              <div class="db-search-row">
+                <input class="settings-input" id="db-search-input" placeholder="输入要查的关键词、人物、梗或历史问题">
+                <button class="settings-save-btn primary" id="db-search-btn" type="button">查询</button>
+              </div>
+              <div class="db-search-results" id="db-search-results"></div>
             </div>
             <div class="db-table-panel">
               <div class="wechaty-subsection-head">

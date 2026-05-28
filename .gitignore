@@ -158,3 +158,6 @@ models/SenseVoiceSmall/
 bailongma-duty-group.memory-card.json
 wechaty-duty-group.memory-card.json
 *.memory-card.json
+
+# Generated screenshots/reports
+output/

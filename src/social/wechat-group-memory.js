@@ -3,6 +3,7 @@ import { nowTimestamp } from '../time.js'
 import { getHonchoConfig } from '../config.js'
 import { extractWeChatGroupId } from './wechat-groups.js'
 import { extractWeChatExplicitMemories } from './wechat-memory-extractor.js'
+import { getDB, updateMemoryEmbedding } from '../db.js'
 
 let client = null
 let cachedKey = ''
@@ -80,6 +81,217 @@ function memberPeerIdFor(senderId = '', senderName = '') {
 
 function sessionIdFor(gid = '') {
   return `wechat_group_${safeIdPart(gid)}`
+}
+
+
+let localSchemaReady = false
+
+function ensureLocalMemorySchema() {
+  if (localSchemaReady) return
+  const db = getDB()
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wechat_group_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id TEXT NOT NULL,
+      group_external_id TEXT NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '',
+      member_id TEXT NOT NULL DEFAULT '',
+      member_name TEXT NOT NULL DEFAULT '',
+      content TEXT NOT NULL,
+      mentioned_self INTEGER NOT NULL DEFAULT 0,
+      source TEXT NOT NULL DEFAULT 'wechaty',
+      timestamp TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+    CREATE INDEX IF NOT EXISTS idx_wgm_group_ts ON wechat_group_messages(group_id, timestamp);
+    CREATE INDEX IF NOT EXISTS idx_wgm_member_ts ON wechat_group_messages(group_id, member_id, timestamp);
+
+    CREATE TABLE IF NOT EXISTS wechat_group_memory_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id TEXT NOT NULL,
+      group_external_id TEXT NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '',
+      member_id TEXT NOT NULL DEFAULT '',
+      member_name TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL,
+      title TEXT NOT NULL,
+      content TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      salience INTEGER NOT NULL DEFAULT 3,
+      source_message_id INTEGER,
+      source_text TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_wgmi_group_member ON wechat_group_memory_items(group_id, member_id, status, updated_at);
+    CREATE INDEX IF NOT EXISTS idx_wgmi_group_category ON wechat_group_memory_items(group_id, category, status, updated_at);
+  `)
+  try { db.exec(`ALTER TABLE wechat_group_messages ADD COLUMN embedding BLOB`) } catch {}
+  try { db.exec(`ALTER TABLE wechat_group_messages ADD COLUMN honcho_synced_at TEXT NOT NULL DEFAULT ''`) } catch {}
+  try { db.exec(`ALTER TABLE wechat_group_messages ADD COLUMN honcho_message_id TEXT NOT NULL DEFAULT ''`) } catch {}
+  try { db.exec(`ALTER TABLE wechat_group_memory_items ADD COLUMN embedding BLOB`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_wgm_group_text ON wechat_group_messages(group_id, content)`) } catch {}
+  localSchemaReady = true
+}
+
+function localExternalGroupId(gid = '') { return `wechat:group:${safeIdPart(gid)}` }
+
+
+function localHashEmbeddingBuffer(text = '') {
+  const dims = 384
+  const vec = new Float32Array(dims)
+  const value = normalizeText(text).toLowerCase()
+  for (let i = 0; i < value.length; i++) {
+    const gram = value.slice(i, i + 2)
+    let h = 2166136261
+    for (let j = 0; j < gram.length; j++) { h ^= gram.charCodeAt(j); h = Math.imul(h, 16777619) }
+    vec[Math.abs(h) % dims] += 1
+  }
+  let norm = 0
+  for (const n of vec) norm += n * n
+  norm = Math.sqrt(norm) || 1
+  for (let i = 0; i < vec.length; i++) vec[i] = vec[i] / norm
+  return Buffer.from(vec.buffer)
+}
+
+function writeLocalEmbedding(table, id, text) {
+  const body = normalizeText(text)
+  if (!body || !id) return
+  ;(async () => {
+    try {
+      let buffer = null
+      try {
+        const { computeEmbedding, isEmbeddingConfigured } = await import('../embedding.js')
+        if (isEmbeddingConfigured()) buffer = await computeEmbedding(body)
+      } catch {}
+      if (!buffer) buffer = localHashEmbeddingBuffer(body)
+      const db = getDB()
+      db.prepare(`UPDATE ${table} SET embedding = ? WHERE id = ?`).run(buffer, id)
+    } catch {}
+  })()
+}
+
+function localRecordGroupMessage({ groupId, groupName = '', senderId = '', senderName = '', text = '', mentionedSelf = false, source = 'wechaty', timestamp = nowTimestamp() } = {}) {
+  const content = normalizeMemoryDisplayText(text)
+  const gid = groupKey(groupId)
+  if (!gid || !content) return { ok: false, provider: 'local', skipped: true, reason: 'empty_group_or_content' }
+  ensureLocalMemorySchema()
+  const db = getDB()
+  const info = db.prepare(`
+    INSERT INTO wechat_group_messages (group_id, group_external_id, group_name, member_id, member_name, content, mentioned_self, source, timestamp, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `).run(gid, localExternalGroupId(gid), groupName, senderId || senderName, senderName, content, mentionedSelf ? 1 : 0, source, timestamp, nowTimestamp())
+  writeLocalEmbedding('wechat_group_messages', info.lastInsertRowid, `${groupName} ${senderName}: ${content}`)
+  return { ok: true, provider: 'local', id: info.lastInsertRowid, group_id: gid }
+}
+
+function localCreateMemory({ groupId, groupName = '', content = '', category = 'manual', senderId = '', senderName = '', sourceText = '', salience = 3 } = {}) {
+  const body = normalizeMemoryDisplayText(content)
+  const gid = groupKey(groupId)
+  if (!gid || !body) return { ok: false, provider: 'local', error: '本地记忆内容为空' }
+  ensureLocalMemorySchema()
+  const db = getDB()
+  const now = nowTimestamp()
+  const title = body.slice(0, 48)
+  const existing = db.prepare(`
+    SELECT id, category, title, content, member_id, member_name, created_at, updated_at
+    FROM wechat_group_memory_items
+    WHERE group_id = ? AND COALESCE(member_id,'') = ? AND COALESCE(member_name,'') = ? AND category = ? AND content = ? AND status='active'
+    LIMIT 1
+  `).get(gid, senderId || senderName || '', senderName || '', category, body)
+  if (existing) {
+    return { ok: true, provider: 'local', deduped: true, group_id: gid, items: [{ id: String(existing.id), kind: 'conclusion', scope: senderId || senderName ? 'member' : 'group', category: existing.category, title: existing.title, content: existing.content, speaker: existing.member_name || groupName, createdAt: existing.created_at, updatedAt: existing.updated_at }] }
+  }
+  const info = db.prepare(`
+    INSERT INTO wechat_group_memory_items (group_id, group_external_id, group_name, member_id, member_name, category, title, content, status, salience, source_text, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)
+  `).run(gid, localExternalGroupId(gid), groupName, senderId || senderName, senderName, category, title, body, Number(salience || 3), sourceText || '', now, now)
+  writeLocalEmbedding('wechat_group_memory_items', info.lastInsertRowid, `${groupName} ${senderName} ${category}: ${body}`)
+  return { ok: true, provider: 'local', group_id: gid, items: [{ id: String(info.lastInsertRowid), kind: 'conclusion', scope: senderId || senderName ? 'member' : 'group', category, title, content: body, speaker: senderName || groupName, createdAt: now, updatedAt: now }] }
+}
+
+function cosineSimilarityBuffer(a, b) {
+  try {
+    const fa = new Float32Array(a.buffer, a.byteOffset, Math.floor(a.byteLength / 4))
+    const fb = new Float32Array(b.buffer, b.byteOffset, Math.floor(b.byteLength / 4))
+    const n = Math.min(fa.length, fb.length)
+    if (!n) return 0
+    let dot = 0, na = 0, nb = 0
+    for (let i = 0; i < n; i++) { dot += fa[i] * fb[i]; na += fa[i] * fa[i]; nb += fb[i] * fb[i] }
+    return dot / (Math.sqrt(na) * Math.sqrt(nb) || 1)
+  } catch { return 0 }
+}
+
+async function localSemanticRows({ table, groupId, query, limit = 8 }) {
+  const gid = groupKey(groupId)
+  const q = normalizeText(query)
+  if (!gid || !q) return []
+  try {
+    let qbuf = null
+    try {
+      const { computeEmbedding, isEmbeddingConfigured } = await import('../embedding.js')
+      if (isEmbeddingConfigured()) qbuf = await computeEmbedding(q)
+    } catch {}
+    if (!qbuf) qbuf = localHashEmbeddingBuffer(q)
+    const rows = getDB().prepare(`SELECT * FROM ${table} WHERE group_id = ? AND embedding IS NOT NULL ORDER BY id DESC LIMIT 1200`).all(gid)
+    return rows.map(row => ({ ...row, _score: cosineSimilarityBuffer(qbuf, row.embedding) }))
+      .filter(row => row._score > 0.12)
+      .sort((a, b) => b._score - a._score)
+      .slice(0, limit)
+  } catch { return [] }
+}
+
+async function getLocalGroupMemoryContext({ groupId, senderId = '', senderName = '', query = '', limit = 16 } = {}) {
+  const gid = groupKey(groupId)
+  if (!gid) return ''
+  ensureLocalMemorySchema()
+  const db = getDB()
+  const q = normalizeText(query)
+  const like = q ? `%${q.slice(0, 80)}%` : ''
+  let memories = []
+  if (like) {
+    memories = db.prepare(`
+      SELECT * FROM wechat_group_memory_items
+      WHERE group_id = ? AND status='active' AND (member_id IN ('', ?) OR member_name IN ('', ?) OR member_id = ? OR member_name = ?) AND content LIKE ?
+      ORDER BY salience DESC, updated_at DESC LIMIT ?
+    `).all(gid, senderId || senderName, senderName, senderId || senderName, senderName, like, Math.min(limit, 20))
+  }
+  if (!memories.length) {
+    memories = db.prepare(`
+      SELECT * FROM wechat_group_memory_items
+      WHERE group_id = ? AND status='active' AND (member_id IN ('', ?) OR member_name IN ('', ?) OR member_id = ? OR member_name = ?)
+      ORDER BY salience DESC, updated_at DESC LIMIT ?
+    `).all(gid, senderId || senderName, senderName, senderId || senderName, senderName, Math.min(limit, 20))
+  }
+  const semanticMemories = await localSemanticRows({ table: 'wechat_group_memory_items', groupId: gid, query: q, limit: 6 })
+  const semanticMessages = await localSemanticRows({ table: 'wechat_group_messages', groupId: gid, query: q, limit: 8 })
+  const recentMessages = db.prepare(`
+    SELECT * FROM wechat_group_messages WHERE group_id = ? ORDER BY timestamp DESC, id DESC LIMIT ?
+  `).all(gid, Math.min(limit, 30))
+  const memoryLines = [...new Map([...semanticMemories, ...memories].map(row => [row.id, row])).values()]
+    .slice(0, 12)
+    .map(row => `- [${row.member_name || '群'}][${row.category || 'memory'}] ${row.content}`)
+  const messageLines = [...new Map([...semanticMessages, ...recentMessages].map(row => [row.id, row])).values()]
+    .slice(0, 16)
+    .map(row => `- ${row.timestamp || row.created_at} ${row.member_name || '群成员'}：${row.content}`)
+  if (!memoryLines.length && !messageLines.length) return '<local-group-memory>本地暂无本群记忆。</local-group-memory>'
+  return `<local-group-memory query="${q.slice(0,120)}">
+${memoryLines.length ? `<member-and-group-memories>\n${memoryLines.join('\n')}\n</member-and-group-memories>` : ''}
+${messageLines.length ? `<recent-and-semantic-chat-records>\n${messageLines.join('\n')}\n</recent-and-semantic-chat-records>` : ''}
+</local-group-memory>`
+}
+
+function listLocalGroupMemory({ groupId, groupName = '', limit = 80, includeAllPeers = true } = {}) {
+  const gid = groupKey(groupId)
+  if (!gid) return { ok: false, provider: 'local', items: [], messages: [], conclusions: [], summaries: [], error: 'missing group id' }
+  ensureLocalMemorySchema()
+  const db = getDB()
+  const size = Math.min(Math.max(Number(limit || 80), 1), 300)
+  const messages = db.prepare(`SELECT * FROM wechat_group_messages WHERE group_id = ? ORDER BY timestamp DESC, id DESC LIMIT ?`).all(gid, size)
+    .map(row => ({ id: String(row.id), kind: 'message', type: 'wechat_group_message', content: row.content, speaker: row.member_name || row.member_id || '群成员', createdAt: row.timestamp || row.created_at, metadata: { sender_id: row.member_id, sender_name: row.member_name, group_id: row.group_id, group_name: row.group_name } }))
+  const conclusions = db.prepare(`SELECT * FROM wechat_group_memory_items WHERE group_id = ? AND status='active' ORDER BY salience DESC, updated_at DESC LIMIT ?`).all(gid, size)
+    .map(row => ({ id: String(row.id), kind: 'conclusion', scope: row.member_id || row.member_name ? 'member' : 'group', category: row.category, title: row.title, content: row.content, speaker: row.member_name || row.group_name || '群', createdAt: row.created_at, updatedAt: row.updated_at, metadata: { member_id: row.member_id, member_name: row.member_name } }))
+  return { ok: true, provider: 'local', group_id: gid, group_name: groupName, items: messages, messages, conclusions, summaries: [], counts: { messages: messages.length, totalMessages: db.prepare('SELECT COUNT(*) AS n FROM wechat_group_messages WHERE group_id=?').get(gid).n, conclusions: conclusions.length, summaries: 0 }, errors: [] }
 }
 
 function messageCreatedAt(item) {
@@ -323,9 +535,10 @@ export function getWeChatGroupMemoryStatus() {
 export async function recordWeChatGroupMessage({ groupId, groupName = '', senderId = '', senderName = '', text = '', mentionedSelf = false, source = 'wechaty', timestamp = nowTimestamp() } = {}) {
   const content = normalizeText(text)
   const gid = groupKey(groupId)
+  const local = localRecordGroupMessage({ groupId, groupName, senderId, senderName, text, mentionedSelf, source, timestamp })
   const honcho = getClient()
-  if (!honcho || !gid || !content) return { ok: false, skipped: true, reason: 'honcho_not_configured' }
-  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ reason: 'honcho_unavailable' }) }
+  if (!honcho || !gid || !content) return { ...local, honcho: { ok: false, skipped: true, reason: 'honcho_not_configured' } }
+  try { await ensureApp(honcho) } catch (err) { return { ...local, honcho: honchoUnavailableResult({ reason: 'honcho_unavailable' }) } }
   const groupPeerId = groupPeerIdFor(gid)
   const memberPeerId = memberPeerIdFor(senderId, senderName)
   const groupPeer = await ensurePeer(honcho, groupPeerId, { type: 'wechat_group', group_id: gid, group_name: groupName })
@@ -337,7 +550,9 @@ export async function recordWeChatGroupMessage({ groupId, groupName = '', sender
     createdAt: timestamp,
   }))
   scheduleDreams(honcho, session, [groupPeerId, memberPeerId])
-  return { ok: true, provider: 'honcho', workspaceId: appIdCache, sessionId: session.id, groupPeerId, memberPeerId, messageIds: created.map(item => item.id).filter(Boolean) }
+  const honchoIds = created.map(item => item.id).filter(Boolean)
+  try { if (local?.id) getDB().prepare(`UPDATE wechat_group_messages SET honcho_synced_at = ?, honcho_message_id = ? WHERE id = ?`).run(nowTimestamp(), honchoIds.join(','), local.id) } catch {}
+  return { ok: true, provider: 'local+honcho', local, honcho: { ok: true, provider: 'honcho', workspaceId: appIdCache, sessionId: session.id, groupPeerId, memberPeerId, messageIds: honchoIds } }
 }
 
 export async function recordWeChatGroupAssistantReply({ groupId, groupName = '', reply = '', targetMemberName = '', source = 'wechaty', timestamp = nowTimestamp() } = {}) {
@@ -357,10 +572,11 @@ export async function recordWeChatGroupAssistantReply({ groupId, groupName = '',
 export async function createWeChatGroupManualMemory({ groupId, groupName = '', content = '', category = 'manual', senderId = '', senderName = '' } = {}) {
   const body = normalizeText(content)
   const gid = groupKey(groupId)
+  const local = localCreateMemory({ groupId, groupName, content, category, senderId, senderName })
   const honcho = getClient()
-  if (!honcho || !gid) return { ok: false, provider: 'honcho', error: 'Honcho 未配置或未启用' }
-  if (!body) return { ok: false, provider: 'honcho', error: '记忆内容不能为空' }
-  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ error: `Honcho 暂不可用：${err?.message || err}` }) }
+  if (!honcho || !gid) return { ...local, honcho: { ok: false, provider: 'honcho', error: 'Honcho 未配置或未启用' } }
+  if (!body) return { ok: false, provider: 'local+honcho', error: '记忆内容不能为空' }
+  try { await ensureApp(honcho) } catch (err) { return { ...local, honcho: honchoUnavailableResult({ error: `Honcho 暂不可用：${err?.message || err}` }) } }
   const groupPeer = await ensurePeer(honcho, groupPeerIdFor(gid), { type: 'wechat_group', group_id: gid, group_name: groupName })
   const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
   const memberPeer = senderId || senderName ? await ensurePeer(honcho, memberPeerIdFor(senderId, senderName), { type: 'wechat_member', sender_id: senderId, sender_name: senderName, group_id: gid, group_name: groupName }) : null
@@ -369,12 +585,13 @@ export async function createWeChatGroupManualMemory({ groupId, groupName = '', c
   const created = await assistantPeer.conclusionsOf(target).create({ content: body, sessionId: session })
   return {
     ok: true,
-    provider: 'honcho',
+    provider: 'local+honcho',
     workspaceId: appIdCache,
     sessionId: session.id,
     group_id: gid,
     category,
     items: created.map(item => normalizeConclusionItem(item, memberPeer ? 'member' : 'group')),
+    local,
   }
 }
 
@@ -417,8 +634,9 @@ export async function recordWeChatGroupExplicitMemories({ groupId, groupName = '
 export async function getWeChatGroupMemoryContext({ groupId, senderId = '', senderName = '', query = '', limit = 16 } = {}) {
   const gid = groupKey(groupId)
   const honcho = getClient()
-  if (!honcho || !gid) return '<honcho-memory status="disabled">Honcho 未配置或未启用，本群无可用长期记忆。</honcho-memory>'
-  try { await ensureApp(honcho) } catch (err) { return `<honcho-memory status="error">Honcho 暂不可用，已降级跳过：${normalizeText(err?.message || err)}</honcho-memory>` }
+  if (!honcho || !gid) return await getLocalGroupMemoryContext({ groupId, senderId, senderName, query, limit })
+  try { await ensureApp(honcho) } catch (err) { return `${await getLocalGroupMemoryContext({ groupId, senderId, senderName, query, limit })}
+<honcho-memory status="error">Honcho 暂不可用，已降级使用本地记忆：${normalizeText(err?.message || err)}</honcho-memory>` }
   const groupPeer = await ensurePeer(honcho, groupPeerIdFor(gid), { type: 'wechat_group', group_id: gid })
   const memberPeer = await ensurePeer(honcho, memberPeerIdFor(senderId, senderName), { type: 'wechat_member', sender_id: senderId, sender_name: senderName, group_id: gid })
   const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
@@ -434,18 +652,19 @@ export async function getWeChatGroupMemoryContext({ groupId, senderId = '', send
       formatHonchoSummariesAsContext(summaries),
       formatHonchoMessagesAsContext(rows),
     ].filter(Boolean)
-    if (!sections.length) return '<honcho-group-memory>Honcho 暂无本群记忆。</honcho-group-memory>'
+    if (!sections.length) return await getLocalGroupMemoryContext({ groupId, senderId, senderName, query, limit })
     return `<honcho-group-memory query="${normalizeText(query).slice(0, 120)}">\n${sections.join('\n')}\n</honcho-group-memory>`
   } catch (err) {
-    return `<honcho-memory status="error">Honcho 读取失败：${normalizeText(err?.message || err)}</honcho-memory>`
+    return `${await getLocalGroupMemoryContext({ groupId, senderId, senderName, query, limit })}
+<honcho-memory status="error">Honcho 读取失败，已降级使用本地记忆：${normalizeText(err?.message || err)}</honcho-memory>`
   }
 }
 
 export async function listWeChatGroupMemory({ groupId, groupName = '', limit = 80, includeAllPeers = true } = {}) {
   const gid = groupKey(groupId)
   const honcho = getClient()
-  if (!honcho || !gid) return { ok: false, provider: 'honcho', items: [], messages: [], conclusions: [], summaries: [], error: 'Honcho 未配置或未启用' }
-  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ items: [], messages: [], conclusions: [], summaries: [], error: `Honcho 暂不可用：${err?.message || err}` }) }
+  if (!honcho || !gid) return listLocalGroupMemory({ groupId, groupName, limit, includeAllPeers })
+  try { await ensureApp(honcho) } catch (err) { const local = listLocalGroupMemory({ groupId, groupName, limit, includeAllPeers }); return { ...local, degraded: true, honcho: honchoUnavailableResult({ error: `Honcho 暂不可用：${err?.message || err}` }) } }
   const groupPeer = await ensurePeer(honcho, groupPeerIdFor(gid), { type: 'wechat_group', group_id: gid, group_name: groupName })
   const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
   const session = await ensureSession(honcho, gid, { type: 'wechat_group_session', group_id: gid, group_name: groupName }, [groupPeer, assistantPeer])
@@ -567,4 +786,97 @@ export async function deleteWeChatGroupMemory({ groupId, kind = '', itemId = '',
     return { ok: true, provider: 'honcho', deleted: 'conclusion', id, group_id: gid }
   }
   return { ok: false, provider: 'honcho', error: '当前只支持删除 Honcho 结论记忆或清空本群 session；原始消息不支持单条删除。' }
+}
+
+export function backfillLocalWeChatMemoryEmbeddings({ limit = 2000 } = {}) {
+  ensureLocalMemorySchema()
+  const db = getDB()
+  const max = Math.min(Math.max(Number(limit || 2000), 1), 10000)
+  let messages = 0
+  let memories = 0
+  const messageRows = db.prepare(`SELECT id, group_name, member_name, content FROM wechat_group_messages WHERE embedding IS NULL AND content <> '' ORDER BY id DESC LIMIT ?`).all(max)
+  const memoryRows = db.prepare(`SELECT id, group_name, member_name, category, content FROM wechat_group_memory_items WHERE embedding IS NULL AND content <> '' ORDER BY id DESC LIMIT ?`).all(max)
+  const tx = db.transaction(() => {
+    for (const row of messageRows) {
+      db.prepare(`UPDATE wechat_group_messages SET embedding = ? WHERE id = ?`).run(localHashEmbeddingBuffer(`${row.group_name || ''} ${row.member_name || ''}: ${row.content || ''}`), row.id)
+      messages += 1
+    }
+    for (const row of memoryRows) {
+      db.prepare(`UPDATE wechat_group_memory_items SET embedding = ? WHERE id = ?`).run(localHashEmbeddingBuffer(`${row.group_name || ''} ${row.member_name || ''} ${row.category || ''}: ${row.content || ''}`), row.id)
+      memories += 1
+    }
+  })
+  tx()
+  return { ok: true, provider: 'local-hash', messages, memories }
+}
+
+export async function backfillWeChatExplicitMemoriesFromMessages({ limit = 5000 } = {}) {
+  ensureLocalMemorySchema()
+  const db = getDB()
+  const max = Math.min(Math.max(Number(limit || 5000), 1), 20000)
+  const rows = db.prepare(`
+    SELECT id, group_id, group_name, member_id, member_name, content, source
+    FROM wechat_group_messages
+    WHERE content <> ''
+    ORDER BY id ASC LIMIT ?
+  `).all(max)
+  let scanned = 0
+  let extracted = 0
+  const errors = []
+  for (const row of rows) {
+    scanned += 1
+    const memories = extractWeChatExplicitMemories({ text: row.content, senderName: row.member_name, senderId: row.member_id })
+    if (!memories.length) continue
+    try {
+      const result = await recordWeChatGroupExplicitMemories({
+        groupId: row.group_id,
+        groupName: row.group_name,
+        senderId: row.member_id,
+        senderName: row.member_name,
+        text: row.content,
+        source: row.source || 'local-backfill',
+      })
+      extracted += Number(result?.count || memories.length || 0)
+    } catch (err) {
+      errors.push(`${row.id}: ${err?.message || err}`)
+      if (errors.length >= 20) break
+    }
+  }
+  return { ok: errors.length === 0, provider: 'local+honcho', scanned, extracted, errors }
+}
+
+
+export async function syncLocalWeChatMessagesToHoncho({ limit = 300 } = {}) {
+  ensureLocalMemorySchema()
+  const honcho = getClient()
+  if (!honcho) return { ok: false, provider: 'honcho', error: 'Honcho 未配置或未启用' }
+  try { await ensureApp(honcho) } catch (err) { return honchoUnavailableResult({ error: `Honcho 暂不可用：${err?.message || err}` }) }
+  const db = getDB()
+  const rows = db.prepare(`
+    SELECT * FROM wechat_group_messages
+    WHERE COALESCE(honcho_synced_at, '') = '' AND content <> ''
+    ORDER BY timestamp ASC, id ASC
+    LIMIT ?
+  `).all(Math.min(Math.max(Number(limit || 300), 1), 2000))
+  let synced = 0
+  const errors = []
+  for (const row of rows) {
+    try {
+      const gid = groupKey(row.group_id)
+      const groupPeerId = groupPeerIdFor(gid)
+      const memberPeerId = memberPeerIdFor(row.member_id, row.member_name)
+      const groupPeer = await ensurePeer(honcho, groupPeerId, { type: 'wechat_group', group_id: gid, group_name: row.group_name })
+      const memberPeer = await ensurePeer(honcho, memberPeerId, { type: 'wechat_member', sender_id: row.member_id, sender_name: row.member_name, group_id: gid, group_name: row.group_name })
+      const assistantPeer = await ensurePeer(honcho, ASSISTANT_PEER_ID, { type: 'assistant', name: '小白龙' })
+      const session = await ensureSession(honcho, gid, { type: 'wechat_group_session', group_id: gid, group_name: row.group_name, source: 'local-backfill' }, [groupPeer, memberPeer, assistantPeer])
+      const created = await session.addMessages(memberPeer.message(row.content, { metadata: { type: 'wechat_group_message', local_message_id: row.id, group_id: gid, group_name: row.group_name, sender_id: row.member_id, sender_name: row.member_name, mentioned_self: !!row.mentioned_self, source: row.source || 'local-backfill', timestamp: row.timestamp }, createdAt: row.timestamp }))
+      const ids = created.map(item => item.id).filter(Boolean).join(',')
+      db.prepare(`UPDATE wechat_group_messages SET honcho_synced_at = ?, honcho_message_id = ? WHERE id = ?`).run(nowTimestamp(), ids, row.id)
+      synced += 1
+    } catch (err) {
+      errors.push(`${row.id}: ${err?.message || err}`)
+      if (errors.length >= 10) break
+    }
+  }
+  return { ok: errors.length === 0, provider: 'honcho', scanned: rows.length, synced, errors }
 }

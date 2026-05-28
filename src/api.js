@@ -22,7 +22,7 @@ import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
 import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, refreshWechatyDutyGroupMemberNames, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
-import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
+import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview, syncLocalWeChatMessagesToHoncho, backfillWeChatExplicitMemoriesFromMessages } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
 import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listKnownWeChatGroups, listWeChatGroupActivityRecords, listWeChatGroupMembers, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
 import { searchMemes } from './social/meme-search.js'
@@ -31,7 +31,7 @@ import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
 import { setDocPanelState, getDocPanelState, DOC_TOPICS } from './docs.js'
-import { getDatabaseOverview } from './database-overview.js'
+import { getDatabaseOverview, exportDatabaseData, importDatabaseData, backfillDatabaseVectors, searchDatabaseData } from './database-overview.js'
 
 export { emitEvent }
 
@@ -1033,10 +1033,73 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return
     }
 
+    // GET /settings/database/export — export local chat/memory database as JSON
+    if (req.method === 'GET' && url.pathname === '/settings/database/export') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      return jsonResponse(res, 200, exportDatabaseData())
+    }
+
+    // POST /settings/database/import — import local chat/memory database JSON
+    if (req.method === 'POST' && url.pathname === '/settings/database/import') {
+      if (!requireLocalOrToken(req, res, url)) return
+      try {
+        const payload = await readJsonBody(req)
+        return jsonResponse(res, 200, importDatabaseData(payload))
+      } catch (err) {
+        return jsonResponse(res, 400, { ok: false, error: err.message })
+      }
+    }
+
+    // POST /settings/database/backfill-vectors — repair local vector index for core/group memory
+    if (req.method === 'POST' && url.pathname === '/settings/database/backfill-vectors') {
+      if (!requireLocalOrToken(req, res, url)) return
+      try {
+        const body = await readJsonBody(req).catch(() => ({}))
+        return jsonResponse(res, 200, backfillDatabaseVectors({ limit: body.limit || url.searchParams.get('limit') || 5000 }))
+      } catch (err) {
+        return jsonResponse(res, 400, { ok: false, error: err.message })
+      }
+    }
+
+    // POST /settings/database/sync-honcho — push local WeChat message history into Honcho
+    if (req.method === 'POST' && url.pathname === '/settings/database/sync-honcho') {
+      if (!requireLocalOrToken(req, res, url)) return
+      try {
+        const body = await readJsonBody(req).catch(() => ({}))
+        const result = await syncLocalWeChatMessagesToHoncho({ limit: body.limit || url.searchParams.get('limit') || 1200 })
+        return jsonResponse(res, 200, result)
+      } catch (err) {
+        return jsonResponse(res, 400, { ok: false, error: err.message })
+      }
+    }
+
+    // POST /settings/database/extract-wechat-memories — extract durable per-group/member facts from stored group chat
+    if (req.method === 'POST' && url.pathname === '/settings/database/extract-wechat-memories') {
+      if (!requireLocalOrToken(req, res, url)) return
+      try {
+        const body = await readJsonBody(req).catch(() => ({}))
+        const result = await backfillWeChatExplicitMemoriesFromMessages({ limit: body.limit || url.searchParams.get('limit') || 5000 })
+        return jsonResponse(res, 200, result)
+      } catch (err) {
+        return jsonResponse(res, 400, { ok: false, error: err.message })
+      }
+    }
+
+    // GET /settings/database/search?q=... — hybrid keyword/vector search over local chat and memories
+    if (req.method === 'GET' && url.pathname === '/settings/database/search') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      return jsonResponse(res, 200, searchDatabaseData({
+        q: url.searchParams.get('q') || '',
+        groupId: url.searchParams.get('group_id') || url.searchParams.get('groupId') || '',
+        groupName: url.searchParams.get('group_name') || url.searchParams.get('groupName') || '',
+        limit: url.searchParams.get('limit') || 30,
+      }))
+    }
+
     // GET /settings/database — local database and knowledge storage overview
     if (req.method === 'GET' && url.pathname === '/settings/database') {
       if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
-      return jsonResponse(res, 200, getDatabaseOverview())
+      return jsonResponse(res, 200, await getDatabaseOverview())
     }
 
     // GET /settings — return current LLM + MiniMax configuration status

@@ -12,6 +12,26 @@ import {
   getUnconsumedUISignals,
   markUISignalsConsumed,
 } from '../db.js'
+
+function localHashEmbeddingBuffer(text = '') {
+  const dims = 384
+  const vec = new Float32Array(dims)
+  const value = String(text || '').replace(/\s+/g, ' ').trim().toLowerCase()
+  for (let i = 0; i < value.length; i++) {
+    const gram = value.slice(i, i + 2)
+    let h = 2166136261
+    for (let j = 0; j < gram.length; j++) {
+      h ^= gram.charCodeAt(j)
+      h = Math.imul(h, 16777619)
+    }
+    vec[Math.abs(h) % dims] += 1
+  }
+  let norm = 0
+  for (const n of vec) norm += n * n
+  norm = Math.sqrt(norm) || 1
+  for (let i = 0; i < vec.length; i++) vec[i] = vec[i] / norm
+  return Buffer.from(vec.buffer)
+}
 import { getActiveUICards } from '../events.js'
 import { getInstalledToolNames } from '../capabilities/marketplace/index.js'
 import { PRIMARY_USER_ID } from '../identity.js'
@@ -146,11 +166,13 @@ async function searchRelevantMemories({
   let vecAppended = []
   try {
     const { computeEmbedding, isEmbeddingConfigured } = await import('../embedding.js')
-    if (isEmbeddingConfigured() && focusText) {
-      const queryEmb = await Promise.race([
-        computeEmbedding(focusText),
-        new Promise(resolve => setTimeout(() => resolve(null), 800)),
-      ])
+    if (focusText) {
+      const queryEmb = isEmbeddingConfigured()
+        ? await Promise.race([
+            computeEmbedding(focusText),
+            new Promise(resolve => setTimeout(() => resolve(null), 800)),
+          ])
+        : localHashEmbeddingBuffer(focusText)
       if (queryEmb) {
         const { searchByEmbedding } = await import('../db.js')
         const vecHits = searchByEmbedding(queryEmb, Math.min(focusLimit, 10))
