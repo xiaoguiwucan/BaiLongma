@@ -45,3 +45,10 @@
 3. [complete] 新增媒体保存、媒体预览接口和 JSON 媒体备份恢复。
 4. [complete] 修复 datetime-local 秒级边界和混合媒体类型筛选漏查。
 5. [in_progress] 完成验证、提交、推送和 GitHub Release。
+
+
+## v0.4.4 Follow-up Plan
+1. [complete] 修复昵称刷新：直接调用 wechat4u batchGetContact 拉群成员 NickName/DisplayName。
+2. [complete] 修复 room_id 变化：统计/记录按群名合并，旧选择仍可匹配新 room_id。
+3. [complete] 优化聊天记录库 UI：主查询、今天、刷新昵称、用途说明。
+4. [in_progress] 更新版本文档、验证、提交、推送并创建 v0.4.4 Release。

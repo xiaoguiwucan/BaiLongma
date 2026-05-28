@@ -77,6 +77,35 @@ function splitNameCandidates(value = '') {
     .filter(Boolean)
 }
 
+function cleanStatsGroupName(value = '') {
+  return String(value || '').trim()
+}
+
+function resolveQueryGroupName(db, gid = '', groupName = '') {
+  const explicit = cleanStatsGroupName(groupName)
+  if (explicit) return explicit
+  if (!gid) return ''
+  try {
+    const row = db.prepare(`
+      SELECT group_name
+      FROM wechat_group_activity
+      WHERE group_id = ? AND group_name <> ''
+      ORDER BY id DESC
+      LIMIT 1
+    `).get(gid)
+    return cleanStatsGroupName(row?.group_name)
+  } catch {
+    return ''
+  }
+}
+
+function groupWhereClause(gid = '', groupName = '', alias = '') {
+  const prefix = alias ? `${alias}.` : ''
+  const name = cleanStatsGroupName(groupName)
+  if (name) return { sql: `(${prefix}group_id = ? OR ${prefix}group_name = ?)`, params: [gid, name] }
+  return { sql: `${prefix}group_id = ?`, params: [gid] }
+}
+
 function normalizeSearchDateInput(value = '', boundary = 'start') {
   const raw = String(value || '').trim()
   if (!raw) return ''
@@ -92,14 +121,23 @@ function normalizeSearchDateInput(value = '', boundary = 'start') {
   return Number.isNaN(parsed.getTime()) ? normalized : toLocalTimestamp(parsed)
 }
 
-function getMemberDisplayNameMap(db, gid) {
+function getMemberDisplayNameMap(db, gid, groupName = '') {
   ensureSchema()
+  const name = cleanStatsGroupName(groupName)
+  const where = name ? '(group_id = ? OR group_name = ?)' : 'group_id = ?'
+  const params = name ? [gid, name] : [gid]
   const rows = db.prepare(`
     SELECT sender_id, display_name
     FROM wechat_group_member_names
-    WHERE group_id = ?
-  `).all(gid)
-  return new Map(rows.map(row => [String(row.sender_id || ''), String(row.display_name || '')]))
+    WHERE ${where}
+    ORDER BY last_seen DESC
+  `).all(...params)
+  const map = new Map()
+  for (const row of rows) {
+    const sid = String(row.sender_id || '')
+    if (sid && !map.has(sid)) map.set(sid, String(row.display_name || ''))
+  }
+  return map
 }
 
 function rowWithDisplayName(row = {}, nameMap = new Map()) {
@@ -304,7 +342,21 @@ export function shouldTrackWeChatGroupStats({ groupId = '', groupName = '' } = {
   const selected = Array.isArray(cfg.selectedGroups) ? cfg.selectedGroups : []
   // 重要：没有手动选择群组时，不默认统计、不默认定时发送，避免把所有群都纳入统计。
   if (!selected.length) return false
-  return groupMatchesSelection({ groupId, groupName }, selected)
+  if (groupMatchesSelection({ groupId, groupName }, selected)) return true
+  const name = cleanStatsGroupName(groupName)
+  if (!name) return false
+  try {
+    ensureSchema()
+    const db = getDB()
+    return selected.some(item => {
+      const normalized = normalizeStatsGroupId(item)
+      if (!normalized || normalized === name) return normalized === name
+      const row = db.prepare(`SELECT group_name FROM wechat_group_activity WHERE group_id = ? AND group_name <> '' ORDER BY id DESC LIMIT 1`).get(normalized)
+      return cleanStatsGroupName(row?.group_name) === name
+    })
+  } catch {
+    return false
+  }
 }
 
 export function normalizeWechatMessageType(messageType = '') {
@@ -454,7 +506,7 @@ export function updateWeChatGroupActivitySenderName({ groupId, groupName = '', s
     UPDATE wechat_group_activity
     SET sender_name = ?,
         group_name = CASE WHEN ? <> '' THEN ? ELSE group_name END
-    WHERE group_id = ?
+    WHERE (group_id = ? OR (? <> '' AND group_name = ?))
       AND sender_id = ?
       AND (
         sender_name IS NULL
@@ -467,7 +519,7 @@ export function updateWeChatGroupActivitySenderName({ groupId, groupName = '', s
         OR sender_name LIKE 'gh_%'
         OR LENGTH(sender_name) >= 16
       )
-  `).run(displayName, cleanGroupName, cleanGroupName, gid, sid)
+  `).run(displayName, cleanGroupName, cleanGroupName, gid, cleanGroupName, cleanGroupName, sid)
   return { ok: true, updated: info.changes || 0, group_id: gid, sender_id: sid, sender_name: displayName }
 }
 
@@ -525,7 +577,7 @@ function rangeDates({ from = '', to = '', hours = 24, range = '' } = {}) {
   return { from: toLocalTimestamp(start), to: toLocalTimestamp(end) }
 }
 
-function rowsByMetric(db, gid, from, to, metric, limit) {
+function rowsByMetric(db, gid, from, to, metric, limit, groupName = '') {
   const safeMetric = {
     message_count: 'COUNT(*)',
     image_count: 'SUM(image_count)',
@@ -535,7 +587,8 @@ function rowsByMetric(db, gid, from, to, metric, limit) {
     brag_count: 'SUM(CASE WHEN brag_score > 0 THEN 1 ELSE 0 END)',
   }[metric]
   if (!safeMetric) return []
-  const nameMap = getMemberDisplayNameMap(db, gid)
+  const nameMap = getMemberDisplayNameMap(db, gid, groupName)
+  const groupFilter = groupWhereClause(gid, groupName)
   const rows = db.prepare(`
     SELECT COALESCE(NULLIF(sender_id, ''), NULLIF(sender_name, ''), 'unknown') AS sender_key,
            sender_id,
@@ -543,12 +596,12 @@ function rowsByMetric(db, gid, from, to, metric, limit) {
            ${safeMetric} AS value,
            COUNT(*) AS message_count
     FROM wechat_group_activity
-    WHERE group_id = ? AND timestamp >= ? AND timestamp <= ?
+    WHERE ${groupFilter.sql} AND timestamp >= ? AND timestamp <= ?
     GROUP BY sender_key
     HAVING value > 0
     ORDER BY value DESC, message_count DESC
     LIMIT ?
-  `).all(gid, from, to, Math.min(Math.max(Number(limit || 10), 1), 30))
+  `).all(...groupFilter.params, from, to, Math.min(Math.max(Number(limit || 10), 1), 30))
   return rows.map(row => ({
     ...row,
     name: pickWeChatDisplayName([nameMap.get(String(row.sender_id || '')), ...splitNameCandidates(row.sender_names)], row.sender_id || row.sender_key),
@@ -557,12 +610,14 @@ function rowsByMetric(db, gid, from, to, metric, limit) {
   }))
 }
 
-export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, range = '', limit = 10 } = {}) {
+export function getWeChatGroupStats({ groupId, groupName = '', from = '', to = '', hours = 24, range = '', limit = 10 } = {}) {
   const gid = normalizeStatsGroupId(groupId)
   if (!gid) return { ok: false, error: 'group_id required' }
   ensureSchema()
   const db = getDB()
-  const nameMap = getMemberDisplayNameMap(db, gid)
+  const resolvedGroupName = resolveQueryGroupName(db, gid, groupName)
+  const nameMap = getMemberDisplayNameMap(db, gid, resolvedGroupName)
+  const groupFilter = groupWhereClause(gid, resolvedGroupName)
   const dates = rangeDates({ from, to, hours, range })
   const totals = db.prepare(`
     SELECT COUNT(*) AS message_count,
@@ -575,29 +630,29 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
            COUNT(DISTINCT COALESCE(NULLIF(sender_id, ''), sender_name)) AS participant_count,
            MAX(group_name) AS group_name
     FROM wechat_group_activity
-    WHERE group_id = ? AND timestamp >= ? AND timestamp <= ?
-  `).get(gid, dates.from, dates.to) || {}
+    WHERE ${groupFilter.sql} AND timestamp >= ? AND timestamp <= ?
+  `).get(...groupFilter.params, dates.from, dates.to) || {}
   const recent = db.prepare(`
     SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, image_count, emoji_count, link_count, brag_score, timestamp
     FROM wechat_group_activity
-    WHERE group_id = ? AND timestamp >= ? AND timestamp <= ?
+    WHERE ${groupFilter.sql} AND timestamp >= ? AND timestamp <= ?
     ORDER BY id DESC
     LIMIT ?
-  `).all(gid, dates.from, dates.to, 80).reverse()
+  `).all(...groupFilter.params, dates.from, dates.to, 80).reverse()
     .map(row => rowWithDisplayName(row, nameMap))
   const important = recent.filter(row => IMPORTANT_RE.test(row.display_text || '')).slice(-12)
   const links = db.prepare(`
     SELECT display_text, sender_id, sender_name, timestamp
     FROM wechat_group_activity
-    WHERE group_id = ? AND timestamp >= ? AND timestamp <= ? AND link_count > 0
+    WHERE ${groupFilter.sql} AND timestamp >= ? AND timestamp <= ? AND link_count > 0
     ORDER BY id DESC
     LIMIT 20
-  `).all(gid, dates.from, dates.to).reverse()
+  `).all(...groupFilter.params, dates.from, dates.to).reverse()
     .map(row => rowWithDisplayName(row, nameMap))
   return {
     ok: true,
     group_id: gid,
-    group_name: totals.group_name || '',
+    group_name: totals.group_name || resolvedGroupName || '',
     from: dates.from,
     to: dates.to,
     totals: {
@@ -611,11 +666,11 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
       participant_count: Number(totals.participant_count || 0),
     },
     leaderboards: {
-      messages: rowsByMetric(db, gid, dates.from, dates.to, 'message_count', limit),
-      images: rowsByMetric(db, gid, dates.from, dates.to, 'image_count', limit),
-      emojis: rowsByMetric(db, gid, dates.from, dates.to, 'emoji_count', limit),
-      links: rowsByMetric(db, gid, dates.from, dates.to, 'link_count', limit),
-      brag: rowsByMetric(db, gid, dates.from, dates.to, 'brag_count', limit),
+      messages: rowsByMetric(db, gid, dates.from, dates.to, 'message_count', limit, resolvedGroupName),
+      images: rowsByMetric(db, gid, dates.from, dates.to, 'image_count', limit, resolvedGroupName),
+      emojis: rowsByMetric(db, gid, dates.from, dates.to, 'emoji_count', limit, resolvedGroupName),
+      links: rowsByMetric(db, gid, dates.from, dates.to, 'link_count', limit, resolvedGroupName),
+      brag: rowsByMetric(db, gid, dates.from, dates.to, 'brag_count', limit, resolvedGroupName),
     },
     important,
     links,
@@ -625,11 +680,12 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
 }
 
 
-export function listWeChatGroupActivityRecords({ groupId, from = '', to = '', hours = 24, range = '', limit = 80, offset = 0, q = '', type = '' } = {}) {
+export function listWeChatGroupActivityRecords({ groupId, groupName = '', from = '', to = '', hours = 24, range = '', limit = 80, offset = 0, q = '', type = '' } = {}) {
   const gid = normalizeStatsGroupId(groupId)
   if (!gid) return { ok: false, error: 'group_id required' }
   ensureSchema()
   const db = getDB()
+  const resolvedGroupName = resolveQueryGroupName(db, gid, groupName)
   const dates = from || to
     ? { from: normalizeSearchDateInput(from, 'start') || toLocalTimestamp(new Date(Date.now() - 24 * 90 * 3600 * 1000)), to: normalizeSearchDateInput(to, 'end') || toLocalTimestamp(new Date()) }
     : rangeDates({ hours, range })
@@ -637,8 +693,9 @@ export function listWeChatGroupActivityRecords({ groupId, from = '', to = '', ho
   const safeOffset = Math.max(Number(offset || 0), 0)
   const query = String(q || '').trim()
   const messageType = String(type || '').trim()
-  const filters = ['group_id = ?', 'timestamp >= ?', 'timestamp <= ?']
-  const params = [gid, dates.from, dates.to]
+  const groupFilter = groupWhereClause(gid, resolvedGroupName)
+  const filters = [groupFilter.sql, 'timestamp >= ?', 'timestamp <= ?']
+  const params = [...groupFilter.params, dates.from, dates.to]
   if (query) {
     filters.push('(display_text LIKE ? OR raw_text LIKE ? OR sender_name LIKE ? OR sender_id LIKE ?)')
     const like = `%${query}%`
@@ -673,11 +730,11 @@ export function listWeChatGroupActivityRecords({ groupId, from = '', to = '', ho
     ORDER BY timestamp DESC, id DESC
     LIMIT ? OFFSET ?
   `).all(...params, safeLimit, safeOffset)
-  const nameMap = getMemberDisplayNameMap(db, gid)
+  const nameMap = getMemberDisplayNameMap(db, gid, resolvedGroupName)
   return {
     ok: true,
     group_id: gid,
-    group_name: totals.group_name || '',
+    group_name: totals.group_name || resolvedGroupName || '',
     from: dates.from,
     to: dates.to,
     from_display: formatWeChatLocalDateTime(dates.from),
@@ -699,13 +756,13 @@ export function listWeChatGroupActivityRecords({ groupId, from = '', to = '', ho
   }
 }
 
-export function buildWeChatGroupActivityExport({ groupId, from = '', to = '', hours = 24, range = '', q = '', type = '', format = 'json' } = {}) {
-  const first = listWeChatGroupActivityRecords({ groupId, from, to, hours, range, q, type, limit: 500, offset: 0 })
+export function buildWeChatGroupActivityExport({ groupId, groupName = '', from = '', to = '', hours = 24, range = '', q = '', type = '', format = 'json' } = {}) {
+  const first = listWeChatGroupActivityRecords({ groupId, groupName, from, to, hours, range, q, type, limit: 500, offset: 0 })
   if (!first.ok) return first
   let all = [...first.records]
   let offset = all.length
   while (first.total > offset && all.length < 20000) {
-    const page = listWeChatGroupActivityRecords({ groupId, from, to, hours, range, q, type, limit: 500, offset })
+    const page = listWeChatGroupActivityRecords({ groupId, groupName, from, to, hours, range, q, type, limit: 500, offset })
     if (!page.ok || !page.records?.length) break
     all = all.concat(page.records)
     offset += page.records.length

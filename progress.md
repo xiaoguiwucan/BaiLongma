@@ -25,3 +25,7 @@
 - 2026-05-28 v0.4.3：修复时间筛选分钟边界、混合媒体类型筛选漏查、导入重复记录跳过。
 - 2026-05-28 v0.4.3：版本号已更新到 0.4.3，README、CHANGELOG、BACKUP、RELEASE 和软件内更新说明已补充。
 - 2026-05-28 v0.4.3：重启 Electron 后冒烟测试通过：`GET /settings/social` 正常返回；`GET /social/wechat-groups/records` 对现有 PT 群返回 total=27、完整时间范围和记录列表；JSON/CSV 导出可生成内容。
+- 2026-05-28 v0.4.4：针对用户反馈修复“重新登录和新消息后仍无昵称”。根因是 Wechaty 默认 room.alias/contact.name 对部分群只返回内部 ID；已改为直接调用 wechat4u batchGetContact 刷新群成员 NickName/DisplayName。
+- 2026-05-28 v0.4.4：本机实测 `/social/wechaty-duty-group/refresh-members` 返回 rooms=3、members=59、named=59；值班群成员“风/小号/移动小号”等已进入 wechat_group_member_names，旧记录 id=28 已回填为“风”。
+- 2026-05-28 v0.4.4：修复重新扫码后 room_id 变化导致统计/聊天记录分裂：查询按 group_name 合并，后端入库判断兼容旧 room_id 选择。
+- 2026-05-28 v0.4.4：优化聊天记录库 UI，新增主查询按钮、今天快捷按钮、刷新昵称按钮、记录库与 Honcho 群记忆区别说明。

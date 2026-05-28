@@ -3,6 +3,43 @@
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
 
+## v0.4.4 - 2026-05-28
+
+### 修复内容
+
+- 修复重新登录并重新发送消息后，排行榜和聊天记录库仍显示“未知成员”的问题。
+- 昵称刷新不再只依赖 Wechaty 的 `room.alias()` / `contact.name()`，改为直接调用 wechat4u 的 `batchGetContact` 拉取群成员 `NickName` / `DisplayName`。
+- 新增 `POST /social/wechaty-duty-group/refresh-members`，可以强制刷新当前已接入群的成员昵称映射。
+- 修复微信群重新扫码后 room_id 改变导致统计断层的问题：统计/聊天记录查询会按群名合并旧 room_id 和新 room_id 的记录。
+- 修复统计群组选择保存旧 room_id 后，新 room_id 收到消息可能不再入库的问题：后端会用旧记录中的群名映射识别同一个群。
+
+### UI 优化
+
+- “微信群聊天记录库”顶部按钮升级为主操作按钮 + 辅助按钮，不再是粗糙的一排普通按钮。
+- 新增“今天”快捷按钮，一键把筛选范围设为当天。
+- 新增“刷新昵称”按钮，在线时可手动触发群成员昵称刷新并回填旧记录。
+- 筛选区输入框高度、间距和日期控件宽度优化，避免只显示小黑块看不清。
+- 在聊天记录库中加入说明：聊天记录库是原始流水账，群记忆管理是 Honcho 长期记忆/结论，两者用途不同。
+
+### 验证结果
+
+- `node --check src/social/wechat-group-stats.js` 通过。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+- 本机实测强制刷新成员昵称返回：`rooms=3, members=59, named=59`，值班群成员“风/小号/移动小号”等昵称已写入映射表，旧记录已回填显示“风”。
+
+### 部署注意事项
+
+- 更新后重启白龙马/Electron。
+- 微信助手真实在线后，进入“微信群聊天记录库”点击“刷新昵称”即可强制回填。
+- 升级前旧记录如果当时的 sender_id 已因微信重新登录变化而无法对应新成员，只能保持“未知成员”；后续新消息会正常写入昵称。
+
+
 ## v0.4.3 - 2026-05-28
 
 ### 大版本补强：微信群聊天记录库

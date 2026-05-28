@@ -2,11 +2,11 @@
 
 ## Current Version
 
-- `0.4.3`
+- `0.4.4`
 
 ## What This Release Includes
 
-- v0.4.3 微信群聊天记录库：按群显示完整入库消息、时间筛选、昵称映射、媒体预览、JSON/CSV 导出与 JSON 导入。
+- v0.4.4 微信群昵称强制刷新与记录库 UI 优化：修复“未知成员”，按群名合并 room_id 变化，新增刷新昵称和今天快捷筛选。
 - Windows NSIS installer
 - GitHub Releases auto-update metadata
 - First-run activation flow
@@ -27,12 +27,12 @@ npm run build
 
 Installer output:
 
-- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.3.exe`
+- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.4.exe`
 - `D:\claude\BaiLongma\dist\latest.yml`
 
 ## Local Verification Checklist
 
-1. Install `Bailongma Setup 0.4.3.exe`.
+1. Install `Bailongma Setup 0.4.4.exe`.
 2. Launch the app and confirm the activation page appears on first run.
 3. Enter a valid API key and verify the app enters `brain-ui`.
 4. Uninstall the app.
@@ -54,9 +54,9 @@ npm run publish
 
 Published artifacts:
 
-- GitHub Release asset: `Bailongma Setup 0.4.3.exe`
+- GitHub Release asset: `Bailongma Setup 0.4.4.exe`
 - GitHub Release asset: `latest.yml`
-- GitHub Release asset: `Bailongma Setup 0.4.3.exe.blockmap`
+- GitHub Release asset: `Bailongma Setup 0.4.4.exe.blockmap`
 
 ## Notes On First Launch Of The Installer
 

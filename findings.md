@@ -23,3 +23,8 @@
 - 媒体不能用任意本机文件路径暴露给 UI；记录库只记录保存到 app data 下的相对媒体路径，API 读取时必须拒绝绝对路径和 `..`。
 - `datetime-local` 只有分钟，作为结束时间直接字符串比较会漏掉同一分钟后半段记录；需要补 `:59`。
 - 图片/表情/链接消息可能被归类为 `mixed`，筛选不能只查 `message_type=image`，应该查计数列。
+
+## 2026-05-28 v0.4.4 nickname findings
+- Wechaty 状态已真实 online，但旧昵称逻辑只成功写入扫码账号自己；`room.memberAll()`/`room.alias()` 对“值班群”等群无法稳定返回成员昵称。
+- wechat4u `batchGetContact([{UserName: roomId}])` 能返回群 `MemberList` 的 `NickName`/`DisplayName`；直接拉取后可识别 3 个接入群共 59/59 个成员。
+- 重新扫码后微信群 room_id 会变化，不能把统计唯一绑定到 `wechaty:@@...`；统计查询和入库选择需要按群名兜底合并。

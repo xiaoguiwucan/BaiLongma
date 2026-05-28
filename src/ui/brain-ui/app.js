@@ -2082,6 +2082,8 @@ function initTTSSettings() {
   const wechatyRecordsType = document.getElementById("wechaty-records-type");
   const wechatyRecordsQuery = document.getElementById("wechaty-records-query");
   const wechatyRecordsRefreshBtn = document.getElementById("wechaty-records-refresh-btn");
+  const wechatyRecordsTodayBtn = document.getElementById("wechaty-records-today-btn");
+  const wechatyRecordsRefreshNamesBtn = document.getElementById("wechaty-records-refresh-names-btn");
   const wechatyRecordsExportJsonBtn = document.getElementById("wechaty-records-export-json-btn");
   const wechatyRecordsExportCsvBtn = document.getElementById("wechaty-records-export-csv-btn");
   const wechatyRecordsImportFile = document.getElementById("wechaty-records-import-file");
@@ -2290,6 +2292,16 @@ function initTTSSettings() {
     }
   }
 
+  function setWechatyRecordTodayRange() {
+    if (!wechatyRecordsFrom || !wechatyRecordsTo) return;
+    const start = new Date();
+    start.setHours(0, 0, 0, 0);
+    const end = new Date();
+    end.setHours(23, 59, 0, 0);
+    wechatyRecordsFrom.value = toDateTimeLocalValue(start);
+    wechatyRecordsTo.value = toDateTimeLocalValue(end);
+  }
+
   function describeWechatyCachedSuffix(status = {}) {
     const parts = [];
     if (status.rooms_stale || wechatyRoomsAreStale) parts.push('下方是上次缓存，不代表当前在线');
@@ -2452,12 +2464,21 @@ function initTTSSettings() {
   }
 
   function groupDigestId(group = {}) {
-    return memoryGroupRequestId(group);
+    return String(group.topic || "").trim() || memoryGroupRequestId(group);
+  }
+
+  function isWechatyDigestGroupSelected(group = {}) {
+    const topic = String(group.topic || "").trim();
+    const stable = groupDigestId(group);
+    const requestId = memoryGroupRequestId(group);
+    return wechatyDigestSelectedGroups.has(stable)
+      || wechatyDigestSelectedGroups.has(requestId)
+      || (!!topic && wechatyDigestSelectedGroups.has(`wechaty:${topic}`));
   }
 
   function updateWechatyDigestGroupCount() {
     if (!wechatyDigestGroupCount) return;
-    const selected = getWechatyDigestCandidateGroups().filter(group => wechatyDigestSelectedGroups.has(groupDigestId(group)));
+    const selected = getWechatyDigestCandidateGroups().filter(group => isWechatyDigestGroupSelected(group));
     wechatyDigestGroupCount.textContent = selected.length
       ? `已选择 ${selected.length} 个群`
       : "未选择，不会统计/不会定时发送";
@@ -2473,11 +2494,12 @@ function initTTSSettings() {
     }
     wechatyDigestGroupList.innerHTML = groups.map(group => {
       const gid = groupDigestId(group);
-      const checked = wechatyDigestSelectedGroups.has(gid) ? " checked" : "";
+      const checked = isWechatyDigestGroupSelected(group) ? " checked" : "";
       const stale = group.stale ? " stale" : "";
       const stat = group.real ? "后续新消息会统计" : "等待真实群 ID";
+      const requestId = memoryGroupRequestId(group);
       return `<label class="wechaty-digest-group-item${stale}" title="${escapeHtml(gid)}">
-        <input class="wechaty-digest-group-checkbox" type="checkbox" value="${escapeHtml(gid)}" data-group-id="${escapeHtml(gid)}" data-group-name="${escapeHtml(group.topic || "")}"${checked}>
+        <input class="wechaty-digest-group-checkbox" type="checkbox" value="${escapeHtml(gid)}" data-group-id="${escapeHtml(gid)}" data-request-id="${escapeHtml(requestId)}" data-group-name="${escapeHtml(group.topic || "")}"${checked}>
         <span><b>${escapeHtml(group.topic || "未命名群")}</b><em>${escapeHtml(stat)}</em></span>
       </label>`;
     }).join("");
@@ -2519,7 +2541,7 @@ function initTTSSettings() {
     ].join("");
     if (wechatyStatsRecent) {
       const recent = Array.isArray(data.recent) ? data.recent.slice(-40).reverse() : [];
-      const selected = wechatyDigestSelectedGroups.has(wechatyActiveMemoryGroupId);
+      const selected = wechatyDigestSelectedGroups.has(wechatyActiveMemoryGroupName) || wechatyDigestSelectedGroups.has(wechatyActiveMemoryGroupId);
       const rows = recent.length
         ? recent.map(row => `<article class="wechaty-stats-row">
             <b>${escapeHtml(row.sender_name || row.sender_id || "群成员")}</b>
@@ -2602,6 +2624,7 @@ function initTTSSettings() {
     ensureWechatyRecordDefaultRange();
     return {
       groupId: wechatyActiveMemoryGroupId,
+      groupName: wechatyActiveMemoryGroupName,
       from: wechatyRecordsFrom?.value || '',
       to: wechatyRecordsTo?.value || '',
       type: wechatyRecordsType?.value || '',
@@ -2623,6 +2646,7 @@ function initTTSSettings() {
     try {
       const params = new URLSearchParams({
         group_id: query.groupId,
+        group_name: query.groupName || '',
         from: query.from,
         to: query.to,
         type: query.type,
@@ -2648,6 +2672,7 @@ function initTTSSettings() {
     const query = collectWechatyRecordQuery({ offset: 0 });
     const params = new URLSearchParams({
       group_id: query.groupId,
+      group_name: query.groupName || '',
       from: query.from,
       to: query.to,
       type: query.type,
@@ -2682,6 +2707,25 @@ function initTTSSettings() {
     }
   }
 
+  async function refreshWechatyMemberNames() {
+    if (wechatyRecordsRefreshNamesBtn) wechatyRecordsRefreshNamesBtn.disabled = true;
+    try {
+      const res = await fetch(`${API}/social/wechaty-duty-group/refresh-members`, { method: 'POST' });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, `昵称刷新完成：${data.named || 0}/${data.members || 0} 个成员可识别，回填 ${data.updated || 0} 条旧记录`);
+        await loadWechatyActiveStats({ silent: true });
+        await loadWechatyRecords({ append: false });
+      } else {
+        showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.error || '刷新昵称失败，请确认微信助手在线', true);
+      }
+    } catch {
+      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, '刷新昵称请求失败，请确认程序和微信助手在线', true);
+    } finally {
+      if (wechatyRecordsRefreshNamesBtn) wechatyRecordsRefreshNamesBtn.disabled = false;
+    }
+  }
+
   async function loadWechatyActiveStats({ silent = false } = {}) {
     if (!wechatyActiveMemoryGroupId) {
       const candidates = getWechatyMemoryCandidateGroups();
@@ -2697,7 +2741,7 @@ function initTTSSettings() {
     }
     if (wechatyRefreshStatsBtn) wechatyRefreshStatsBtn.disabled = true;
     try {
-      const url = `${API}/social/wechat-groups/stats?group_id=${encodeURIComponent(wechatyActiveMemoryGroupId)}&range=today&limit=10`;
+      const url = `${API}/social/wechat-groups/stats?group_id=${encodeURIComponent(wechatyActiveMemoryGroupId)}&group_name=${encodeURIComponent(wechatyActiveMemoryGroupName || '')}&range=today&limit=10`;
       const data = await fetch(url).then(r => r.json());
       renderWechatyStats(data);
       await loadWechatyRecords({ append: false });
@@ -3047,9 +3091,18 @@ function initTTSSettings() {
     const cb = event.target?.closest?.(".wechaty-digest-group-checkbox");
     if (!cb) return;
     const gid = cb.dataset.groupId || cb.value;
+    const groupName = cb.dataset.groupName || "";
+    const requestId = cb.dataset.requestId || (cb.value?.startsWith?.("wechaty:") ? cb.value : `wechaty:${cb.value || groupName}`);
     if (!gid) return;
     if (cb.checked) wechatyDigestSelectedGroups.add(gid);
-    else wechatyDigestSelectedGroups.delete(gid);
+    else {
+      wechatyDigestSelectedGroups.delete(gid);
+      if (groupName) {
+        wechatyDigestSelectedGroups.delete(groupName);
+        wechatyDigestSelectedGroups.delete(`wechaty:${groupName}`);
+      }
+      wechatyDigestSelectedGroups.delete(requestId);
+    }
     updateWechatyDigestGroupCount();
   });
   wechatyRoomFilter?.addEventListener("input", renderWechatyRooms);
@@ -3151,6 +3204,8 @@ function initTTSSettings() {
   wechatyRefreshMemoryBtn?.addEventListener("click", loadWechatyActiveMemory);
   wechatyRefreshStatsBtn?.addEventListener("click", () => loadWechatyActiveStats({ silent: false }));
   wechatyRecordsRefreshBtn?.addEventListener("click", () => loadWechatyRecords({ append: false }));
+  wechatyRecordsTodayBtn?.addEventListener("click", () => { setWechatyRecordTodayRange(); loadWechatyRecords({ append: false }); });
+  wechatyRecordsRefreshNamesBtn?.addEventListener("click", refreshWechatyMemberNames);
   wechatyRecordsMoreBtn?.addEventListener("click", () => loadWechatyRecords({ append: true }));
   wechatyRecordsExportJsonBtn?.addEventListener("click", () => exportWechatyRecords('json'));
   wechatyRecordsExportCsvBtn?.addEventListener("click", () => exportWechatyRecords('csv'));

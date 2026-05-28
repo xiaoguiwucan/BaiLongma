@@ -4758,7 +4758,21 @@ body.person-card-mode .person-card-panel,
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 7px;
+  gap: 8px;
+  min-width: 360px;
+}
+.wechaty-records-actions .settings-save-btn {
+  min-height: 34px;
+  border-radius: 11px;
+  padding: 0 13px;
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.settings-save-btn.primary {
+  color: #06131a;
+  border-color: rgba(114,255,195,0.45);
+  background: linear-gradient(135deg, #72ffc3, #57d6ff);
+  box-shadow: 0 8px 24px rgba(87,214,255,0.16), inset 0 1px 0 rgba(255,255,255,0.45);
 }
 .settings-save-btn.ghost {
   display: inline-flex;
@@ -4769,18 +4783,49 @@ body.person-card-mode .person-card-panel,
   color: var(--ink2);
   cursor: pointer;
 }
+.wechaty-records-help {
+  margin: 8px 0 10px;
+  border: 1px solid rgba(114,255,195,0.13);
+  border-radius: 13px;
+  padding: 9px 11px;
+  color: var(--ink2);
+  background: rgba(114,255,195,0.04);
+  font-size: 11px;
+  line-height: 1.6;
+}
+.wechaty-records-help b {
+  color: #9fffd5;
+}
 .wechaty-records-filters {
   display: grid;
   grid-template-columns: repeat(4, minmax(140px, 1fr));
-  gap: 8px;
-  margin: 8px 0 10px;
+  gap: 10px;
+  margin: 10px 0 12px;
 }
 .wechaty-records-filters label {
   display: grid;
-  gap: 5px;
+  gap: 6px;
   color: var(--ink3);
   font-size: 10px;
   letter-spacing: .06em;
+}
+.wechaty-records-filters label span {
+  color: var(--dim);
+  padding-left: 2px;
+}
+.wechaty-records-filters .settings-input,
+.wechaty-records-filters .settings-select {
+  width: 100%;
+  min-width: 0;
+  height: 34px;
+  border-radius: 11px;
+  background: rgba(0,8,14,0.68);
+  border-color: rgba(255,255,255,0.10);
+}
+.wechaty-records-filters input[type="datetime-local"] {
+  min-width: 190px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 11px;
 }
 .wechaty-records-summary {
   border: 1px solid rgba(114,255,195,0.14);

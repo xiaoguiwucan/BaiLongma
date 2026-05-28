@@ -493,17 +493,22 @@ const createSettingsModal = () => `
                     <p>显示已经写入本机 SQLite 的全量聊天记录，支持时间筛选、关键词检索、导入和导出。</p>
                   </div>
                   <div class="wechaty-records-actions">
-                    <button class="settings-save-btn" id="wechaty-records-refresh-btn" type="button">查询记录</button>
-                    <button class="settings-save-btn" id="wechaty-records-export-json-btn" type="button">导出 JSON</button>
-                    <button class="settings-save-btn" id="wechaty-records-export-csv-btn" type="button">导出 CSV</button>
+                    <button class="settings-save-btn primary" id="wechaty-records-refresh-btn" type="button">🔎 查询记录</button>
+                    <button class="settings-save-btn ghost" id="wechaty-records-today-btn" type="button">今天</button>
+                    <button class="settings-save-btn ghost" id="wechaty-records-refresh-names-btn" type="button">刷新昵称</button>
+                    <button class="settings-save-btn ghost" id="wechaty-records-export-json-btn" type="button">导出 JSON</button>
+                    <button class="settings-save-btn ghost" id="wechaty-records-export-csv-btn" type="button">导出 CSV</button>
                     <label class="settings-save-btn ghost" for="wechaty-records-import-file">导入 JSON</label>
                     <input id="wechaty-records-import-file" type="file" accept="application/json,.json" hidden>
                   </div>
                 </div>
+                <div class="wechaty-records-help">
+                  <b>聊天记录库</b>是原始流水账：谁在什么时候说了什么、发了什么图；<b>群记忆管理</b>是 Honcho 长期记忆：把聊天里有价值的偏好、约定、结论抽取成可供大模型下次回答使用的知识。
+                </div>
                 <div class="wechaty-records-filters">
-                  <label>开始时间<input class="settings-input" id="wechaty-records-from" type="datetime-local"></label>
-                  <label>结束时间<input class="settings-input" id="wechaty-records-to" type="datetime-local"></label>
-                  <label>类型<select class="settings-select" id="wechaty-records-type">
+                  <label><span>开始时间</span><input class="settings-input" id="wechaty-records-from" type="datetime-local"></label>
+                  <label><span>结束时间</span><input class="settings-input" id="wechaty-records-to" type="datetime-local"></label>
+                  <label><span>类型</span><select class="settings-select" id="wechaty-records-type">
                     <option value="">全部类型</option>
                     <option value="text">文字</option>
                     <option value="image">图片</option>
@@ -511,7 +516,7 @@ const createSettingsModal = () => `
                     <option value="link">链接</option>
                     <option value="mixed">混合</option>
                   </select></label>
-                  <label>关键词<input class="settings-input" id="wechaty-records-query" type="search" placeholder="搜索成员/内容/链接"></label>
+                  <label><span>关键词</span><input class="settings-input" id="wechaty-records-query" type="search" placeholder="搜索成员/内容/链接"></label>
                 </div>
                 <div class="wechaty-records-summary" id="wechaty-records-summary">尚未查询聊天记录。</div>
                 <div class="wechaty-records-list" id="wechaty-records-list"></div>
@@ -886,6 +891,19 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.4</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群昵称强制刷新与记录库 UI 优化：修复“未知成员”，并说明记录库和群记忆的区别。</p>
+                <ul class="release-note-points">
+                  <li>直接调用 wechat4u 群成员资料刷新，解决重新登录后昵称仍未知的问题。</li>
+                  <li>新增“刷新昵称”按钮，在线时可手动回填群成员昵称。</li>
+                  <li>重新扫码导致 room_id 变化时，统计和聊天记录按群名合并。</li>
+                  <li>查询区新增主查询按钮、今天快捷按钮和更清晰的日期输入框。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.3</span>

@@ -20,7 +20,7 @@ import { persistAppState } from './capabilities/executor.js'
 import { MinimaxProvider } from './providers/minimax.js'
 import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
-import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
+import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, refreshWechatyDutyGroupMemberNames, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
 import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
@@ -278,6 +278,13 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       return jsonResponse(res, result.ok ? 200 : 409, result)
     }
 
+    // POST /social/wechaty-duty-group/refresh-members — 强制刷新当前已接入群的成员昵称映射。
+    if (req.method === 'POST' && url.pathname === '/social/wechaty-duty-group/refresh-members') {
+      if (!requireLocalOrToken(req, res, url)) return
+      const result = await refreshWechatyDutyGroupMemberNames({ force: true })
+      return jsonResponse(res, result.ok ? 200 : 409, result)
+    }
+
     // POST /social/wechaty-duty-group/start — 启动 Wechaty 扫码，可接入多个群；默认“值班群”和“PT站看片狂魔小群”
     if (req.method === 'POST' && url.pathname === '/social/wechaty-duty-group/start') {
       if (!requireLocalOrToken(req, res, url)) return
@@ -424,7 +431,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       const from = url.searchParams.get('from') || ''
       const to = url.searchParams.get('to') || ''
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '10'), 30)
-      return jsonResponse(res, 200, getWeChatGroupStats({ groupId: rawGroupId, from, to, hours, range, limit }))
+      const groupName = url.searchParams.get('group_name') || url.searchParams.get('groupName') || ''
+      return jsonResponse(res, 200, getWeChatGroupStats({ groupId: rawGroupId, groupName, from, to, hours, range, limit }))
     }
 
 
@@ -436,6 +444,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
       const result = listWeChatGroupActivityRecords({
         groupId: rawGroupId,
+        groupName: url.searchParams.get('group_name') || url.searchParams.get('groupName') || '',
         from: url.searchParams.get('from') || '',
         to: url.searchParams.get('to') || '',
         hours: Math.min(parseInt(url.searchParams.get('hours') || '24'), 24 * 365),
@@ -471,6 +480,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
       const result = buildWeChatGroupActivityExport({
         groupId: rawGroupId,
+        groupName: url.searchParams.get('group_name') || url.searchParams.get('groupName') || '',
         from: url.searchParams.get('from') || '',
         to: url.searchParams.get('to') || '',
         hours: Math.min(parseInt(url.searchParams.get('hours') || '24'), 24 * 365),
