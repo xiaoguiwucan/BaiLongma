@@ -746,7 +746,7 @@ async function handleMessage(message) {
     const rawWechatPayload = await getWechatRawMessagePayload(message)
     const rawSenderName = extractRawWechatSenderName(rawWechatPayload)
     const senderId = getWechatyContactId(talker)
-    const senderParts = isSelf ? { displayName: '我', roomAlias: '', contactAlias: '', contactName: '我' } : await resolveWechatyMemberNameParts(room, talker, senderId)
+    const senderParts = isSelf ? { displayName: '我', roomAlias: '', contactAlias: '', contactName: '我', wechatId: '', wxid: '', stableKey: '', rawIdentity: '' } : await resolveWechatyMemberNameParts(room, talker, senderId)
     if (rawSenderName && !isWeChatInternalIdLike(rawSenderName) && senderParts.displayName === '未知成员') senderParts.displayName = rawSenderName
     const senderName = senderParts.displayName
     const groupId = `wechaty:${room.id}`
@@ -761,6 +761,10 @@ async function handleMessage(message) {
           roomAlias: senderParts.roomAlias || rawSenderName,
           contactAlias: senderParts.contactAlias,
           contactName: senderParts.contactName,
+          wechatId: senderParts.wechatId,
+          wxid: senderParts.wxid,
+          stableKey: senderParts.stableKey,
+          rawIdentity: senderParts.rawIdentity,
           source: 'wechaty-message',
         })
       } catch (err) {
@@ -811,7 +815,7 @@ async function handleMessage(message) {
 
     console.log(`[Wechaty] 值班群消息${isSelf ? '（self）' : ''}${mentionedSelf ? '（@我）' : ''} ${senderName}: ${text.slice(0, 100)}`)
 
-    const adminVerified = isWechatyGroupAdminSender({ senderId, senderName, groupId, groupName: topic })
+    const adminVerified = await isWechatyGroupAdminSender({ senderId, senderName, groupId, groupName: topic })
     const adminProtectionReply = adminVerified ? '' : buildAdminProtectionReply({ groupId, groupName: topic, senderId, text })
     if (adminProtectionReply) {
       await sendWechatyDutyGroupMessage(room.id, adminProtectionReply, { mentionId: senderId, mentionName: senderName })
@@ -940,11 +944,30 @@ function cleanWechatyDisplayCandidate(value = '') {
     .trim()
 }
 
+function extractWechatyStableIdentity(...sources) {
+  const values = []
+  for (const source of sources) {
+    if (!source || typeof source !== 'object') continue
+    for (const key of ['Alias', 'alias', 'WeChatId', 'weixin', 'wechat', 'wechatId', 'wxid', 'Wxid', 'UserName', 'id']) {
+      const value = String(source?.[key] || '').trim()
+      if (value) values.push({ key, value })
+    }
+  }
+  const wxid = values.find(item => /^wxid_/iu.test(item.value))?.value || ''
+  // Alias 通常是用户设置的微信号；RemarkName/NickName/DisplayName 是可变昵称，不能当稳定身份。
+  const wechatId = values.find(item => /^(Alias|alias|WeChatId|weixin|wechat|wechatId)$/u.test(item.key) && item.value && !isWeChatInternalIdLike(item.value))?.value || ''
+  const stableKey = wxid || wechatId || ''
+  const rawIdentity = JSON.stringify(Object.fromEntries(values.map(item => [item.key, item.value]).filter(([, value]) => value).slice(0, 20)))
+  return { wechatId, wxid, stableKey, rawIdentity }
+}
+
 function partsFromWechatyRoomMemberRaw(raw = {}) {
+  const identity = extractWechatyStableIdentity(raw)
   return {
     roomAlias: cleanWechatyDisplayCandidate(raw.DisplayName || raw.RemarkName || raw.RemarkPYInitial || ''),
     contactAlias: cleanWechatyDisplayCandidate(raw.Alias || raw.RemarkName || raw.RemarkPYQuanPin || ''),
     contactName: cleanWechatyDisplayCandidate(raw.NickName || raw.DisplayName || ''),
+    ...identity,
   }
 }
 
@@ -975,27 +998,50 @@ async function hydrateWechatyRoomMembers(roomId = '') {
   return null
 }
 
-async function getWechatyRoomMemberRaw(room, senderId = '', { hydrate = false } = {}) {
-  const roomId = String(room?.id || '').trim()
+async function hydrateWechatyMemberContact(roomId = '', senderId = '') {
+  const rid = String(roomId || '').trim()
   const sid = String(senderId || '').trim()
-  if (!roomId || !sid || !bot?.puppet?.roomMemberRawPayload) return null
+  if (!rid || !sid || !bot?.puppet?.wechat4u?.batchGetContact) return null
   try {
-    const raw = await bot.puppet.roomMemberRawPayload(roomId, sid)
-    if (!hydrate || hasUsableWechatyMemberName(raw)) return raw
-  } catch {}
-  if (hydrate) {
-    const roomRaw = await hydrateWechatyRoomMembers(roomId)
-    const found = Array.isArray(roomRaw?.MemberList)
-      ? roomRaw.MemberList.find(item => item?.UserName === sid)
-      : null
-    if (found) return found
-    try { return await bot.puppet.roomMemberRawPayload(roomId, sid) } catch {}
+    const contacts = await bot.puppet.wechat4u.batchGetContact([{ UserName: sid, EncryChatRoomId: rid }])
+    const raw = Array.isArray(contacts) ? contacts.find(item => item?.UserName === sid) || contacts[0] : null
+    if (raw) {
+      try { bot.puppet.wechat4u.updateContacts([raw]) } catch {}
+      return raw
+    }
+  } catch (err) {
+    console.warn(`[WechatyStats] 单独刷新成员资料失败 room="${rid}" sender="${sid}"：${err?.message || err}`)
   }
   return null
 }
 
+async function getWechatyRoomMemberRaw(room, senderId = '', { hydrate = false } = {}) {
+  const roomId = String(room?.id || '').trim()
+  const sid = String(senderId || '').trim()
+  if (!roomId || !sid || !bot?.puppet?.roomMemberRawPayload) return null
+  let firstRaw = null
+  try {
+    const raw = await bot.puppet.roomMemberRawPayload(roomId, sid)
+    firstRaw = raw || null
+    if (!hydrate || (hasUsableWechatyMemberName(raw) && extractWechatyStableIdentity(raw).stableKey)) return raw
+  } catch {}
+  if (hydrate) {
+    const memberRaw = await hydrateWechatyMemberContact(roomId, sid)
+    if (memberRaw && (hasUsableWechatyMemberName(memberRaw) || extractWechatyStableIdentity(memberRaw).stableKey)) {
+      return { ...(firstRaw || {}), ...memberRaw }
+    }
+    const roomRaw = await hydrateWechatyRoomMembers(roomId)
+    const found = Array.isArray(roomRaw?.MemberList)
+      ? roomRaw.MemberList.find(item => item?.UserName === sid)
+      : null
+    if (found) return { ...(firstRaw || {}), ...found }
+    try { return await bot.puppet.roomMemberRawPayload(roomId, sid) } catch {}
+  }
+  return firstRaw
+}
+
 async function resolveWechatyMemberNamePartsFromId(room, senderId = '', { hydrate = false } = {}) {
-  const parts = { roomAlias: '', contactAlias: '', contactName: '' }
+  const parts = { roomAlias: '', contactAlias: '', contactName: '', wechatId: '', wxid: '', stableKey: '', rawIdentity: '' }
   const raw = await getWechatyRoomMemberRaw(room, senderId, { hydrate })
   if (raw) Object.assign(parts, partsFromWechatyRoomMemberRaw(raw))
   const candidates = []
@@ -1004,6 +1050,7 @@ async function resolveWechatyMemberNamePartsFromId(room, senderId = '', { hydrat
   pushWechatyCandidate(candidates, parts.contactName)
   try {
     const payload = await bot?.puppet?.contactPayload?.(senderId)
+    Object.assign(parts, Object.fromEntries(Object.entries(extractWechatyStableIdentity(payload)).map(([key, value]) => [key, parts[key] || value])))
     pushWechatyCandidate(candidates, payload?.alias)
     pushWechatyCandidate(candidates, payload?.name)
     pushWechatyCandidate(candidates, payload?.friend)
@@ -1014,7 +1061,7 @@ async function resolveWechatyMemberNamePartsFromId(room, senderId = '', { hydrat
 }
 
 async function resolveWechatyMemberNameParts(room, contact, fallback = '') {
-  const parts = { roomAlias: '', contactAlias: '', contactName: '' }
+  const parts = { roomAlias: '', contactAlias: '', contactName: '', wechatId: '', wxid: '', stableKey: '', rawIdentity: '' }
   const candidates = []
   const senderId = getWechatyContactId(contact) || String(fallback || '').trim()
   const direct = senderId ? await resolveWechatyMemberNamePartsFromId(room, senderId, { hydrate: true }) : null
@@ -1022,6 +1069,10 @@ async function resolveWechatyMemberNameParts(room, contact, fallback = '') {
     parts.roomAlias = direct.roomAlias || parts.roomAlias
     parts.contactAlias = direct.contactAlias || parts.contactAlias
     parts.contactName = direct.contactName || parts.contactName
+    parts.wechatId = direct.wechatId || parts.wechatId
+    parts.wxid = direct.wxid || parts.wxid
+    parts.stableKey = direct.stableKey || parts.stableKey
+    parts.rawIdentity = direct.rawIdentity || parts.rawIdentity
     pushWechatyCandidate(candidates, direct.roomAlias)
     pushWechatyCandidate(candidates, direct.contactAlias)
     pushWechatyCandidate(candidates, direct.contactName)
@@ -1032,6 +1083,7 @@ async function resolveWechatyMemberNameParts(room, contact, fallback = '') {
   try { parts.contactName = String(contact?.name?.() || '').trim(); pushWechatyCandidate(candidates, parts.contactName) } catch {}
   try {
     const payload = contact?.payload && typeof contact.payload === 'object' ? contact.payload : {}
+    Object.assign(parts, Object.fromEntries(Object.entries(extractWechatyStableIdentity(payload)).map(([key, value]) => [key, parts[key] || value])))
     pushWechatyCandidate(candidates, payload?.alias)
     pushWechatyCandidate(candidates, payload?.remark)
     pushWechatyCandidate(candidates, payload?.remarkName)
@@ -1109,6 +1161,10 @@ async function refreshRoomMemberDisplayNames(room, topic = '', { force = false }
         roomAlias: parts.roomAlias,
         contactAlias: parts.contactAlias,
         contactName: parts.contactName,
+        wechatId: parts.wechatId,
+        wxid: parts.wxid,
+        stableKey: parts.stableKey,
+        rawIdentity: parts.rawIdentity,
         source: 'wechaty-room-member',
       })
       updated += Number(result?.updated || 0)
@@ -1161,7 +1217,7 @@ function getConfiguredGroupNames() {
   }
 }
 
-function isWechatyGroupAdminSender(input = '') {
+async function isWechatyGroupAdminSender(input = '') {
   const payload = (input && typeof input === 'object') ? input : { senderId: input }
   const sid = String(payload.senderId || '').trim()
   const senderName = String(payload.senderName || '').trim()
@@ -1174,27 +1230,55 @@ function isWechatyGroupAdminSender(input = '') {
     const ids = Array.isArray(cfg.adminWechatIds) ? cfg.adminWechatIds.map(id => String(id || '').trim()).filter(Boolean) : []
     if (ids.some(id => id === sid)) return true
 
-    // wechaty-puppet-wechat4u 的 sender_id 在重新登录后可能变化。
-    // 设置页虽然保存的是精确 sender_id，但如果历史管理员 ID 在同一个群里对应的微信昵称/群昵称
-    // 与当前发言人一致，则认为是同一个已选管理员，并把本次新 sender_id 自动补入配置。
-    // 这样既解决重登后管理员失效，又避免用户每次扫码后重新配置。
-    if (!senderName || !ids.length) return false
     const members = listWeChatGroupMembers({ groupId, groupName, limit: 1000 }).members || []
-    const configuredAdminNames = new Set()
-    for (const id of ids) {
-      for (const member of members) {
-        if (String(member.sender_id || '').trim() !== id) continue
-        for (const name of [member.display_name, member.room_alias, member.contact_alias, member.contact_name]) {
-          const clean = String(name || '').trim()
-          if (clean) configuredAdminNames.add(clean)
+    const current = members.find(member => String(member.sender_id || '').trim() === sid) || null
+    const currentStable = String(current?.stable_key || current?.wxid || current?.wechat_id || '').trim()
+    const adminRows = ids
+      .map(id => members.find(member => String(member.sender_id || '').trim() === id))
+      .filter(Boolean)
+
+    // 优先使用稳定身份：wxid / 微信号 Alias。只要能拿到，就不依赖昵称。
+    if (currentStable) {
+      const matched = adminRows.find(row => String(row?.stable_key || row?.wxid || row?.wechat_id || '').trim() === currentStable)
+      if (matched) {
+        try {
+          const nextIds = [...new Set([...ids, sid])]
+          setWechatyDutyGroupConfig({ adminWechatIds: nextIds })
+          console.warn(`[WechatyAdmin] 管理员 sender_id 已变化，按稳定微信身份自动补录：group="${groupName || groupId}" stable="${currentStable}" old_id="${matched.sender_id}" new_id="${sid}"`)
+        } catch (err) {
+          console.warn(`[WechatyAdmin] 管理员新 sender_id 自动补录失败：${err?.message || err}`)
         }
+        return true
+      }
+    }
+
+    // 最后兜底才使用昵称，而且必须“当前在线快照”里同群昵称唯一，避免群里有人改成同名冒充。
+    // 成员表保留了历史 sender_id，不能把历史旧 ID 也算作同名人数，否则每次重登都会误判为多人同名。
+    if (!senderName || !ids.length) return false
+    const latestSeen = members.map(member => String(member.last_seen || '')).sort().at(-1) || ''
+    const activeMembers = latestSeen ? members.filter(member => String(member.last_seen || '') === latestSeen) : members
+    const sameNameRows = activeMembers.filter(member => {
+      const names = [member.display_name, member.room_alias, member.contact_alias, member.contact_name]
+        .map(v => String(v || '').trim())
+        .filter(Boolean)
+      return names.includes(senderName)
+    })
+    if (sameNameRows.length !== 1) {
+      if (sameNameRows.length > 1) console.warn(`[WechatyAdmin] 昵称兜底拒绝：group="${groupName || groupId}" name="${senderName}" 命中 ${sameNameRows.length} 人，存在同名风险`)
+      return false
+    }
+    const configuredAdminNames = new Set()
+    for (const row of adminRows) {
+      for (const name of [row.display_name, row.room_alias, row.contact_alias, row.contact_name]) {
+        const clean = String(name || '').trim()
+        if (clean) configuredAdminNames.add(clean)
       }
     }
     if (!configuredAdminNames.has(senderName)) return false
     try {
       const nextIds = [...new Set([...ids, sid])]
       setWechatyDutyGroupConfig({ adminWechatIds: nextIds })
-      console.warn(`[WechatyAdmin] 管理员 sender_id 已随登录变化，按同群昵称匹配自动补录：group="${groupName || groupId}" name="${senderName}" old_count=${ids.length} new_id="${sid}"`)
+      console.warn(`[WechatyAdmin] 管理员 sender_id 已随登录变化，按同群唯一昵称匹配自动补录：group="${groupName || groupId}" name="${senderName}" old_count=${ids.length} new_id="${sid}"`)
     } catch (err) {
       console.warn(`[WechatyAdmin] 管理员新 sender_id 自动补录失败：${err?.message || err}`)
     }

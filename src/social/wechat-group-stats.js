@@ -342,6 +342,11 @@ function ensureSchema() {
     );
     CREATE INDEX IF NOT EXISTS idx_wechat_group_digest_sent_at ON wechat_group_digest_sent(sent_at);
   `)
+  try { db.exec(`ALTER TABLE wechat_group_member_names ADD COLUMN wechat_id TEXT NOT NULL DEFAULT ''`) } catch {}
+  try { db.exec(`ALTER TABLE wechat_group_member_names ADD COLUMN wxid TEXT NOT NULL DEFAULT ''`) } catch {}
+  try { db.exec(`ALTER TABLE wechat_group_member_names ADD COLUMN stable_key TEXT NOT NULL DEFAULT ''`) } catch {}
+  try { db.exec(`ALTER TABLE wechat_group_member_names ADD COLUMN raw_identity TEXT NOT NULL DEFAULT ''`) } catch {}
+  try { db.exec(`CREATE INDEX IF NOT EXISTS idx_wechat_group_member_names_stable ON wechat_group_member_names(group_id, stable_key)`) } catch {}
   schemaReady = true
 }
 
@@ -564,26 +569,34 @@ export function updateWeChatGroupActivitySenderName({ groupId, groupName = '', s
 }
 
 
-export function upsertWeChatGroupMemberName({ groupId, groupName = '', senderId = '', displayName = '', roomAlias = '', contactAlias = '', contactName = '', source = 'wechaty' } = {}) {
+export function upsertWeChatGroupMemberName({ groupId, groupName = '', senderId = '', displayName = '', roomAlias = '', contactAlias = '', contactName = '', wechatId = '', wxid = '', stableKey = '', rawIdentity = '', source = 'wechaty' } = {}) {
   const gid = normalizeStatsGroupId(groupId)
   const sid = String(senderId || '').trim()
   const cleanRoomAlias = isWeChatInternalIdLike(roomAlias) ? '' : String(roomAlias || '').trim()
   const cleanContactAlias = isWeChatInternalIdLike(contactAlias) ? '' : String(contactAlias || '').trim()
   const cleanContactName = isWeChatInternalIdLike(contactName) ? '' : String(contactName || '').trim()
+  const cleanWechatId = String(wechatId || '').trim()
+  const cleanWxid = String(wxid || '').trim()
+  const cleanStableKey = String(stableKey || cleanWxid || cleanWechatId || '').trim()
+  const cleanRawIdentity = String(rawIdentity || '').slice(0, 2000)
   const finalName = pickWeChatDisplayName([displayName, cleanRoomAlias, cleanContactAlias, cleanContactName], '')
   if (!gid || !sid || finalName === '未知成员') return { ok: false, skipped: true, reason: 'invalid_member_name' }
   ensureSchema()
   const db = getDB()
   db.prepare(`
     INSERT INTO wechat_group_member_names (
-      group_id, group_name, sender_id, display_name, room_alias, contact_alias, contact_name, source, first_seen, last_seen
-    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      group_id, group_name, sender_id, display_name, room_alias, contact_alias, contact_name, wechat_id, wxid, stable_key, raw_identity, source, first_seen, last_seen
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     ON CONFLICT(group_id, sender_id) DO UPDATE SET
       group_name = CASE WHEN excluded.group_name <> '' THEN excluded.group_name ELSE wechat_group_member_names.group_name END,
       display_name = excluded.display_name,
       room_alias = excluded.room_alias,
       contact_alias = excluded.contact_alias,
       contact_name = excluded.contact_name,
+      wechat_id = CASE WHEN excluded.wechat_id <> '' THEN excluded.wechat_id ELSE wechat_group_member_names.wechat_id END,
+      wxid = CASE WHEN excluded.wxid <> '' THEN excluded.wxid ELSE wechat_group_member_names.wxid END,
+      stable_key = CASE WHEN excluded.stable_key <> '' THEN excluded.stable_key ELSE wechat_group_member_names.stable_key END,
+      raw_identity = CASE WHEN excluded.raw_identity <> '' THEN excluded.raw_identity ELSE wechat_group_member_names.raw_identity END,
       source = excluded.source,
       last_seen = excluded.last_seen
   `).run(
@@ -594,6 +607,10 @@ export function upsertWeChatGroupMemberName({ groupId, groupName = '', senderId 
     cleanRoomAlias,
     cleanContactAlias,
     cleanContactName,
+    cleanWechatId,
+    cleanWxid,
+    cleanStableKey,
+    cleanRawIdentity,
     String(source || 'wechaty').trim(),
     nowTimestamp(),
     nowTimestamp()
@@ -681,13 +698,13 @@ export function listWeChatGroupMembers({ groupId = '', groupName = '', q = '', l
   }
   const keyword = String(q || '').trim()
   if (keyword) {
-    filters.push('(display_name LIKE ? OR room_alias LIKE ? OR contact_alias LIKE ? OR contact_name LIKE ? OR sender_id LIKE ? OR group_name LIKE ?)')
+    filters.push('(display_name LIKE ? OR room_alias LIKE ? OR contact_alias LIKE ? OR contact_name LIKE ? OR wechat_id LIKE ? OR wxid LIKE ? OR stable_key LIKE ? OR sender_id LIKE ? OR group_name LIKE ?)')
     const like = `%${keyword}%`
-    params.push(like, like, like, like, like, like)
+    params.push(like, like, like, like, like, like, like, like, like)
   }
   const where = filters.length ? `WHERE ${filters.join(' AND ')}` : ''
   const rows = db.prepare(`
-    SELECT group_id, group_name, sender_id, display_name, room_alias, contact_alias, contact_name, source, first_seen, last_seen
+    SELECT group_id, group_name, sender_id, display_name, room_alias, contact_alias, contact_name, wechat_id, wxid, stable_key, raw_identity, source, first_seen, last_seen
     FROM wechat_group_member_names
     ${where}
     ORDER BY last_seen DESC, group_name COLLATE NOCASE ASC, display_name COLLATE NOCASE ASC

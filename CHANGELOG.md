@@ -2,6 +2,25 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.30 - 2026-05-29
+
+### 新增
+- 尝试采集微信群成员稳定微信身份字段：成员库新增 `wechat_id`、`wxid`、`stable_key`、`raw_identity` 字段。
+- 管理员识别优先级调整为：精确 sender_id > 稳定微信身份（wxid/微信号 Alias）> 当前群成员快照唯一昵称兜底。
+- 对单个群成员额外尝试调用 wechat4u `batchGetContact({ UserName, EncryChatRoomId })` 拉取详情，测试是否能拿到真实微信号或 wxid。
+
+### 修复
+- 修复昵称兜底把历史旧 sender_id 也算入同名人数的问题：现在只检查当前最新群成员快照里的同名人数，避免重登后历史记录造成误判。
+- 如果当前快照里出现多个同名成员，昵称兜底会拒绝授权，避免普通群友改成管理员同名后冒充。
+
+### 实测结果
+- 当前 wechat4u 在 `值班群` 中只能拿到临时 `UserName=@...`，未暴露 `wxid` 或微信号 Alias；数据库字段已保留，若后续协议/账号能返回会自动启用。
+
+### 验证
+- 通过 node --check：src/social/wechaty-duty-group.js、src/social/wechat-group-stats.js、src/social/dispatch.js、src/social/wechat-groups.js。
+- 通过 npm run test:wechat-guard。
+- 通过 npm run test:wechat-record-all。
+
 ## v0.4.29 - 2026-05-29
 
 ### 修复
