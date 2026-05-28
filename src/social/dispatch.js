@@ -116,6 +116,8 @@ async function sendWechaty({ roomId, memberId = '' }, content, options = {}) {
   return sendWechatyDutyGroupMessage(roomId, content, {
     mentionId: options?.social?.reply_mention_id || options?.social?.sender_id || options?.replyMentionId || memberId || '',
     mentionName: options?.social?.reply_mention_name || options?.social?.sender_name || options?.replyMentionName || '',
+    adminBypass: options?.social?.wechat_admin === true,
+    social: options?.social || null,
   })
 }
 

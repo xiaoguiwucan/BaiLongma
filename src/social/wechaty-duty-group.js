@@ -370,7 +370,8 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     if (mentionId) {
       console.log(`[Wechaty] 准备发送群回复 room="${rid}" mention_id="${mentionId}" mention_name="${mentionName || ''}" resolved=${mentionContact ? 'yes' : 'no'}`)
     }
-    if (LOCAL_FILE_REFERENCE_RE.test(body)) {
+    const adminBypass = opts.adminBypass === true || opts.social?.wechat_admin === true
+    if (!adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
       const refusal = '为了保护机主隐私，微信群里不能发送或描述本机文件、桌面图片、截图、相册或 file:// 路径。可以发送公开网络图片链接。'
       if (mentionContact) {
         await room.say(refusal, mentionContact)
@@ -378,6 +379,9 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
         await room.say(refusal)
       }
       return { ok: false, blocked: true, reason: 'local_file_reference_in_wechat_outbound' }
+    }
+    if (adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
+      console.log('[WechatyAdmin] 已验证管理员回复绕过微信群本机隐私发送拦截')
     }
     const imageUrls = extractPublicImageUrlsFromWechatText(body)
     let textBody = imageUrls.length ? stripImageMarkdown(body, imageUrls) : body
