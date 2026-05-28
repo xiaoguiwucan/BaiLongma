@@ -49,5 +49,7 @@ assert.equal(listed.ok, true)
 assert.equal(listed.total, 1)
 assert.equal(listed.records[0].sender_display_name, '成员A')
 assert.equal(listed.records[0].display_text, '这条有 force，聊天记录库必须入库')
+assert.equal(listed.latest_record.sender_display_name, '成员A')
+assert.equal(listed.latest_record.display_text, '这条有 force，聊天记录库必须入库')
 
 console.log('[PASS] wechat record-all ingestion')

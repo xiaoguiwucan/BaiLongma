@@ -586,6 +586,9 @@ const createSettingsModal = () => `
                   <b>聊天记录库</b>是原始流水账：谁在什么时候说了什么、发了什么图；<b>群记忆管理</b>是 Honcho 长期记忆：把聊天里有价值的偏好、约定、结论抽取成可供大模型下次回答使用的知识。
                 </div>
                 <div class="wechaty-records-filters">
+                  <label><span>查看群组</span><select class="settings-select" id="wechaty-records-group">
+                    <option value="">跟随左侧群选择</option>
+                  </select></label>
                   <label><span>开始时间</span><input class="settings-input" id="wechaty-records-from" type="datetime-local"></label>
                   <label><span>结束时间</span><input class="settings-input" id="wechaty-records-to" type="datetime-local"></label>
                   <label><span>类型</span><select class="settings-select" id="wechaty-records-type">
@@ -971,6 +974,19 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.15</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">修复微信群聊天记录页“不更新”的误判：明确当前查看群，并让结束时间自动跟随现在。</p>
+                <ul class="release-note-points">
+                  <li>聊天记录库新增“查看群组”下拉框，不再只能跟随左侧 Honcho 记忆群选择。</li>
+                  <li>默认结束时间会在每次查询前自动刷新到当前时间，避免设置页长开后新消息被旧时间过滤。</li>
+                  <li>微信群助手页停留时会自动刷新聊天记录列表，不再只刷新统计榜单。</li>
+                  <li>记录摘要显示当前查看群和 DB 最新入库时间，方便判断是选错群、筛选范围问题还是真没入库。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.14</span>

@@ -73,3 +73,14 @@
 - 旧单模型配置必须可自动迁移为模型池第一项，避免用户当前配置丢失。
 - 自动切换只处理额度不足、限流、认证失败、服务不可用、模型不可用、网络超时等可切换错误；用户主动中断不切换。
 - 已经流出内容后不重试，避免 UI/语音重复或内容拼接错乱。
+
+## v0.4.15 Hotfix Plan - WeChat chat archive not updating
+1. [complete] 对照 Wechaty 日志和 `wechat_group_activity` 数据库最新记录，确认问题发生在写库链路还是 UI/API 查询链路。
+2. [complete] 检查 `wechaty-duty-group`、`wechat-group-stats`、API 和设置页聊天记录库筛选逻辑，重点确认 room_id 变化、统计群开关、北京时间/UTC、自动刷新。
+3. [complete] 修复“程序运行但全量聊天记录不持续入库/页面不更新”的根因，并增加最近收到/最近入库诊断。
+4. [in_progress] 运行关键测试、更新版本文档、提交 tag、推送 GitHub Release。
+
+### v0.4.15 Constraints
+- 不修改 AiMaMi 本地代理配置。
+- 聊天记录库必须独立于是否启用日报/统计榜单：只要 Wechaty 收到已接入群消息，就必须尝试入库。
+- 查询页面要按群名合并旧 room_id，避免重登后看起来“数据丢失”。

@@ -2118,6 +2118,7 @@ function initTTSSettings() {
   const wechatyStatsCards = document.getElementById("wechaty-stats-cards");
   const wechatyLeaderboards = document.getElementById("wechaty-leaderboards");
   const wechatyStatsRecent = document.getElementById("wechaty-stats-recent");
+  const wechatyRecordsGroup = document.getElementById("wechaty-records-group");
   const wechatyRecordsFrom = document.getElementById("wechaty-records-from");
   const wechatyRecordsTo = document.getElementById("wechaty-records-to");
   const wechatyRecordsType = document.getElementById("wechaty-records-type");
@@ -2449,6 +2450,7 @@ function initTTSSettings() {
   let wechatyRecordsOffset = 0;
   let wechatyRecordsHasMore = false;
   let wechatyRecordsLastQuery = null;
+  let wechatyRecordsToAutoNow = true;
   let wechatyStatsAutoRefreshTimer = null;
 
   function formatWechatyTime(value, full = false) {
@@ -2467,7 +2469,12 @@ function initTTSSettings() {
 
   function ensureWechatyRecordDefaultRange() {
     if (!wechatyRecordsFrom || !wechatyRecordsTo) return;
-    if (!wechatyRecordsTo.value) wechatyRecordsTo.value = toDateTimeLocalValue(new Date());
+    // 默认“结束时间”必须跟随当前时间，否则设置页长开时新消息会被旧 to 时间过滤，
+    // 页面看起来就像聊天记录库不更新。用户手动改过结束时间后才停止自动跟随。
+    if (wechatyRecordsToAutoNow || !wechatyRecordsTo.value) {
+      wechatyRecordsTo.value = toDateTimeLocalValue(new Date());
+      wechatyRecordsToAutoNow = true;
+    }
     if (!wechatyRecordsFrom.value) {
       const start = new Date();
       start.setHours(0, 0, 0, 0);
@@ -2483,6 +2490,7 @@ function initTTSSettings() {
     end.setHours(23, 59, 0, 0);
     wechatyRecordsFrom.value = toDateTimeLocalValue(start);
     wechatyRecordsTo.value = toDateTimeLocalValue(end);
+    wechatyRecordsToAutoNow = false;
   }
 
   function describeWechatyCachedSuffix(status = {}) {
@@ -2824,7 +2832,8 @@ function initTTSSettings() {
       return;
     }
     const records = Array.isArray(data.records) ? data.records : [];
-    const summary = `已入库 ${data.total || 0} 条 · 当前显示 ${Math.min((data.offset || 0) + records.length, data.total || 0)} 条 · 参与 ${data.totals?.participant_count || 0} 人 · 图片 ${data.totals?.image_count || 0} / 表情 ${data.totals?.emoji_count || 0} / 链接 ${data.totals?.link_count || 0} · ${data.from_display || ''} 至 ${data.to_display || ''}`;
+    const latest = data.latest_record?.timestamp_display || formatWechatyTime(data.latest_record?.timestamp, true) || '暂无';
+    const summary = `当前查看：${data.group_name || wechatyActiveMemoryGroupName || '未选择群'} · 当前筛选已入库 ${data.total || 0} 条 · 当前显示 ${Math.min((data.offset || 0) + records.length, data.total || 0)} 条 · DB 最新入库 ${latest} · 参与 ${data.totals?.participant_count || 0} 人 · 图片 ${data.totals?.image_count || 0} / 表情 ${data.totals?.emoji_count || 0} / 链接 ${data.totals?.link_count || 0} · ${data.from_display || ''} 至 ${data.to_display || ''}`;
     wechatyRecordsSummary.textContent = summary;
     const html = records.length
       ? records.map(row => `<article class="wechaty-record-row">
@@ -3269,6 +3278,20 @@ function initTTSSettings() {
     return raw.startsWith("wechaty:") ? raw : `wechaty:${raw}`;
   }
 
+  function renderWechatyRecordsGroupSelect() {
+    if (!wechatyRecordsGroup) return;
+    const candidates = getWechatyMemoryCandidateGroups();
+    const currentId = wechatyActiveMemoryGroupId || (candidates[0] ? memoryGroupRequestId(candidates[0]) : "");
+    const options = candidates.map(group => {
+      const reqId = memoryGroupRequestId(group);
+      const selected = reqId === currentId ? " selected" : "";
+      const label = `${group.topic || reqId}${group.stale ? "（缓存）" : ""}`;
+      return `<option value="${escapeHtml(reqId)}" data-group-name="${escapeHtml(group.topic || "")}"${selected}>${escapeHtml(label)}</option>`;
+    }).join("");
+    wechatyRecordsGroup.innerHTML = options || '<option value="">没有可查看的接入群</option>';
+    if (currentId) wechatyRecordsGroup.value = currentId;
+  }
+
   function renderWechatyMemoryGroups(overview = null) {
     if (!wechatyMemoryGroups) return;
     const candidates = getWechatyMemoryCandidateGroups();
@@ -3276,6 +3299,7 @@ function initTTSSettings() {
       wechatyActiveMemoryGroupId = memoryGroupRequestId(candidates[0]);
       wechatyActiveMemoryGroupName = candidates[0].topic;
     }
+    renderWechatyRecordsGroupSelect();
     const overviewMap = new Map((overview?.groups || []).map(row => [String(row.group_id || row.id || ""), row]));
     if (!candidates.length) {
       wechatyMemoryGroups.innerHTML = '<div class="wechaty-empty">请先在上方勾选允许 @ 回复的群，保存后这里会按群显示 Honcho 记忆。</div>';
@@ -3572,6 +3596,9 @@ function initTTSSettings() {
     wechatyStatsAutoRefreshTimer = setInterval(() => {
       if (!isWechatGroupsTabVisible()) return;
       loadWechatyActiveStats({ silent: true, refreshRecords: false }).catch?.(() => {});
+      if (wechatyActiveMemoryGroupId && !wechatyRecordsRefreshBtn?.disabled) {
+        loadWechatyRecords({ append: false }).catch?.(() => {});
+      }
     }, 12000);
   }
 
@@ -3621,6 +3648,20 @@ function initTTSSettings() {
 
   wechatyRefreshMemoryBtn?.addEventListener("click", loadWechatyActiveMemory);
   wechatyRefreshStatsBtn?.addEventListener("click", () => loadWechatyActiveStats({ silent: false }));
+  wechatyRecordsGroup?.addEventListener("change", () => {
+    const opt = wechatyRecordsGroup.selectedOptions?.[0];
+    wechatyActiveMemoryGroupId = wechatyRecordsGroup.value || "";
+    wechatyActiveMemoryGroupName = opt?.dataset?.groupName || opt?.textContent?.replace(/（缓存）$/u, '') || "";
+    renderWechatyMemoryGroups();
+    loadWechatyActiveStats({ silent: true });
+    loadWechatyRecords({ append: false });
+  });
+  wechatyRecordsFrom?.addEventListener("input", () => {
+    if (!wechatyRecordsTo?.value) wechatyRecordsToAutoNow = true;
+  });
+  wechatyRecordsTo?.addEventListener("input", () => {
+    wechatyRecordsToAutoNow = !wechatyRecordsTo.value;
+  });
   wechatyRecordsRefreshBtn?.addEventListener("click", () => loadWechatyRecords({ append: false }));
   wechatyRecordsTodayBtn?.addEventListener("click", () => { setWechatyRecordTodayRange(); loadWechatyRecords({ append: false }); });
   wechatyRecordsRefreshNamesBtn?.addEventListener("click", refreshWechatyMemberNames);

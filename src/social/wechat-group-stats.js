@@ -762,6 +762,13 @@ export function listWeChatGroupActivityRecords({ groupId, groupName = '', from =
     FROM wechat_group_activity
     WHERE ${where}
   `).get(...params) || {}
+  const latestRecord = db.prepare(`
+    SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, timestamp, created_at
+    FROM wechat_group_activity
+    WHERE ${groupFilter.sql}
+    ORDER BY id DESC
+    LIMIT 1
+  `).get(...groupFilter.params) || null
   const rows = db.prepare(`
     SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, raw_text,
            text_length, image_count, emoji_count, link_count, brag_score, mentioned_self, source, timestamp, created_at
@@ -792,6 +799,7 @@ export function listWeChatGroupActivityRecords({ groupId, groupName = '', from =
       brag_score: Number(totals.brag_score || 0),
     },
     records: rows.map(row => rowWithDisplayName(row, nameMap)),
+    latest_record: latestRecord ? rowWithDisplayName(latestRecord, nameMap) : null,
     db_path: paths.dbFile,
   }
 }

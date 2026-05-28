@@ -51,3 +51,10 @@
 - v0.4.6：最终验证通过：node --check 全部相关文件通过，wechat guard/memory 测试通过，git diff --check 通过；已重启 Electron 并确认 `/settings` 返回模型池 profiles、activeProfileId 和 failover，且不返回明文 API Key。
 - 2026-05-28 v0.4.7：已修复微信群 @ 回复对象，改为按当前提问人的 sender_id / sender_name 生成专属 reply target，并在发送时优先按群成员精确匹配，避免再 @ 到管理员或上一位成员。
 - 2026-05-28 v0.4.7：已补充对聊天记忆机制的说明：不是全库直塞，而是分层注入（群长期记忆、成员记忆、最近群聊流水、摘要、关键词召回）。
+
+## 2026-05-28 v0.4.15 hotfix progress
+- 已验证 DB schema：聊天记录字段为 `display_text/raw_text/timestamp`，不是 `content`。
+- 已用 SQLite 和 API 对比确认：数据库持续写入 PT 群新消息，页面截图的 16 条对应另一个当前选中的群。
+- 下一步修复：让结束时间默认跟随当前时间、自动刷新聊天记录列表、在摘要中明确显示当前查看群和 DB 最新入库时间，降低误判。
+- 已完成 v0.4.15 修复：查看群组下拉框、结束时间自动跟随、聊天记录自动刷新、摘要显示当前群/DB 最新入库时间、API latest_record。
+- 已重启 Bailongma，当前 3721 端口运行 v0.4.15；Browser 烟测切到 PT 群后记录数正常刷新到 514 条。
