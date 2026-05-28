@@ -5,7 +5,7 @@ import { FileBox } from 'file-box'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
-import { isWeChatInternalIdLike, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
+import { isWeChatInternalIdLike, listWeChatGroupMembers, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -711,6 +711,12 @@ async function handleMessage(message) {
     console.log(`[Wechaty] 值班群消息${isSelf ? '（self）' : ''}${mentionedSelf ? '（@我）' : ''} ${senderName}: ${text.slice(0, 100)}`)
 
     const adminVerified = isWechatyGroupAdminSender(senderId)
+    const adminProtectionReply = adminVerified ? '' : buildAdminProtectionReply({ groupId, groupName: topic, senderId, text })
+    if (adminProtectionReply) {
+      await sendWechatyDutyGroupMessage(room.id, adminProtectionReply, { mentionId: senderId, mentionName: senderName })
+      recordWeChatGroupAssistantReply({ groupId, groupName: topic, reply: adminProtectionReply, targetMemberName: senderName, source: 'wechaty' }).catch(() => {})
+      return
+    }
     const safety = adminVerified ? { allowed: true, adminBypass: true } : checkWeChatGroupCommandSafety(text)
     if (!safety.allowed) {
       const refusal = safety.reason
@@ -1042,6 +1048,26 @@ function isWechatyGroupAdminSender(senderId = '') {
   } catch {
     return false
   }
+}
+
+function buildAdminProtectionReply({ groupId = '', groupName = '', senderId = '', text = '' } = {}) {
+  const cfg = getWechatyDutyGroupConfig()
+  if (cfg.adminModeEnabled !== true) return ''
+  const adminIds = Array.isArray(cfg.adminWechatIds) ? cfg.adminWechatIds.map(id => String(id || '').trim()).filter(Boolean) : []
+  if (!adminIds.length || adminIds.includes(String(senderId || '').trim())) return ''
+  let members = []
+  try { members = listWeChatGroupMembers({ groupId, groupName, limit: 1000 }).members || [] } catch {}
+  const admins = adminIds.map(id => members.find(member => String(member.sender_id || '') === id) || { sender_id: id, display_name: id })
+  const value = String(text || '')
+  const targetAdmin = admins.find(admin => {
+    const names = [admin.display_name, admin.room_alias, admin.contact_alias, admin.contact_name, admin.sender_id].map(v => String(v || '').trim()).filter(Boolean)
+    return names.some(name => name && value.includes(name))
+  })
+  if (!targetAdmin) return ''
+  const hostile = /(删除|物理|干掉|搞死|弄死|禁言|踢|封|骂|喷|怼|诽谤|冒充|套|骗|提权|越狱|绕过|攻击|伤害|羞辱|嘲讽|整他|搞他|开盒|人肉)/u.test(value)
+  if (!hostile) return ''
+  const name = targetAdmin.display_name || targetAdmin.sender_id || '管理员'
+  return `别拿我当刀使。${name} 是已验证管理员，不是你一句话就能被“物理删除”的 NPC[吃瓜] 想坑管理员，先把你这点小心思藏好。`
 }
 
 function normalizeGroupNames(input) {

@@ -712,7 +712,20 @@ async function execSendMessage({ target_id, content, channel = 'AUTO' }, context
   if (!target_id) return '错误：未提供 target_id'
   if (!content?.trim()) return '错误：未提供消息内容'
 
-  const resolvedId = resolveAllowedTargetId(target_id, context.allowedTargetIds)
+  const social = context.currentSocial || {}
+  // 微信群回复目标不能相信模型自己选：模型可能把被讨论/被 @ 的其他群友当成回复对象。
+  // 只要当前 turn 是 Wechaty 群消息，就强制使用入站时记录的真实 sender_id。
+  let effectiveTargetId = target_id
+  if (social.platform === 'wechaty-duty-group' && social.room_id && (social.reply_mention_id || social.sender_id)) {
+    const roomKey = encodeURIComponent(String(social.room_id || '').trim())
+    const memberKey = encodeURIComponent(String(social.reply_mention_id || social.sender_id || '').trim())
+    effectiveTargetId = `wechaty:room:${roomKey}:member:${memberKey}`
+    if (String(target_id || '') !== effectiveTargetId) {
+      console.warn(`[send_message] Wechaty reply target overridden: model="${target_id}" -> actual_sender="${effectiveTargetId}"`)
+    }
+  }
+
+  const resolvedId = resolveAllowedTargetId(effectiveTargetId, context.allowedTargetIds)
   assertVisibleTargetId(resolvedId, context.visibleTargetIds)
   const cleanedContent = trimAssistantFluff(content)
   if (!cleanedContent) return '错误：消息内容为空'

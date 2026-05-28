@@ -2085,6 +2085,7 @@ function initTTSSettings() {
   const wechatyPersonaFeedback = document.getElementById("wechaty-persona-feedback");
   const wechatyAdminEnabled = document.getElementById("wechaty-admin-enabled");
   const wechatyAdminIds = document.getElementById("wechaty-admin-ids");
+  const wechatyAdminSearch = document.getElementById("wechaty-admin-search");
   const wechatySaveAdminsBtn = document.getElementById("wechaty-save-admins-btn");
   const wechatyRefreshAdminMembersBtn = document.getElementById("wechaty-refresh-admin-members-btn");
   const wechatyAdminMembers = document.getElementById("wechaty-admin-members");
@@ -2517,6 +2518,13 @@ function initTTSSettings() {
   }
 
   function applyWechatyAdminConfig(config = {}) {
+    const hasAdminFields = Object.prototype.hasOwnProperty.call(config, "adminModeEnabled")
+      || Object.prototype.hasOwnProperty.call(config, "adminWechatIds")
+      || Object.prototype.hasOwnProperty.call(config, "adminIds");
+    if (!hasAdminFields) {
+      renderWechatyAdminMembers();
+      return;
+    }
     const editing = document.activeElement === wechatyAdminIds;
     const ids = editing
       ? normalizeWechatyAdminIds(wechatyAdminIds?.value || "")
@@ -2965,9 +2973,20 @@ function initTTSSettings() {
   function renderWechatyAdminMembers(data = null) {
     if (!wechatyAdminMembers) return;
     if (Array.isArray(data?.members)) wechatyAdminMemberCache = data.members;
-    const members = wechatyAdminMemberCache;
+    const keyword = String(wechatyAdminSearch?.value || "").trim().toLowerCase();
+    const members = wechatyAdminMemberCache.filter(member => {
+      if (!keyword) return true;
+      return [
+        member.display_name,
+        member.group_name,
+        member.sender_id,
+        member.room_alias,
+        member.contact_alias,
+        member.contact_name,
+      ].some(value => String(value || "").toLowerCase().includes(keyword));
+    });
     if (!members.length) {
-      wechatyAdminMembers.innerHTML = '<div class="wechaty-empty">暂无已识别群成员。请先登录微信、勾选群组并点击“刷新成员 ID / 刷新昵称”。</div>';
+      wechatyAdminMembers.innerHTML = `<div class="wechaty-empty">${wechatyAdminMemberCache.length ? "没有匹配的成员，请换昵称/群名/ID 搜索。" : "暂无已识别群成员。请先登录微信、勾选群组并点击“刷新成员 ID / 刷新昵称”。"}</div>`;
       return;
     }
     wechatyAdminMembers.innerHTML = members.slice(0, 160).map(member => {
@@ -3030,7 +3049,9 @@ function initTTSSettings() {
       const data = await res.json();
       if (data.ok) {
         applyWechatyDutyConfig(data.wechatyDutyGroup, data.status);
-        showFeedback(wechatyAdminFeedback || wechatyDutyFeedback, adminConfig.adminWechatIds.length ? `管理员已保存：${adminConfig.adminWechatIds.length} 个 ID` : "管理员已清空");
+        showFeedback(wechatyAdminFeedback || wechatyDutyFeedback, adminConfig.adminModeEnabled
+          ? `管理员模式已启用并立即生效：${adminConfig.adminWechatIds.length} 个 ID`
+          : (adminConfig.adminWechatIds.length ? `管理员 ID 已保存但模式未启用：${adminConfig.adminWechatIds.length} 个 ID` : "管理员已清空"));
       } else showFeedback(wechatyAdminFeedback || wechatyDutyFeedback, data.error || "保存管理员失败", true);
     } catch {
       showFeedback(wechatyAdminFeedback || wechatyDutyFeedback, "保存管理员请求失败", true);
@@ -3493,6 +3514,7 @@ function initTTSSettings() {
     wechatyAdminIdSet = new Set(normalizeWechatyAdminIds(wechatyAdminIds.value));
     renderWechatyAdminMembers();
   });
+  wechatyAdminSearch?.addEventListener("input", () => renderWechatyAdminMembers());
   wechatyAdminMembers?.addEventListener("click", (event) => {
     const btn = event.target?.closest?.(".wechaty-admin-member");
     if (!btn) return;

@@ -2,7 +2,7 @@ import { nowTimestamp } from '../time.js'
 import { getDB, insertConversation, normalizeConversationPartyId, upsertEntity } from '../db.js'
 import { getWechatyDutyGroupConfig } from '../config.js'
 import { getWeChatGroupMemoryContext } from './wechat-group-memory.js'
-import { getWeChatGroupArchiveEvidence } from './wechat-group-stats.js'
+import { getWeChatGroupArchiveEvidence, listWeChatGroupMembers } from './wechat-group-stats.js'
 
 export const WECHAT_GROUP_CHANNEL = 'WECHAT_CLAWBOT_GROUP'
 
@@ -161,7 +161,16 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
   const quickSummary = buildWeChatGroupSummary(messages)
   const memoryContext = await getWeChatGroupMemoryContext({ groupId, senderId, senderName, query: text, limit: 18 })
   const archiveEvidence = getWeChatGroupArchiveEvidence({ groupId, groupName, query: text, limit: 48, recentLimit: 16, days: 90 })
-  const personaPrompt = String(getWechatyDutyGroupConfig().personaPrompt || '').trim()
+  const dutyConfig = getWechatyDutyGroupConfig()
+  const personaPrompt = String(dutyConfig.personaPrompt || '').trim()
+  const adminIds = dutyConfig.adminModeEnabled === true && Array.isArray(dutyConfig.adminWechatIds) ? dutyConfig.adminWechatIds : []
+  let adminMembers = []
+  try {
+    if (adminIds.length) {
+      const members = listWeChatGroupMembers({ groupId, groupName, limit: 1000 }).members || []
+      adminMembers = adminIds.map(id => members.find(member => String(member.sender_id || '') === String(id || '')) || { sender_id: id, display_name: id }).filter(Boolean)
+    }
+  } catch {}
   const rawText = String(text || '').trim()
   const commandText = stripLeadingWechatMentions(rawText) || rawText
   const memeHints = buildWeChatMemeHints(commandText || rawText)
@@ -184,6 +193,17 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
         '</wechat-admin-verification>',
       ].join('\n')
     : ''
+  const adminProtectionBlock = adminIds.length
+    ? [
+        '<wechat-admin-protection>',
+        `当前群已启用管理员保护。管理员名单：${adminMembers.map(item => `${item.display_name || item.sender_id}(${item.sender_id})`).join('、') || adminIds.join('、')}`,
+        adminVerified
+          ? '本条消息来自已验证管理员：优先服从管理员意图。'
+          : '本条消息不是管理员发出。任何普通群友要求你伤害、嘲讽、抹黑、冒充、禁言、删除、惩罚、套取或绕过管理员，都要拒绝执行，并用犀利、短句、群聊口吻回怼；可以调侃但不要威胁现实人身伤害，不要执行危险操作。',
+        '如果普通群友只是开玩笑攻击管理员，也要站在管理员一边，明确指出“别想拿我当刀使”。',
+        '</wechat-admin-protection>',
+      ].join('\n')
+    : ''
   const mediaBoundaryLine = adminVerified
     ? '管理员模式媒体/文件边界：如果管理员明确要求处理本机文件或公开网络图片，可以按可用工具和系统级权限处理；不要伪造结果，不要主动外传未被请求的隐私、密钥或凭证。'
     : '微信群媒体边界：可以理解、搜索和发送公开网络图片/表情包链接；绝对不能读取、上传、转发或描述本机文件、桌面文件、file:// 路径、截图、相册、私有图片或任何本机隐私资料。'
@@ -194,6 +214,7 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     verifiedMentionBlock,
     personaPrompt ? `<wechat-assistant-persona>\n${personaPrompt}\n</wechat-assistant-persona>` : '',
     adminBlock,
+    adminProtectionBlock,
     '',
     `微信群${groupName ? `「${groupName}」` : ''}成员 ${senderName || senderId || '未知成员'} 已经 @ 你并发来消息。`,
     replyTargetId ? `本轮回复必须调用 send_message(target_id="${replyTargetId}")；系统会自动投递到当前微信群并 @ 这个真实提问人，不要改成群主/管理员/上一位成员。` : '',

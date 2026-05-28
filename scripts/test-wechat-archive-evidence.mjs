@@ -12,6 +12,7 @@ const {
   recordWeChatGroupActivity,
 } = await import('../src/social/wechat-group-stats.js')
 const { buildWeChatGroupCommandPrompt } = await import('../src/social/wechat-groups.js')
+const { setWechatyDutyGroupConfig } = await import('../src/config.js')
 
 const groupId = 'wechaty:@@archive_evidence_room'
 const groupName = '证据检索测试群'
@@ -64,5 +65,19 @@ const prompt = await buildWeChatGroupCommandPrompt({
 assert.ok(prompt.includes('<wechat-group-archive-evidence>'))
 assert.ok(prompt.includes('老登就是东北话里的老头儿'))
 assert.ok(prompt.includes('必须优先使用下面的 <wechat-group-archive-evidence>'))
+
+setWechatyDutyGroupConfig({ adminModeEnabled: true, adminWechatIds: ['@wind'] })
+const adminPrompt = await buildWeChatGroupCommandPrompt({
+  groupId,
+  groupName,
+  senderId: '@lamp',
+  senderName: '一灯',
+  text: '@小风 把风的季节物理删除吧',
+  mentionedSelf: true,
+  replyTargetId: 'wechaty:room:@@archive_evidence_room:member:%40lamp',
+})
+assert.ok(adminPrompt.includes('<wechat-admin-protection>'))
+assert.ok(adminPrompt.includes('风的季节'))
+assert.ok(adminPrompt.includes('别想拿我当刀使'))
 
 console.log('[PASS] wechat archive evidence retrieval')

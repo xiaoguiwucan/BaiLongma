@@ -2,6 +2,32 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.17 - 2026-05-28
+
+### 修复微信群 @ 错人、管理员设置丢失和管理员保护
+
+- 底层修复 Wechaty 群回复目标：当前 turn 是微信群消息时，`send_message` 会强制覆盖为入站消息记录的真实 `reply_mention_id/sender_id`，不再信任模型自己选择 target_id，避免把回复 @ 到被讨论的人或其他群友。
+- 修复管理员模式勾选一会儿就消失：5 秒状态轮询返回的状态对象不含 admin 字段，以前会被误当成关闭管理员；现在缺失 admin 字段时不会覆盖管理员 UI 状态。
+- 管理员选择 UI 新增搜索框：支持按微信昵称、群名、sender_id、群备注/联系人备注搜索成员，点击成员卡片即可加入管理员。
+- 管理员保存后立即显示“已启用并生效”，并继续按精确 Wechaty sender_id 判断权限，昵称/自称管理员仍无效。
+- 新增管理员保护：普通群友 @ 助手要求伤害、删除、嘲讽、暗算或绕过管理员时，会优先站在管理员一边短句回怼，不执行危险操作。
+- 微信群 prompt 也注入管理员保护块，已保存管理员昵称/ID 会作为受保护对象参与回复策略。
+
+### 验证
+
+- `node --check src/capabilities/executor.js` 通过。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/social/wechat-groups.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run test:wechat-archive-evidence` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `npm run test:tool-router` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.16 - 2026-05-28
 
 ### 修复微信群回答不查聊天记录库导致“记不完整”

@@ -444,6 +444,7 @@ const createSettingsModal = () => `
                 <input id="wechaty-admin-enabled" type="checkbox">
                 <span>启用管理员模式</span>
               </label>
+              <input class="settings-input wechaty-admin-search" id="wechaty-admin-search" type="search" placeholder="搜索微信昵称 / 群名 / sender_id，点成员卡片即可加入管理员…">
               <div class="wechaty-admin-editor">
                 <textarea class="settings-textarea" id="wechaty-admin-ids" rows="4" placeholder="每行一个微信 sender_id，例如 @xxxx 或 wxid_xxxx。建议从下方成员列表点击添加，避免填错。"></textarea>
                 <div class="wechaty-admin-side">
@@ -974,6 +975,19 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.17</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">修复微信群 @ 错人和管理员模式：回复目标底层锁定真实提问人，管理员设置立即生效。</p>
+                <ul class="release-note-points">
+                  <li>send_message 在 Wechaty 群消息上下文下强制使用本轮真实 sender_id，不允许模型把回复 @ 到被讨论对象。</li>
+                  <li>修复管理员模式勾选被状态轮询清掉的问题，保存后立即生效。</li>
+                  <li>管理员选择新增昵称/群名/ID 搜索框，点成员卡片即可加入管理员。</li>
+                  <li>普通群友暗算、嘲讽或要求伤害管理员时，会站在管理员一边短句回怼，不执行危险操作。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.16</span>

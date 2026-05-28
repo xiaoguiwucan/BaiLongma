@@ -4353,6 +4353,11 @@ body.person-card-mode .person-card-panel,
   border-color: rgba(251,191,36,0.28);
   background: rgba(251,191,36,0.055);
 }
+.wechaty-admin-search {
+  margin: 0 0 10px;
+  border-color: rgba(251,191,36,0.22);
+  background: rgba(0,8,14,0.72);
+}
 .wechaty-admin-editor {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(190px, 240px);

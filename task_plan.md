@@ -90,3 +90,10 @@
 2. [complete] 新增当前群聊天记录库证据检索：按关键词/称呼/被问对象搜索本群历史流水，并限制条数避免全库塞进 prompt。
 3. [pending] 将检索结果注入微信群 @ 回复 prompt，要求回答聊天历史问题时优先基于证据，不知道就说明没查到。
 4. [in_progress] 补测试、重启验证、更新 v0.4.16 文档并发布 GitHub Release。
+
+## v0.4.17 Hotfix Plan - WeChat @ target and admin mode
+1. [complete] 修复 Wechaty @ 回复目标：底层 send_message 对当前微信群消息强制使用本轮真实 sender_id，不允许模型改错 target_id。
+2. [complete] 修复管理员模式勾选被状态轮询覆盖：status polling 不再把缺失 admin 字段当成关闭。
+3. [complete] 管理员选择 UI 支持按微信昵称/群名/ID 搜索，保存后立即显示已生效状态。
+4. [complete] 管理员保护：非管理员 @ 助手攻击/暗算管理员时，基于已保存管理员 ID/昵称生成犀利但不越界的回怼。
+5. [complete] 测试、重启、文档和 GitHub Release。

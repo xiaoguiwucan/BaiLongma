@@ -61,3 +61,7 @@
 ## 2026-05-28 v0.4.16 聊天记忆不完整排查
 - 当前微信群 @ prompt 只使用 `getRecentWeChatGroupMessages()` 从 `conversations` 表取最近 100 条/24小时，并使用 Honcho 长期记忆；没有直接检索 `wechat_group_activity` 全量聊天记录库。
 - 所以用户问“老登是谁/之前谁说过什么”这类需要查流水的问题时，模型只能靠最近上下文或长期记忆猜，数据库虽然有记录但没有进入回答证据。
+
+## 2026-05-28 v0.4.17 @ 目标和管理员模式排查
+- @ 错目标风险点：模型仍可传错/拼坏 `target_id`，当前执行器先校验模型 target，再通过 `currentExternalPartyId` 路由；应在 Wechaty 群消息上下文下强制覆盖为本轮真实 sender_id，底层不信任模型选择。
+- 管理员勾选消失根因：5 秒状态轮询调用 `applyWechatyDutyConfig({ enabled, groupNames }, status)`，这个对象不含 admin 字段，但 `applyWechatyAdminConfig({})` 会把 `adminModeEnabled` 当 false 写回 UI。
