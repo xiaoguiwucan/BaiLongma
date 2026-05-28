@@ -14,7 +14,8 @@
 5. [complete] 新增定时摘要/日报配置与调度，支持手动预览/发送，并避免重复发送。
 6. [complete] 改造设置页：群统计卡片、排行榜、定时总结配置、长期记忆/成员记忆展示更明显。
 7. [complete] 运行语法检查和现有测试，修复问题。
-8. [in_progress] 更新版本号、README/CHANGELOG/BACKUP/软件内更新说明，提交、打 tag、推送并创建 GitHub Release。（版本文档已更新，待提交发布）
+8. [complete] v0.4.3 更新版本号、README/CHANGELOG/BACKUP/RELEASE/软件内更新说明。
+9. [in_progress] 提交、打 tag、推送并创建 GitHub Release。
 
 ## Constraints
 - 不修改 AiMaMi 本地代理配置。
@@ -36,3 +37,11 @@
 3. [complete] Honcho 群组/成员长期记忆分区固定显示空状态。
 4. [complete] 历史英文内部协议误回复在记忆展示和上下文注入中隐藏。
 5. [pending] 版本文档、提交、推送、Release。
+
+
+## v0.4.3 Follow-up Plan
+1. [complete] 新增微信群聊天记录库 API：分页查询、时间/类型/关键词筛选、JSON/CSV 导出、JSON 导入。
+2. [complete] 新增成员昵称映射表并让排行榜/记录库统一优先显示微信昵称。
+3. [complete] 新增媒体保存、媒体预览接口和 JSON 媒体备份恢复。
+4. [complete] 修复 datetime-local 秒级边界和混合媒体类型筛选漏查。
+5. [in_progress] 完成验证、提交、推送和 GitHub Release。

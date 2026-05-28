@@ -486,6 +486,37 @@ const createSettingsModal = () => `
                 <div class="wechaty-empty">选择左侧群并刷新统计后显示今日数据。</div>
               </div>
               <div class="wechaty-leaderboards" id="wechaty-leaderboards"></div>
+              <div class="wechaty-records-panel">
+                <div class="wechaty-records-head">
+                  <div>
+                    <h5>微信群聊天记录库</h5>
+                    <p>显示已经写入本机 SQLite 的全量聊天记录，支持时间筛选、关键词检索、导入和导出。</p>
+                  </div>
+                  <div class="wechaty-records-actions">
+                    <button class="settings-save-btn" id="wechaty-records-refresh-btn" type="button">查询记录</button>
+                    <button class="settings-save-btn" id="wechaty-records-export-json-btn" type="button">导出 JSON</button>
+                    <button class="settings-save-btn" id="wechaty-records-export-csv-btn" type="button">导出 CSV</button>
+                    <label class="settings-save-btn ghost" for="wechaty-records-import-file">导入 JSON</label>
+                    <input id="wechaty-records-import-file" type="file" accept="application/json,.json" hidden>
+                  </div>
+                </div>
+                <div class="wechaty-records-filters">
+                  <label>开始时间<input class="settings-input" id="wechaty-records-from" type="datetime-local"></label>
+                  <label>结束时间<input class="settings-input" id="wechaty-records-to" type="datetime-local"></label>
+                  <label>类型<select class="settings-select" id="wechaty-records-type">
+                    <option value="">全部类型</option>
+                    <option value="text">文字</option>
+                    <option value="image">图片</option>
+                    <option value="emoji">表情</option>
+                    <option value="link">链接</option>
+                    <option value="mixed">混合</option>
+                  </select></label>
+                  <label>关键词<input class="settings-input" id="wechaty-records-query" type="search" placeholder="搜索成员/内容/链接"></label>
+                </div>
+                <div class="wechaty-records-summary" id="wechaty-records-summary">尚未查询聊天记录。</div>
+                <div class="wechaty-records-list" id="wechaty-records-list"></div>
+                <div class="wechaty-records-more"><button class="settings-save-btn" id="wechaty-records-more-btn" type="button">加载更多</button></div>
+              </div>
               <div class="wechaty-stats-recent" id="wechaty-stats-recent"></div>
             </div>
           </div>
@@ -855,6 +886,19 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.3</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群聊天记录库：按群查看完整入库消息，支持时间筛选、昵称映射、媒体预览和导入导出。</p>
+                <ul class="release-note-points">
+                  <li>新增“微信群聊天记录库”，显示已入库总数、完整时间、成员昵称、内容和媒体标记。</li>
+                  <li>支持开始/结束时间、类型、关键词筛选和分页加载更多。</li>
+                  <li>JSON 导出包含媒体 base64 备份，CSV 导出方便表格查看，JSON 导入会恢复记录和媒体。</li>
+                  <li>新收到的图片/表情/音视频会尝试保存到本机数据目录，并可在设置页预览。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.2</span>

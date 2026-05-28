@@ -4724,3 +4724,195 @@ body.person-card-mode .person-card-panel,
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
+
+.wechaty-records-panel {
+  margin-top: 12px;
+  border: 1px solid rgba(87,214,255,0.10);
+  border-radius: 18px;
+  padding: 12px;
+  background:
+    radial-gradient(circle at 8% 0%, rgba(87,214,255,0.10), transparent 34%),
+    linear-gradient(180deg, rgba(255,255,255,0.035), rgba(0,0,0,0.14));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.wechaty-records-head {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+  margin-bottom: 10px;
+}
+.wechaty-records-head h5 {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+  letter-spacing: .08em;
+}
+.wechaty-records-head p {
+  margin: 4px 0 0;
+  color: var(--dim);
+  font-size: 11px;
+  line-height: 1.5;
+}
+.wechaty-records-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 7px;
+}
+.settings-save-btn.ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255,255,255,0.04);
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--ink2);
+  cursor: pointer;
+}
+.wechaty-records-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(140px, 1fr));
+  gap: 8px;
+  margin: 8px 0 10px;
+}
+.wechaty-records-filters label {
+  display: grid;
+  gap: 5px;
+  color: var(--ink3);
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+.wechaty-records-summary {
+  border: 1px solid rgba(114,255,195,0.14);
+  border-radius: 12px;
+  padding: 8px 10px;
+  color: #9fffd5;
+  background: rgba(114,255,195,0.045);
+  font-size: 11px;
+  line-height: 1.5;
+  margin-bottom: 8px;
+}
+.wechaty-records-list {
+  display: grid;
+  gap: 8px;
+  max-height: 420px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.wechaty-record-row {
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(2,9,14,0.42);
+}
+.wechaty-record-meta {
+  display: grid;
+  grid-template-columns: 150px minmax(0, 1fr) auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 6px;
+}
+.wechaty-record-meta time {
+  color: var(--cool);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  font-size: 10px;
+}
+.wechaty-record-meta b {
+  color: var(--ink);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.wechaty-record-meta em {
+  justify-self: end;
+  border: 1px solid rgba(255,201,107,0.18);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--warm);
+  background: rgba(255,201,107,0.06);
+  font-style: normal;
+  font-size: 10px;
+}
+.wechaty-record-row p {
+  margin: 0 0 7px;
+  color: var(--ink2);
+  font-size: 12px;
+  line-height: 1.6;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+.wechaty-record-media {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(112px, 1fr));
+  gap: 8px;
+  margin: 8px 0;
+}
+.wechaty-record-media a,
+.wechaty-record-media-card {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 7px;
+  background: rgba(255,255,255,0.035);
+  color: var(--ink2);
+  text-decoration: none;
+}
+.wechaty-record-media img,
+.wechaty-record-media video {
+  width: 100%;
+  max-height: 132px;
+  object-fit: cover;
+  border-radius: 9px;
+  background: rgba(0,0,0,0.26);
+}
+.wechaty-record-media audio {
+  width: 100%;
+}
+.wechaty-record-media span {
+  color: var(--dim);
+  font-size: 10px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wechaty-record-file {
+  grid-column: 1 / -1;
+  color: var(--cool) !important;
+}
+.wechaty-record-row small {
+  display: block;
+  margin-top: 6px;
+  color: var(--dim);
+  font-size: 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  word-break: break-all;
+}
+.wechaty-record-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+}
+.wechaty-record-badges span {
+  border: 1px solid rgba(87,214,255,0.14);
+  border-radius: 999px;
+  padding: 2px 7px;
+  color: var(--cool);
+  background: rgba(87,214,255,0.055);
+  font-size: 10px;
+}
+.wechaty-records-more {
+  display: flex;
+  justify-content: center;
+  margin-top: 10px;
+}
+#wechaty-records-more-btn { display: none; }
+@media (max-width: 920px) {
+  .wechaty-records-head { flex-direction: column; }
+  .wechaty-records-actions { justify-content: flex-start; }
+  .wechaty-records-filters { grid-template-columns: 1fr 1fr; }
+  .wechaty-record-meta { grid-template-columns: 1fr; }
+  .wechaty-record-meta em { justify-self: start; }
+}

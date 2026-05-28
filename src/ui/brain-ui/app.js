@@ -2077,6 +2077,17 @@ function initTTSSettings() {
   const wechatyStatsCards = document.getElementById("wechaty-stats-cards");
   const wechatyLeaderboards = document.getElementById("wechaty-leaderboards");
   const wechatyStatsRecent = document.getElementById("wechaty-stats-recent");
+  const wechatyRecordsFrom = document.getElementById("wechaty-records-from");
+  const wechatyRecordsTo = document.getElementById("wechaty-records-to");
+  const wechatyRecordsType = document.getElementById("wechaty-records-type");
+  const wechatyRecordsQuery = document.getElementById("wechaty-records-query");
+  const wechatyRecordsRefreshBtn = document.getElementById("wechaty-records-refresh-btn");
+  const wechatyRecordsExportJsonBtn = document.getElementById("wechaty-records-export-json-btn");
+  const wechatyRecordsExportCsvBtn = document.getElementById("wechaty-records-export-csv-btn");
+  const wechatyRecordsImportFile = document.getElementById("wechaty-records-import-file");
+  const wechatyRecordsSummary = document.getElementById("wechaty-records-summary");
+  const wechatyRecordsList = document.getElementById("wechaty-records-list");
+  const wechatyRecordsMoreBtn = document.getElementById("wechaty-records-more-btn");
   const wechatyQrArea = document.getElementById("wechaty-qr-area");
   const wechatyQrImg = document.getElementById("wechaty-qr-img");
   const honchoEnabled = document.getElementById("honcho-enabled");
@@ -2251,12 +2262,32 @@ function initTTSSettings() {
   let wechatySavedPersonaPresetId = "custom";
   let wechatyDigestConfigCache = {};
   let wechatyDigestSelectedGroups = new Set();
+  let wechatyRecordsOffset = 0;
+  let wechatyRecordsHasMore = false;
+  let wechatyRecordsLastQuery = null;
 
-  function formatWechatyTime(value) {
+  function formatWechatyTime(value, full = false) {
     if (!value) return '';
     const d = new Date(value);
-    if (Number.isNaN(d.getTime())) return String(value).slice(0, 16);
+    if (Number.isNaN(d.getTime())) return String(value).replace('T', ' ').slice(0, full ? 19 : 16);
+    const pad = n => String(n).padStart(2, '0');
+    if (full) return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
     return d.toLocaleString('zh-CN', { hour12: false, month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function toDateTimeLocalValue(date = new Date()) {
+    const pad = n => String(n).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  }
+
+  function ensureWechatyRecordDefaultRange() {
+    if (!wechatyRecordsFrom || !wechatyRecordsTo) return;
+    if (!wechatyRecordsTo.value) wechatyRecordsTo.value = toDateTimeLocalValue(new Date());
+    if (!wechatyRecordsFrom.value) {
+      const start = new Date();
+      start.setHours(0, 0, 0, 0);
+      wechatyRecordsFrom.value = toDateTimeLocalValue(start);
+    }
   }
 
   function describeWechatyCachedSuffix(status = {}) {
@@ -2493,17 +2524,161 @@ function initTTSSettings() {
         ? recent.map(row => `<article class="wechaty-stats-row">
             <b>${escapeHtml(row.sender_name || row.sender_id || "群成员")}</b>
             <p>${escapeHtml(row.display_text || "")}</p>
-            <span>${escapeHtml(String(row.timestamp || "").slice(0, 16))} · ${escapeHtml(row.message_type || "message")} · 图${row.image_count || 0}/表${row.emoji_count || 0}/链${row.link_count || 0}/装${row.brag_score || 0}</span>
+            <span>${escapeHtml(row.timestamp_display || formatWechatyTime(row.timestamp, true))} · ${escapeHtml(row.message_type || "message")} · 图${row.image_count || 0}/表${row.emoji_count || 0}/链${row.link_count || 0}/装${row.brag_score || 0}</span>
           </article>`).join("")
         : `<div class="wechaty-empty">${selected ? "本群今天还没有写入本地统计库的新消息。统计只记录你在这里勾选并保存之后收到的新消息。" : "本群未勾选参与统计/定时总结，所以不会写入本地统计库。"}</div>`;
       wechatyStatsRecent.innerHTML = `<section class="wechaty-stats-storage-note">
         <b>统计数据位置</b>
-        <span>这里的数据存放在本机 SQLite：data/jarvis.db 的 wechat_group_activity 表；Honcho 群记忆管理展示的是 Honcho session/长期结论，二者不是同一个列表。</span>
+        <span>这里的数据存放在本机 SQLite：${escapeHtml(data.db_path || 'userData/data/jarvis.db')} 的 wechat_group_activity 表；Honcho 群记忆管理展示的是 Honcho session/长期结论，二者不是同一个列表。</span>
       </section>
       <section class="wechaty-stats-recent-list">
         <h5>本地统计库最近记录</h5>
         ${rows}
       </section>`;
+    }
+  }
+
+
+  function recordTypeLabel(type = '') {
+    return ({ text: '文字', image: '图片', emoji: '表情', link: '链接', mixed: '混合', unknown: '未知' })[type] || type || '消息';
+  }
+
+  function mediaBadges(row = {}) {
+    const badges = [];
+    if (row.image_count) badges.push(`图片×${row.image_count}`);
+    if (row.emoji_count) badges.push(`表情×${row.emoji_count}`);
+    if (row.link_count) badges.push(`链接×${row.link_count}`);
+    if (row.brag_score) badges.push(`装逼分×${row.brag_score}`);
+    if (String(row.raw_text || '').includes('[媒体文件]')) badges.push('本地媒体已保存');
+    return badges.length ? `<div class="wechaty-record-badges">${badges.map(item => `<span>${escapeHtml(item)}</span>`).join('')}</div>` : '';
+  }
+
+  function mediaPreview(row = {}) {
+    const files = Array.isArray(row.media_files) ? row.media_files : [];
+    if (!files.length) return '';
+    return `<div class="wechaty-record-media">${files.map(file => {
+      const rel = file.relative_path || file.relativePath || '';
+      const src = `${API}/social/wechat-groups/records/media?path=${encodeURIComponent(rel)}`;
+      const name = escapeHtml(file.file_name || rel.split('/').pop() || '媒体文件');
+      if (file.kind === 'image') return `<a href="${src}" target="_blank" rel="noreferrer"><img src="${src}" alt="${name}" loading="lazy"><span>${name}</span></a>`;
+      if (file.kind === 'video') return `<div class="wechaty-record-media-card"><video src="${src}" controls preload="metadata"></video><span>${name}</span></div>`;
+      if (file.kind === 'audio') return `<div class="wechaty-record-media-card"><audio src="${src}" controls preload="metadata"></audio><span>${name}</span></div>`;
+      return `<a class="wechaty-record-file" href="${src}" target="_blank" rel="noreferrer">打开媒体：${name}</a>`;
+    }).join('')}</div>`;
+  }
+
+  function renderWechatyRecords(data = {}, { append = false } = {}) {
+    if (!wechatyRecordsList || !wechatyRecordsSummary) return;
+    if (!data || data.ok === false) {
+      if (!append) wechatyRecordsList.innerHTML = `<div class="wechaty-empty">${escapeHtml(data?.error || '聊天记录查询失败')}</div>`;
+      wechatyRecordsSummary.textContent = data?.error || '聊天记录查询失败';
+      if (wechatyRecordsMoreBtn) wechatyRecordsMoreBtn.style.display = 'none';
+      return;
+    }
+    const records = Array.isArray(data.records) ? data.records : [];
+    const summary = `已入库 ${data.total || 0} 条 · 当前显示 ${Math.min((data.offset || 0) + records.length, data.total || 0)} 条 · 参与 ${data.totals?.participant_count || 0} 人 · 图片 ${data.totals?.image_count || 0} / 表情 ${data.totals?.emoji_count || 0} / 链接 ${data.totals?.link_count || 0} · ${data.from_display || ''} 至 ${data.to_display || ''}`;
+    wechatyRecordsSummary.textContent = summary;
+    const html = records.length
+      ? records.map(row => `<article class="wechaty-record-row">
+          <div class="wechaty-record-meta">
+            <time>${escapeHtml(row.timestamp_display || formatWechatyTime(row.timestamp, true))}</time>
+            <b>${escapeHtml(row.sender_display_name || row.sender_name || '未知成员')}</b>
+            <em>${escapeHtml(recordTypeLabel(row.message_type))}</em>
+          </div>
+          <p>${escapeHtml(row.display_text || row.raw_text || '')}</p>
+          ${mediaPreview(row)}
+          ${mediaBadges(row)}
+          <small>ID: ${escapeHtml(row.sender_id || '')} · source=${escapeHtml(row.source || '')}</small>
+        </article>`).join('')
+      : `<div class="wechaty-empty">当前筛选条件下没有聊天记录。</div>`;
+    if (append && wechatyRecordsList.innerHTML && records.length) wechatyRecordsList.insertAdjacentHTML('beforeend', html);
+    else wechatyRecordsList.innerHTML = html;
+    wechatyRecordsHasMore = !!data.has_more;
+    wechatyRecordsOffset = (data.offset || 0) + records.length;
+    if (wechatyRecordsMoreBtn) wechatyRecordsMoreBtn.style.display = wechatyRecordsHasMore ? '' : 'none';
+  }
+
+  function collectWechatyRecordQuery({ offset = 0 } = {}) {
+    ensureWechatyRecordDefaultRange();
+    return {
+      groupId: wechatyActiveMemoryGroupId,
+      from: wechatyRecordsFrom?.value || '',
+      to: wechatyRecordsTo?.value || '',
+      type: wechatyRecordsType?.value || '',
+      q: wechatyRecordsQuery?.value?.trim() || '',
+      limit: 80,
+      offset,
+    };
+  }
+
+  async function loadWechatyRecords({ append = false } = {}) {
+    if (!wechatyActiveMemoryGroupId) {
+      renderWechatyRecords({ ok: false, error: '请先选择一个群' });
+      return;
+    }
+    const query = collectWechatyRecordQuery({ offset: append ? wechatyRecordsOffset : 0 });
+    wechatyRecordsLastQuery = query;
+    if (wechatyRecordsRefreshBtn) wechatyRecordsRefreshBtn.disabled = true;
+    if (wechatyRecordsMoreBtn) wechatyRecordsMoreBtn.disabled = true;
+    try {
+      const params = new URLSearchParams({
+        group_id: query.groupId,
+        from: query.from,
+        to: query.to,
+        type: query.type,
+        q: query.q,
+        limit: String(query.limit),
+        offset: String(query.offset),
+      });
+      const data = await fetch(`${API}/social/wechat-groups/records?${params}`).then(r => r.json());
+      renderWechatyRecords(data, { append });
+    } catch {
+      renderWechatyRecords({ ok: false, error: '聊天记录查询请求失败' }, { append });
+    } finally {
+      if (wechatyRecordsRefreshBtn) wechatyRecordsRefreshBtn.disabled = false;
+      if (wechatyRecordsMoreBtn) wechatyRecordsMoreBtn.disabled = false;
+    }
+  }
+
+  function exportWechatyRecords(format = 'json') {
+    if (!wechatyActiveMemoryGroupId) {
+      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, '请先选择一个群', true);
+      return;
+    }
+    const query = collectWechatyRecordQuery({ offset: 0 });
+    const params = new URLSearchParams({
+      group_id: query.groupId,
+      from: query.from,
+      to: query.to,
+      type: query.type,
+      q: query.q,
+      format,
+    });
+    window.open(`${API}/social/wechat-groups/records/export?${params}`, '_blank');
+  }
+
+  async function importWechatyRecords(file) {
+    if (!file || !wechatyActiveMemoryGroupId) return;
+    try {
+      const text = await file.text();
+      const payload = JSON.parse(text);
+      const records = Array.isArray(payload) ? payload : (payload.records || []);
+      const mediaFiles = Array.isArray(payload?.media_files) ? payload.media_files : (Array.isArray(payload?.mediaFiles) ? payload.mediaFiles : []);
+      const res = await fetch(`${API}/social/wechat-groups/records/import`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_id: wechatyActiveMemoryGroupId, group_name: wechatyActiveMemoryGroupName, records, media_files: mediaFiles }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, `导入完成：新增 ${data.inserted || 0} 条，跳过 ${data.skipped || 0} 条，媒体 ${data.media_imported || 0} 个`);
+        await loadWechatyRecords();
+        await loadWechatyActiveStats({ silent: true });
+      } else showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.error || '导入失败', true);
+    } catch {
+      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, '导入 JSON 解析失败', true);
+    } finally {
+      if (wechatyRecordsImportFile) wechatyRecordsImportFile.value = '';
     }
   }
 
@@ -2525,6 +2700,7 @@ function initTTSSettings() {
       const url = `${API}/social/wechat-groups/stats?group_id=${encodeURIComponent(wechatyActiveMemoryGroupId)}&range=today&limit=10`;
       const data = await fetch(url).then(r => r.json());
       renderWechatyStats(data);
+      await loadWechatyRecords({ append: false });
     } catch {
       if (!silent) showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "读取群统计失败", true);
     } finally {
@@ -2969,10 +3145,16 @@ function initTTSSettings() {
     renderWechatyMemoryGroups();
     loadWechatyActiveMemory();
     loadWechatyActiveStats({ silent: true });
+    loadWechatyRecords({ append: false });
   });
 
   wechatyRefreshMemoryBtn?.addEventListener("click", loadWechatyActiveMemory);
   wechatyRefreshStatsBtn?.addEventListener("click", () => loadWechatyActiveStats({ silent: false }));
+  wechatyRecordsRefreshBtn?.addEventListener("click", () => loadWechatyRecords({ append: false }));
+  wechatyRecordsMoreBtn?.addEventListener("click", () => loadWechatyRecords({ append: true }));
+  wechatyRecordsExportJsonBtn?.addEventListener("click", () => exportWechatyRecords('json'));
+  wechatyRecordsExportCsvBtn?.addEventListener("click", () => exportWechatyRecords('csv'));
+  wechatyRecordsImportFile?.addEventListener("change", () => importWechatyRecords(wechatyRecordsImportFile.files?.[0]));
 
   wechatySaveDigestBtn?.addEventListener("click", async () => {
     wechatySaveDigestBtn.disabled = true;

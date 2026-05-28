@@ -24,7 +24,7 @@ import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWe
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
 import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
-import { getWeChatGroupStats } from './social/wechat-group-stats.js'
+import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listWeChatGroupActivityRecords, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -193,6 +193,31 @@ function contentTypeFor(filePath) {
       return 'application/json; charset=utf-8'
     case '.svg':
       return 'image/svg+xml'
+    case '.png':
+      return 'image/png'
+    case '.jpg':
+    case '.jpeg':
+      return 'image/jpeg'
+    case '.gif':
+      return 'image/gif'
+    case '.webp':
+      return 'image/webp'
+    case '.bmp':
+      return 'image/bmp'
+    case '.mp4':
+      return 'video/mp4'
+    case '.mov':
+      return 'video/quicktime'
+    case '.webm':
+      return 'video/webm'
+    case '.mp3':
+      return 'audio/mpeg'
+    case '.m4a':
+      return 'audio/mp4'
+    case '.wav':
+      return 'audio/wav'
+    case '.ogg':
+      return 'audio/ogg'
     default:
       return 'text/plain; charset=utf-8'
   }
@@ -400,6 +425,82 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       const to = url.searchParams.get('to') || ''
       const limit = Math.min(parseInt(url.searchParams.get('limit') || '10'), 30)
       return jsonResponse(res, 200, getWeChatGroupStats({ groupId: rawGroupId, from, to, hours, range, limit }))
+    }
+
+
+    // GET /social/wechat-groups/records?group_id=xxx&from=2026-05-26&to=2026-05-28&q=xxx
+    // 群聊天记录库：按时间/关键词/类型分页查看已经入库的全量消息。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/records') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
+      if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
+      const result = listWeChatGroupActivityRecords({
+        groupId: rawGroupId,
+        from: url.searchParams.get('from') || '',
+        to: url.searchParams.get('to') || '',
+        hours: Math.min(parseInt(url.searchParams.get('hours') || '24'), 24 * 365),
+        range: url.searchParams.get('range') || '',
+        limit: Math.min(parseInt(url.searchParams.get('limit') || '80'), 500),
+        offset: Math.max(parseInt(url.searchParams.get('offset') || '0'), 0),
+        q: url.searchParams.get('q') || '',
+        type: url.searchParams.get('type') || '',
+      })
+      return jsonResponse(res, result.ok ? 200 : 400, result)
+    }
+
+    // GET /social/wechat-groups/records/media?path=data/wechat-media/...
+    // 群聊天记录媒体预览：只允许读取已经保存到本机数据目录下的相对媒体路径。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/records/media') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const result = resolveWeChatGroupMediaFile(url.searchParams.get('path') || '')
+      if (!result.ok) return jsonResponse(res, 404, result)
+      res.writeHead(200, {
+        'Content-Type': result.content_type || contentTypeFor(result.filePath),
+        'Content-Length': String(result.bytes || 0),
+        'Content-Disposition': `inline; filename="${encodeURIComponent(result.file_name || 'media')}"`,
+        'Cache-Control': 'private, max-age=3600',
+      })
+      fs.createReadStream(result.filePath).pipe(res)
+      return
+    }
+
+    // GET /social/wechat-groups/records/export?group_id=xxx&format=json|csv
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/records/export') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
+      if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
+      const result = buildWeChatGroupActivityExport({
+        groupId: rawGroupId,
+        from: url.searchParams.get('from') || '',
+        to: url.searchParams.get('to') || '',
+        hours: Math.min(parseInt(url.searchParams.get('hours') || '24'), 24 * 365),
+        range: url.searchParams.get('range') || '',
+        q: url.searchParams.get('q') || '',
+        type: url.searchParams.get('type') || '',
+        format: url.searchParams.get('format') || 'json',
+      })
+      if (!result.ok) return jsonResponse(res, 400, result)
+      res.writeHead(200, {
+        'Content-Type': result.contentType,
+        'Content-Disposition': `attachment; filename="${result.filename}"`,
+      })
+      res.end(result.body)
+      return
+    }
+
+    // POST /social/wechat-groups/records/import — 导入 JSON 记录，适合备份恢复。
+    if (req.method === 'POST' && url.pathname === '/social/wechat-groups/records/import') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        const result = importWeChatGroupActivityRecords({
+          groupId: body.group_id || body.groupId,
+          groupName: body.group_name || body.groupName || '',
+          records: Array.isArray(body.records) ? body.records : (Array.isArray(body) ? body : []),
+          mediaFiles: body.mediaFiles || body.media_files || [],
+        })
+        jsonResponse(res, result.ok ? 200 : 400, result)
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
     }
 
     // POST /social/wechat-groups/digest/send — 手动发送当前群统计总结，方便设置页验证。

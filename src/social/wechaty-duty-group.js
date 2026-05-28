@@ -5,7 +5,7 @@ import { FileBox } from 'file-box'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
-import { isWeChatInternalIdLike, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, updateWeChatGroupActivitySenderName } from './wechat-group-stats.js'
+import { isWeChatInternalIdLike, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -14,6 +14,7 @@ import fs from 'fs'
 const FALLBACK_GROUP_NAMES = ['值班群', 'PT站看片狂魔小群']
 const WECHATY_MEMORY_NAME = path.join(paths.userDir, 'wechaty-duty-group')
 const WECHATY_MEMORY_FILE = `${WECHATY_MEMORY_NAME}.memory-card.json`
+const WECHAT_MEDIA_DIR = path.join(paths.dataDir, 'wechat-media')
 const ROOM_REFRESH_STALE_MS = 2 * 60 * 1000
 const MESSAGE_HEALTH_STALE_MS = 10 * 60 * 1000
 const MEMBER_NAME_REFRESH_STALE_MS = 10 * 60 * 1000
@@ -564,17 +565,34 @@ async function handleMessage(message) {
     try { messageType = message.type?.() ?? '' } catch {}
     lastMessageAt = new Date().toISOString()
     const talker = message.talker?.()
+    const rawWechatPayload = await getWechatRawMessagePayload(message)
+    const rawSenderName = extractRawWechatSenderName(rawWechatPayload)
     const senderId = getWechatyContactId(talker)
-    const senderName = isSelf ? '我' : await resolveWechatyMemberDisplayName(room, talker, senderId)
+    const senderParts = isSelf ? { displayName: '我', roomAlias: '', contactAlias: '', contactName: '我' } : await resolveWechatyMemberNameParts(room, talker, senderId)
+    if (rawSenderName && !isWeChatInternalIdLike(rawSenderName) && senderParts.displayName === '未知成员') senderParts.displayName = rawSenderName
+    const senderName = senderParts.displayName
     const groupId = `wechaty:${room.id}`
     const groupExternalId = makeWeChatGroupExternalId(groupId)
     if (senderId && senderName && senderName !== '未知成员') {
       try {
-        updateWeChatGroupActivitySenderName({ groupId, groupName: topic, senderId, senderName })
+        upsertWeChatGroupMemberName({
+          groupId,
+          groupName: topic,
+          senderId,
+          displayName: senderName,
+          roomAlias: senderParts.roomAlias || rawSenderName,
+          contactAlias: senderParts.contactAlias,
+          contactName: senderParts.contactName,
+          source: 'wechaty-message',
+        })
       } catch (err) {
         console.warn(`[WechatyStats] 更新成员昵称失败：${err?.message || err}`)
       }
     }
+    let mediaInfo = null
+    try { mediaInfo = await persistWechatMessageMedia(message, { groupId, groupName: topic, senderId }) } catch (err) { console.warn(`[WechatyStats] 保存群媒体失败：${err?.message || err}`) }
+    const statsRawText = mediaInfo?.stored ? `${rawText || normalizeWeChatGroupDisplayText(rawText, messageType)}
+[媒体文件] ${mediaInfo.relativePath}`.trim() : rawText
     let activity = null
     try {
       activity = recordWeChatGroupActivity({
@@ -582,7 +600,7 @@ async function handleMessage(message) {
         groupName: topic,
         senderId: senderId || senderName,
         senderName,
-        text: rawText,
+        text: statsRawText,
         messageType,
         mentionedSelf: false,
         source: 'wechaty',
@@ -644,6 +662,27 @@ async function handleMessage(message) {
 
 
 
+
+async function getWechatRawMessagePayload(message) {
+  try {
+    if (bot?.puppet?.messageRawPayload && message?.id) return await bot.puppet.messageRawPayload(message.id)
+  } catch {}
+  try { return message?.payload || null } catch { return null }
+}
+
+function extractRawWechatSenderName(rawPayload) {
+  try {
+    const content = String(rawPayload?.Content || rawPayload?.MMActualContent || '')
+    const original = String(rawPayload?.OriginalContent || '')
+    const display = String(rawPayload?.MMActualSender || rawPayload?.ActualNickName || rawPayload?.RecommendInfo?.NickName || '')
+    const fromContent = content.includes(':\n') ? content.split(':\n')[0] : ''
+    const fromOriginal = original.includes(':<br/>') ? original.split(':<br/>')[0] : ''
+    return [display, fromContent, fromOriginal].map(v => String(v || '').trim()).find(v => v && !isWeChatInternalIdLike(v)) || ''
+  } catch {
+    return ''
+  }
+}
+
 function getWechatyContactId(contact) {
   const payload = contact?.payload && typeof contact.payload === 'object' ? contact.payload : {}
   return String(contact?.id || payload?.id || payload?.contactId || payload?.UserName || '').trim()
@@ -654,11 +693,12 @@ function pushWechatyCandidate(candidates, value) {
   if (text) candidates.push(text)
 }
 
-async function resolveWechatyMemberDisplayName(room, contact, fallback = '') {
+async function resolveWechatyMemberNameParts(room, contact, fallback = '') {
+  const parts = { roomAlias: '', contactAlias: '', contactName: '' }
   const candidates = []
-  try { pushWechatyCandidate(candidates, await room?.alias?.(contact)) } catch {}
-  try { pushWechatyCandidate(candidates, await contact?.alias?.()) } catch {}
-  try { pushWechatyCandidate(candidates, contact?.name?.()) } catch {}
+  try { parts.roomAlias = String(await room?.alias?.(contact) || '').trim(); pushWechatyCandidate(candidates, parts.roomAlias) } catch {}
+  try { parts.contactAlias = String(await contact?.alias?.() || '').trim(); pushWechatyCandidate(candidates, parts.contactAlias) } catch {}
+  try { parts.contactName = String(contact?.name?.() || '').trim(); pushWechatyCandidate(candidates, parts.contactName) } catch {}
   try {
     const payload = contact?.payload && typeof contact.payload === 'object' ? contact.payload : {}
     pushWechatyCandidate(candidates, payload?.alias)
@@ -670,7 +710,12 @@ async function resolveWechatyMemberDisplayName(room, contact, fallback = '') {
     pushWechatyCandidate(candidates, payload?.RemarkName)
   } catch {}
   pushWechatyCandidate(candidates, fallback)
-  return candidates.find(value => !isWeChatInternalIdLike(value)) || '未知成员'
+  const displayName = candidates.find(value => !isWeChatInternalIdLike(value)) || '未知成员'
+  return { ...parts, displayName }
+}
+
+async function resolveWechatyMemberDisplayName(room, contact, fallback = '') {
+  return (await resolveWechatyMemberNameParts(room, contact, fallback)).displayName
 }
 
 function scheduleRoomMemberNameRefresh(room, topic = '') {
@@ -694,10 +739,19 @@ async function refreshRoomMemberDisplayNames(room, topic = '') {
   for (const member of members || []) {
     const senderId = getWechatyContactId(member)
     if (!senderId) continue
-    const senderName = await resolveWechatyMemberDisplayName(room, member, senderId)
-    if (!senderName || senderName === '未知成员') continue
+    const parts = await resolveWechatyMemberNameParts(room, member, senderId)
+    if (!parts.displayName || parts.displayName === '未知成员') continue
     try {
-      const result = updateWeChatGroupActivitySenderName({ groupId, groupName, senderId, senderName })
+      const result = upsertWeChatGroupMemberName({
+        groupId,
+        groupName,
+        senderId,
+        displayName: parts.displayName,
+        roomAlias: parts.roomAlias,
+        contactAlias: parts.contactAlias,
+        contactName: parts.contactName,
+        source: 'wechaty-room-member',
+      })
       updated += Number(result?.updated || 0)
     } catch (err) {
       console.warn(`[WechatyStats] 回填成员昵称失败 sender="${senderId}"：${err?.message || err}`)
@@ -705,6 +759,33 @@ async function refreshRoomMemberDisplayNames(room, topic = '') {
   }
   if (updated > 0) console.log(`[WechatyStats] 已回填群成员微信昵称 topic="${groupName}" rows=${updated}`)
   return { ok: true, group_id: groupId, members: members?.length || 0, updated }
+}
+
+
+async function persistWechatMessageMedia(message, { groupId = '', groupName = '', senderId = '' } = {}) {
+  let type = ''
+  try { type = String(message.type?.() ?? '') } catch {}
+  const normalizedType = normalizeWechatMessageType(type)
+  if (!/(attachment|audio|emoji|emoticon|sticker|image|video|file)/iu.test(normalizedType)) return { stored: false }
+  if (!message?.toFileBox) return { stored: false, reason: 'toFileBox_unavailable' }
+  const groupPart = String(groupId || groupName || 'unknown-group').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80)
+  const day = new Date().toISOString().slice(0, 10)
+  const dir = path.join(WECHAT_MEDIA_DIR, groupPart, day)
+  fs.mkdirSync(dir, { recursive: true })
+  const fileBox = await message.toFileBox()
+  const rawName = String(fileBox?.name || `message-${message.id || Date.now()}`)
+  const safeName = rawName.replace(/[\\/:*?"<>|]+/g, '_').slice(-160)
+  const fileName = `${Date.now()}-${String(message.id || '').replace(/[^a-zA-Z0-9_-]+/g, '').slice(0, 32)}-${safeName}`
+  const filePath = path.join(dir, fileName)
+  await fileBox.toFile(filePath, true)
+  return {
+    stored: true,
+    filePath,
+    relativePath: path.relative(paths.userDir, filePath),
+    fileName,
+    type: normalizedType || type,
+    senderId,
+  }
 }
 
 async function safeTopic(room) {

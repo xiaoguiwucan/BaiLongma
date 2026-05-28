@@ -1,6 +1,9 @@
 import { getDB } from '../db.js'
 import { nowTimestamp } from '../time.js'
 import { getWeChatGroupDigestConfig } from '../config.js'
+import { paths } from '../paths.js'
+import fs from 'fs'
+import path from 'path'
 
 const MAX_TEXT_LENGTH = 2400
 
@@ -39,6 +42,14 @@ const XML_LIKE_RE = /^<\?xml|^<msg\b|^<appmsg\b|^<sysmsg\b/iu
 
 let schemaReady = false
 
+export function formatWeChatLocalDateTime(value = '') {
+  if (!value) return ''
+  const d = value instanceof Date ? value : new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value).replace('T', ' ').slice(0, 19)
+  const pad = n => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+}
+
 export function isWeChatInternalIdLike(value = '') {
   const text = String(value || '').trim()
   if (!text) return false
@@ -66,10 +77,160 @@ function splitNameCandidates(value = '') {
     .filter(Boolean)
 }
 
+function normalizeSearchDateInput(value = '', boundary = 'start') {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  let normalized = raw
+  if (/^\d{4}-\d{2}-\d{2}$/u.test(raw)) {
+    normalized = `${raw}T${boundary === 'end' ? '23:59:59' : '00:00:00'}`
+  } else if (/^\d{4}-\d{2}-\d{2}[T\s]\d{2}:\d{2}$/u.test(raw)) {
+    normalized = `${raw.replace(' ', 'T')}:${boundary === 'end' ? '59' : '00'}`
+  } else if (/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}/u.test(raw)) {
+    normalized = raw.replace(' ', 'T')
+  }
+  const parsed = new Date(normalized)
+  return Number.isNaN(parsed.getTime()) ? normalized : toLocalTimestamp(parsed)
+}
+
+function getMemberDisplayNameMap(db, gid) {
+  ensureSchema()
+  const rows = db.prepare(`
+    SELECT sender_id, display_name
+    FROM wechat_group_member_names
+    WHERE group_id = ?
+  `).all(gid)
+  return new Map(rows.map(row => [String(row.sender_id || ''), String(row.display_name || '')]))
+}
+
+function rowWithDisplayName(row = {}, nameMap = new Map()) {
+  const mapped = nameMap.get(String(row.sender_id || ''))
+  const senderName = pickWeChatDisplayName([mapped, row.sender_name], row.sender_id)
+  return {
+    ...row,
+    sender_name: senderName,
+    sender_display_name: senderName,
+    timestamp_display: formatWeChatLocalDateTime(row.timestamp),
+    media_files: mediaMetadataFromText(`${row.raw_text || ''}\n${row.display_text || ''}`),
+  }
+}
+
+function extractStoredMediaPaths(text = '') {
+  const mediaPaths = []
+  for (const match of String(text || '').matchAll(/\[媒体文件\]\s+([^\n\r]+)/gu)) {
+    const rel = String(match[1] || '').trim()
+    if (rel && !rel.includes('..') && !rel.startsWith('/')) mediaPaths.push(rel)
+  }
+  return [...new Set(mediaPaths)]
+}
+
+function inferMediaKind(relativePath = '') {
+  const ext = path.extname(String(relativePath || '').toLowerCase())
+  if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.svg'].includes(ext)) return 'image'
+  if (['.mp4', '.mov', '.webm', '.m4v', '.avi'].includes(ext)) return 'video'
+  if (['.mp3', '.m4a', '.wav', '.ogg', '.amr', '.silk'].includes(ext)) return 'audio'
+  return 'file'
+}
+
+function contentTypeForMedia(filePath = '') {
+  switch (path.extname(String(filePath || '').toLowerCase())) {
+    case '.png': return 'image/png'
+    case '.jpg':
+    case '.jpeg': return 'image/jpeg'
+    case '.gif': return 'image/gif'
+    case '.webp': return 'image/webp'
+    case '.bmp': return 'image/bmp'
+    case '.svg': return 'image/svg+xml'
+    case '.mp4': return 'video/mp4'
+    case '.mov': return 'video/quicktime'
+    case '.webm': return 'video/webm'
+    case '.mp3': return 'audio/mpeg'
+    case '.m4a': return 'audio/mp4'
+    case '.wav': return 'audio/wav'
+    case '.ogg': return 'audio/ogg'
+    default: return 'application/octet-stream'
+  }
+}
+
+function mediaMetadataFromText(text = '') {
+  return extractStoredMediaPaths(text).map(rel => ({
+    relative_path: rel,
+    file_name: path.basename(rel),
+    kind: inferMediaKind(rel),
+  }))
+}
+
+export function resolveWeChatGroupMediaFile(relativePath = '') {
+  const rel = String(relativePath || '').trim().replace(/\\/g, '/')
+  if (!rel || rel.includes('\0') || rel.startsWith('/') || rel.split('/').includes('..')) {
+    return { ok: false, error: 'invalid media path' }
+  }
+  const root = path.resolve(paths.userDir)
+  const filePath = path.resolve(root, rel)
+  const diff = path.relative(root, filePath)
+  if (!diff || diff.startsWith('..') || path.isAbsolute(diff)) return { ok: false, error: 'invalid media path' }
+  try {
+    const stat = fs.statSync(filePath)
+    if (!stat.isFile()) return { ok: false, error: 'media file not found' }
+    return {
+      ok: true,
+      filePath,
+      relative_path: rel,
+      file_name: path.basename(filePath),
+      bytes: stat.size,
+      content_type: contentTypeForMedia(filePath),
+      kind: inferMediaKind(rel),
+    }
+  } catch {
+    return { ok: false, error: 'media file not found' }
+  }
+}
+
+function collectMediaExports(records = []) {
+  const files = []
+  const seen = new Set()
+  for (const row of records) {
+    for (const rel of extractStoredMediaPaths(`${row.raw_text || ''}\n${row.display_text || ''}`)) {
+      if (seen.has(rel)) continue
+      seen.add(rel)
+      const resolved = resolveWeChatGroupMediaFile(rel)
+      if (!resolved.ok) continue
+      try {
+        const stat = fs.statSync(resolved.filePath)
+        if (!stat.isFile() || stat.size > 20 * 1024 * 1024) continue
+        files.push({
+          relative_path: rel,
+          file_name: resolved.file_name,
+          kind: resolved.kind,
+          content_type: resolved.content_type,
+          bytes: stat.size,
+          base64: fs.readFileSync(resolved.filePath).toString('base64'),
+        })
+      } catch {}
+    }
+  }
+  return files
+}
+
 function ensureSchema() {
   if (schemaReady) return
   const db = getDB()
   db.exec(`
+    CREATE TABLE IF NOT EXISTS wechat_group_member_names (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id TEXT NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '',
+      sender_id TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      room_alias TEXT NOT NULL DEFAULT '',
+      contact_alias TEXT NOT NULL DEFAULT '',
+      contact_name TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      first_seen TEXT NOT NULL,
+      last_seen TEXT NOT NULL,
+      UNIQUE(group_id, sender_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_wechat_group_member_names_group ON wechat_group_member_names(group_id, display_name);
+
     CREATE TABLE IF NOT EXISTS wechat_group_activity (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       group_id TEXT NOT NULL,
@@ -237,9 +398,9 @@ export function normalizeWeChatGroupDisplayText(text = '', messageType = '') {
   return analyzeWeChatGroupMessage({ text, messageType }).displayText
 }
 
-export function recordWeChatGroupActivity({ groupId, groupName = '', senderId = '', senderName = '', text = '', messageType = '', mentionedSelf = false, source = 'wechaty', timestamp = nowTimestamp() } = {}) {
+export function recordWeChatGroupActivity({ groupId, groupName = '', senderId = '', senderName = '', text = '', messageType = '', mentionedSelf = false, source = 'wechaty', timestamp = nowTimestamp(), force = false } = {}) {
   const gid = normalizeStatsGroupId(groupId)
-  if (!shouldTrackWeChatGroupStats({ groupId: gid, groupName })) return { ok: false, skipped: true, reason: 'group_not_selected_for_stats' }
+  if (!force && !shouldTrackWeChatGroupStats({ groupId: gid, groupName })) return { ok: false, skipped: true, reason: 'group_not_selected_for_stats' }
   const analysis = analyzeWeChatGroupMessage({ text, messageType })
   if (!gid || !analysis.ok) return { ok: false, skipped: true, reason: 'empty_activity', analysis }
   ensureSchema()
@@ -279,6 +440,16 @@ export function updateWeChatGroupActivitySenderName({ groupId, groupName = '', s
   }
   ensureSchema()
   const db = getDB()
+  db.prepare(`
+    INSERT INTO wechat_group_member_names (
+      group_id, group_name, sender_id, display_name, source, first_seen, last_seen
+    ) VALUES (?, ?, ?, ?, 'wechaty', ?, ?)
+    ON CONFLICT(group_id, sender_id) DO UPDATE SET
+      group_name = CASE WHEN excluded.group_name <> '' THEN excluded.group_name ELSE wechat_group_member_names.group_name END,
+      display_name = excluded.display_name,
+      source = excluded.source,
+      last_seen = excluded.last_seen
+  `).run(gid, cleanGroupName, sid, displayName, nowTimestamp(), nowTimestamp())
   const info = db.prepare(`
     UPDATE wechat_group_activity
     SET sender_name = ?,
@@ -298,6 +469,45 @@ export function updateWeChatGroupActivitySenderName({ groupId, groupName = '', s
       )
   `).run(displayName, cleanGroupName, cleanGroupName, gid, sid)
   return { ok: true, updated: info.changes || 0, group_id: gid, sender_id: sid, sender_name: displayName }
+}
+
+
+export function upsertWeChatGroupMemberName({ groupId, groupName = '', senderId = '', displayName = '', roomAlias = '', contactAlias = '', contactName = '', source = 'wechaty' } = {}) {
+  const gid = normalizeStatsGroupId(groupId)
+  const sid = String(senderId || '').trim()
+  const cleanRoomAlias = isWeChatInternalIdLike(roomAlias) ? '' : String(roomAlias || '').trim()
+  const cleanContactAlias = isWeChatInternalIdLike(contactAlias) ? '' : String(contactAlias || '').trim()
+  const cleanContactName = isWeChatInternalIdLike(contactName) ? '' : String(contactName || '').trim()
+  const finalName = pickWeChatDisplayName([displayName, cleanRoomAlias, cleanContactAlias, cleanContactName], '')
+  if (!gid || !sid || finalName === '未知成员') return { ok: false, skipped: true, reason: 'invalid_member_name' }
+  ensureSchema()
+  const db = getDB()
+  db.prepare(`
+    INSERT INTO wechat_group_member_names (
+      group_id, group_name, sender_id, display_name, room_alias, contact_alias, contact_name, source, first_seen, last_seen
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(group_id, sender_id) DO UPDATE SET
+      group_name = CASE WHEN excluded.group_name <> '' THEN excluded.group_name ELSE wechat_group_member_names.group_name END,
+      display_name = excluded.display_name,
+      room_alias = excluded.room_alias,
+      contact_alias = excluded.contact_alias,
+      contact_name = excluded.contact_name,
+      source = excluded.source,
+      last_seen = excluded.last_seen
+  `).run(
+    gid,
+    String(groupName || '').trim(),
+    sid,
+    finalName,
+    cleanRoomAlias,
+    cleanContactAlias,
+    cleanContactName,
+    String(source || 'wechaty').trim(),
+    nowTimestamp(),
+    nowTimestamp()
+  )
+  const updated = updateWeChatGroupActivitySenderName({ groupId: gid, groupName, senderId: sid, senderName: finalName })
+  return { ok: true, group_id: gid, sender_id: sid, display_name: finalName, updated: updated?.updated || 0 }
 }
 
 function rangeDates({ from = '', to = '', hours = 24, range = '' } = {}) {
@@ -325,6 +535,7 @@ function rowsByMetric(db, gid, from, to, metric, limit) {
     brag_count: 'SUM(CASE WHEN brag_score > 0 THEN 1 ELSE 0 END)',
   }[metric]
   if (!safeMetric) return []
+  const nameMap = getMemberDisplayNameMap(db, gid)
   const rows = db.prepare(`
     SELECT COALESCE(NULLIF(sender_id, ''), NULLIF(sender_name, ''), 'unknown') AS sender_key,
            sender_id,
@@ -340,7 +551,7 @@ function rowsByMetric(db, gid, from, to, metric, limit) {
   `).all(gid, from, to, Math.min(Math.max(Number(limit || 10), 1), 30))
   return rows.map(row => ({
     ...row,
-    name: pickWeChatDisplayName(splitNameCandidates(row.sender_names), row.sender_id || row.sender_key),
+    name: pickWeChatDisplayName([nameMap.get(String(row.sender_id || '')), ...splitNameCandidates(row.sender_names)], row.sender_id || row.sender_key),
     value: Number(row.value || 0),
     message_count: Number(row.message_count || 0),
   }))
@@ -351,6 +562,7 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
   if (!gid) return { ok: false, error: 'group_id required' }
   ensureSchema()
   const db = getDB()
+  const nameMap = getMemberDisplayNameMap(db, gid)
   const dates = rangeDates({ from, to, hours, range })
   const totals = db.prepare(`
     SELECT COUNT(*) AS message_count,
@@ -372,7 +584,7 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
     ORDER BY id DESC
     LIMIT ?
   `).all(gid, dates.from, dates.to, 80).reverse()
-    .map(row => ({ ...row, sender_name: pickWeChatDisplayName([row.sender_name], row.sender_id) }))
+    .map(row => rowWithDisplayName(row, nameMap))
   const important = recent.filter(row => IMPORTANT_RE.test(row.display_text || '')).slice(-12)
   const links = db.prepare(`
     SELECT display_text, sender_id, sender_name, timestamp
@@ -381,7 +593,7 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
     ORDER BY id DESC
     LIMIT 20
   `).all(gid, dates.from, dates.to).reverse()
-    .map(row => ({ ...row, sender_name: pickWeChatDisplayName([row.sender_name], row.sender_id) }))
+    .map(row => rowWithDisplayName(row, nameMap))
   return {
     ok: true,
     group_id: gid,
@@ -408,7 +620,186 @@ export function getWeChatGroupStats({ groupId, from = '', to = '', hours = 24, r
     important,
     links,
     recent,
+    db_path: paths.dbFile,
   }
+}
+
+
+export function listWeChatGroupActivityRecords({ groupId, from = '', to = '', hours = 24, range = '', limit = 80, offset = 0, q = '', type = '' } = {}) {
+  const gid = normalizeStatsGroupId(groupId)
+  if (!gid) return { ok: false, error: 'group_id required' }
+  ensureSchema()
+  const db = getDB()
+  const dates = from || to
+    ? { from: normalizeSearchDateInput(from, 'start') || toLocalTimestamp(new Date(Date.now() - 24 * 90 * 3600 * 1000)), to: normalizeSearchDateInput(to, 'end') || toLocalTimestamp(new Date()) }
+    : rangeDates({ hours, range })
+  const safeLimit = Math.min(Math.max(Number(limit || 80), 1), 500)
+  const safeOffset = Math.max(Number(offset || 0), 0)
+  const query = String(q || '').trim()
+  const messageType = String(type || '').trim()
+  const filters = ['group_id = ?', 'timestamp >= ?', 'timestamp <= ?']
+  const params = [gid, dates.from, dates.to]
+  if (query) {
+    filters.push('(display_text LIKE ? OR raw_text LIKE ? OR sender_name LIKE ? OR sender_id LIKE ?)')
+    const like = `%${query}%`
+    params.push(like, like, like, like)
+  }
+  if (messageType) {
+    if (messageType === 'image') filters.push('image_count > 0')
+    else if (messageType === 'emoji') filters.push('emoji_count > 0')
+    else if (messageType === 'link') filters.push('link_count > 0')
+    else {
+      filters.push('message_type = ?')
+      params.push(messageType)
+    }
+  }
+  const where = filters.join(' AND ')
+  const totals = db.prepare(`
+    SELECT COUNT(*) AS total,
+           COALESCE(SUM(image_count), 0) AS image_count,
+           COALESCE(SUM(emoji_count), 0) AS emoji_count,
+           COALESCE(SUM(link_count), 0) AS link_count,
+           COALESCE(SUM(brag_score), 0) AS brag_score,
+           COUNT(DISTINCT COALESCE(NULLIF(sender_id, ''), sender_name)) AS participant_count,
+           MAX(group_name) AS group_name
+    FROM wechat_group_activity
+    WHERE ${where}
+  `).get(...params) || {}
+  const rows = db.prepare(`
+    SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, raw_text,
+           text_length, image_count, emoji_count, link_count, brag_score, mentioned_self, source, timestamp, created_at
+    FROM wechat_group_activity
+    WHERE ${where}
+    ORDER BY timestamp DESC, id DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, safeLimit, safeOffset)
+  const nameMap = getMemberDisplayNameMap(db, gid)
+  return {
+    ok: true,
+    group_id: gid,
+    group_name: totals.group_name || '',
+    from: dates.from,
+    to: dates.to,
+    from_display: formatWeChatLocalDateTime(dates.from),
+    to_display: formatWeChatLocalDateTime(dates.to),
+    total: Number(totals.total || 0),
+    limit: safeLimit,
+    offset: safeOffset,
+    has_more: safeOffset + rows.length < Number(totals.total || 0),
+    totals: {
+      message_count: Number(totals.total || 0),
+      participant_count: Number(totals.participant_count || 0),
+      image_count: Number(totals.image_count || 0),
+      emoji_count: Number(totals.emoji_count || 0),
+      link_count: Number(totals.link_count || 0),
+      brag_score: Number(totals.brag_score || 0),
+    },
+    records: rows.map(row => rowWithDisplayName(row, nameMap)),
+    db_path: paths.dbFile,
+  }
+}
+
+export function buildWeChatGroupActivityExport({ groupId, from = '', to = '', hours = 24, range = '', q = '', type = '', format = 'json' } = {}) {
+  const first = listWeChatGroupActivityRecords({ groupId, from, to, hours, range, q, type, limit: 500, offset: 0 })
+  if (!first.ok) return first
+  let all = [...first.records]
+  let offset = all.length
+  while (first.total > offset && all.length < 20000) {
+    const page = listWeChatGroupActivityRecords({ groupId, from, to, hours, range, q, type, limit: 500, offset })
+    if (!page.ok || !page.records?.length) break
+    all = all.concat(page.records)
+    offset += page.records.length
+  }
+  if (String(format).toLowerCase() === 'csv') {
+    const headers = ['id', '时间', '群', '成员昵称', '成员ID', '类型', '内容', '原始内容', '图片数', '表情数', '链接数', '装逼分', '是否@助手', '来源']
+    const esc = value => `"${String(value ?? '').replace(/"/g, '""')}"`
+    const lines = [
+      headers.map(esc).join(','),
+      ...all.map(row => [
+        row.id,
+        row.timestamp_display,
+        row.group_name,
+        row.sender_display_name || row.sender_name,
+        row.sender_id,
+        row.message_type,
+        row.display_text,
+        row.raw_text,
+        row.image_count,
+        row.emoji_count,
+        row.link_count,
+        row.brag_score,
+        row.mentioned_self ? 1 : 0,
+        row.source,
+      ].map(esc).join(',')),
+    ]
+    return { ok: true, format: 'csv', filename: `wechat-group-${Date.now()}.csv`, contentType: 'text/csv; charset=utf-8', body: `\uFEFF${lines.join('\n')}` }
+  }
+  const mediaFiles = collectMediaExports(all)
+  return {
+    ok: true,
+    format: 'json',
+    filename: `wechat-group-${Date.now()}.json`,
+    contentType: 'application/json; charset=utf-8',
+    body: JSON.stringify({ ...first, count: all.length, records: all, media_files: mediaFiles, media_note: 'media_files 内为本机已保存媒体的 base64；CSV 只导出媒体相对路径。' }, null, 2),
+  }
+}
+
+export function importWeChatGroupActivityRecords({ groupId, groupName = '', records = [], mediaFiles = [], media_files = [] } = {}) {
+  const gid = normalizeStatsGroupId(groupId)
+  if (!gid) return { ok: false, error: 'group_id required' }
+  if (!Array.isArray(records)) return { ok: false, error: 'records must be array' }
+  ensureSchema()
+  const importMediaFiles = Array.isArray(mediaFiles) && mediaFiles.length ? mediaFiles : (Array.isArray(media_files) ? media_files : [])
+  let mediaImported = 0
+  let mediaSkipped = 0
+  for (const file of importMediaFiles) {
+    const rel = String(file.relative_path || file.relativePath || '').trim()
+    const base64 = String(file.base64 || '')
+    if (!rel || !base64 || rel.includes('..') || rel.startsWith('/')) {
+      mediaSkipped += 1
+      continue
+    }
+    try {
+      const target = path.join(paths.userDir, rel)
+      fs.mkdirSync(path.dirname(target), { recursive: true })
+      fs.writeFileSync(target, Buffer.from(base64, 'base64'))
+      mediaImported += 1
+    } catch {
+      mediaSkipped += 1
+    }
+  }
+  let inserted = 0
+  let skipped = 0
+  const db = getDB()
+  for (const row of records) {
+    const text = row.raw_text || row.rawText || row.display_text || row.content || row.text || ''
+    const senderId = row.sender_id || row.senderId || row.member_id || row.memberId || ''
+    const timestamp = row.timestamp || nowTimestamp()
+    const exists = db.prepare(`
+      SELECT 1 FROM wechat_group_activity
+      WHERE group_id = ? AND sender_id = ? AND timestamp = ? AND raw_text = ?
+      LIMIT 1
+    `).get(gid, String(senderId || '').trim(), String(timestamp), String(text).trim().slice(0, MAX_TEXT_LENGTH))
+    if (exists) {
+      skipped += 1
+      continue
+    }
+    const result = recordWeChatGroupActivity({
+      groupId: gid,
+      groupName: row.group_name || row.groupName || groupName,
+      senderId,
+      senderName: row.sender_name || row.senderName || row.member_name || row.memberName || '',
+      text,
+      messageType: row.message_type || row.messageType || '',
+      mentionedSelf: !!(row.mentioned_self || row.mentionedSelf),
+      source: row.source || 'import',
+      timestamp,
+      force: true,
+    })
+    if (result.ok) inserted += 1
+    else skipped += 1
+  }
+  return { ok: true, inserted, skipped, total: records.length, media_imported: mediaImported, media_skipped: mediaSkipped }
 }
 
 export function listActiveWeChatGroupStatsGroups({ hours = 24 * 30, limit = 100 } = {}) {
