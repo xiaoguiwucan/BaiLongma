@@ -2,6 +2,29 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.13 - 2026-05-28
+
+### 清理后台内部 skip 日志显示
+
+- v0.4.12 已经修复 `skip_recognition/skip_consolidation` 循环熔断；本版本继续清理“单次后台 skip 日志”造成的误解。
+- `callLLM()` 新增 `suppressToolLogs`，后台记忆识别器/整合器执行内部协议工具时不再输出 `[工具调用] skip_recognition` / `[工具结果] skip_recognition`。
+- 记忆识别器日志从“显式跳过”改为“无需写入记忆”，避免把正常的“没有要存的长期记忆”显示成跳过用户消息。
+- 记忆整合器日志从“显式跳过”改为“无需整理”。
+- TICK 心跳如果只调用 `set_tick_interval`、UI 状态更新等运行时工具，不再进入记忆识别器，减少空闲状态下的无意义后台 LLM 调用。
+
+### 验证
+
+- `node --check src/llm.js` 通过。
+- `node --check src/index.js` 通过。
+- `node --check src/memory/recognizer.js` 通过。
+- `node --check src/memory/consolidator.js` 通过。
+- `npm run test:tool-router` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.12 - 2026-05-28
 
 ### 彻底修复后台一直“跳过识别/跳过整理”

@@ -973,6 +973,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.13</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">清理后台内部 skip 日志显示：避免再把正常记忆空结果看成“跳过消息”。</p>
+                <ul class="release-note-points">
+                  <li>后台记忆识别/整合内部工具不再输出“工具调用 skip_recognition/skip_consolidation”。</li>
+                  <li>“显式跳过”日志改为“无需写入记忆 / 无需整理”，含义更准确。</li>
+                  <li>TICK 只做节奏/界面等运行时动作时不再进入记忆识别器。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.12</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

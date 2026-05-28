@@ -80,6 +80,7 @@ export async function runConsolidator({ entity, memories }) {
       mustReply: false,
       maxToolRounds: 3,
       stopAfterTools: ['skip_consolidation', 'merge_memories', 'downgrade_memory'],
+      suppressToolLogs: true,
       onToolCall,
       toolContext: { source: 'consolidator', entity },
     })
@@ -89,6 +90,6 @@ export async function runConsolidator({ entity, memories }) {
     return { actions: 0, skipped: false, error: err.message }
   }
 
-  console.log(`[整合器] entity=${entity} memories=${memories.length} actions=${actions} ${skipped ? '(显式跳过)' : ''}`)
+  console.log(`[整合器] entity=${entity} memories=${memories.length} actions=${actions} ${skipped ? '(无需整理)' : ''}`)
   return { actions, skipped }
 }

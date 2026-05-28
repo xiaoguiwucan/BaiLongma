@@ -722,6 +722,7 @@ export async function callLLM({
   mustReply = false,
   maxToolRounds = TOOL_LOOP_LIMITS.maxRounds,
   stopAfterTools = [],
+  suppressToolLogs = false,
 }) {
   const toolSchemas = getToolSchemas(tools)
   const roundLimit = Math.max(1, Math.min(TOOL_LOOP_LIMITS.maxRounds, Number(maxToolRounds) || TOOL_LOOP_LIMITS.maxRounds))
@@ -853,14 +854,14 @@ export async function callLLM({
     }
 
     const runPreparedToolCall = async ({ tc, normalizedArgs, fingerprint, stopReason, hadEmptyArguments }) => {
-      console.log(`[工具调用] ${tc.name}`)
+      if (!suppressToolLogs) console.log(`[工具调用] ${tc.name}`)
       if (hadEmptyArguments) {
-        console.log(`[工具警告] ${tc.name} 参数为空`)
+        if (!suppressToolLogs) console.log(`[工具警告] ${tc.name} 参数为空`)
       }
       let result
       if (stopReason) {
         result = makeToolLoopStoppedResult(tc.name, stopReason)
-        console.log(`[工具熔断] ${tc.name}: ${stopReason}`)
+        if (!suppressToolLogs) console.log(`[工具熔断] ${tc.name}: ${stopReason}`)
         // 熔断信号已经回传给模型，重置跨工具的全局连续失败计数，让 agent 有机会切换到完全不同的工具
         // （比如换 read_file 查日志、search_memory 找历史经验）。同指纹反复失败仍由 sameFailureCounts
         // 拦截，跨工具死循环仍由 recentFingerprints 的 unique threshold 拦截——安全网未失效。
@@ -886,7 +887,7 @@ export async function callLLM({
           detail: buildToolLogDetail(normalizedArgs, result),
         })
       }
-      console.log(`[工具结果] ${tc.name}: ${result.slice(0, 100)}`)
+      if (!suppressToolLogs) console.log(`[工具结果] ${tc.name}: ${result.slice(0, 100)}`)
       if (onToolCall) onToolCall(tc.name, normalizedArgs, result)
       lastToolResult = { name: tc.name, args: normalizedArgs, result }
       return { id: tc.id, name: tc.name, args: normalizedArgs, result, stopReason }
@@ -908,7 +909,7 @@ export async function callLLM({
         }
 
         if (preparedBatch.length > 1) {
-          console.log(`[工具并行] ${preparedBatch.map(item => item.tc.name).join(', ')}`)
+          if (!suppressToolLogs) console.log(`[工具并行] ${preparedBatch.map(item => item.tc.name).join(', ')}`)
           const batchResults = await Promise.all(preparedBatch.map(item => runPreparedToolCall(item)))
           toolResults.push(...batchResults.map(({ id, name, result }) => ({ id, name, result })))
           const lastBatchResult = batchResults[batchResults.length - 1]

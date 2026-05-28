@@ -184,6 +184,7 @@ export async function runRecognizer({ userMessage, jarvisThink, jarvisResponse, 
       mustReply: false,
       maxToolRounds: 4,
       stopAfterTools: ['skip_recognition', 'upsert_memory'],
+      suppressToolLogs: true,
       onToolCall,
       toolContext: { source: 'memory-recognizer', sessionRef, senderId },
     })
@@ -217,7 +218,7 @@ export async function runRecognizer({ userMessage, jarvisThink, jarvisResponse, 
   }
 
   if (writtenMemories.length === 0) {
-    console.log(`[识别器] ${skipped ? '显式跳过' : '无记忆写入'}`)
+    console.log(`[识别器] 无需写入记忆`)
   } else {
     const inserted = writtenMemories.filter(m => m.action === 'inserted').length
     const updated = writtenMemories.filter(m => m.action === 'updated').length

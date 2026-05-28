@@ -348,6 +348,23 @@ function hasNonMessageToolCall(toolCallLog = []) {
   return toolCallLog.some(t => t.name && t.name !== 'send_message')
 }
 
+const RUNTIME_ONLY_TICK_TOOLS = new Set([
+  'set_tick_interval',
+  'complete_startup_self_check',
+  'ui_show',
+  'ui_update',
+  'ui_hide',
+  'ui_patch',
+  'ui_register',
+  'hotspot_mode',
+  'person_card_mode',
+  'media_mode',
+])
+
+function hasMemoryRelevantTickToolCall(toolCallLog = []) {
+  return toolCallLog.some(t => t?.name && !RUNTIME_ONLY_TICK_TOOLS.has(t.name))
+}
+
 const MAIN_TURN_BLOCKED_TOOLS = new Set([
   // 这些工具只属于记忆识别器/整合器。主对话回合不能暴露，否则模型会把用户消息
   // 误当成“记忆识别任务”并调用 skip_recognition，造成真实 @ 消息不回复。
@@ -1423,7 +1440,7 @@ async function runTurn(input, label, msg = null) {
   // Do not send it into the memory recognizer: otherwise the recognizer's terminal
   // skip_recognition call can flood logs/UI and make the app look like it is
   // "一直跳过识别" even though no real user message was being processed.
-  if (isTick && toolCallLog.length === 0) {
+  if (isTick && (toolCallLog.length === 0 || !hasMemoryRelevantTickToolCall(toolCallLog))) {
     emitEvent('memories_written', { count: 0, memories: [] })
     return
   }
