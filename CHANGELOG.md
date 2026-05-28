@@ -4,6 +4,27 @@
 
 
 
+## v0.3.9 - 2026-05-28
+
+### 新增/修复
+
+- Wechaty 群回复现在会识别公开网络图片 URL 和 Markdown 图片，例如 `![meme](https://example.com/a.webp)` 或 `https://example.com/b.jpg`，并用 `FileBox.fromUrl` 作为图片发送到微信群。
+- 出站发送前新增本机文件引用拦截：如果回复内容包含 `file://`、`/Users/`、`~/`、Windows 本地盘符、桌面/下载/相册/截图等本地文件语义，会直接拒绝发送，避免把本机文件或路径发到群里。
+- 图片发送只允许 `http/https` 且后缀为 png/jpg/jpeg/gif/webp 的公开网络图片，单条最多发送 3 张。
+- `test:wechat-memory` 增加公开网络图片 URL 提取测试。
+
+### 验证结果
+
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `npm run test:wechat-memory` 通过。
+- 完整 v0.3.8 检查集继续通过。
+
+### 部署注意事项
+
+- 更新后重启白龙马/Electron。
+- 公开网络图片可以作为图片发送；本机文件、桌面图片、截图、相册、file:// 路径仍会被拒绝。
+
+
 ## v0.3.8 - 2026-05-28
 
 ### 新增内容

@@ -801,6 +801,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.3.9</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群网络图片发送补强：公开图片 URL 可作为图片发送，本机文件引用出站拦截。</p>
+                <ul class="release-note-points">
+                  <li>识别 https 图片 URL 和 Markdown 图片并用 FileBox.fromUrl 发送。</li>
+                  <li>只允许 png/jpg/jpeg/gif/webp 公开网络图片，单条最多 3 张。</li>
+                  <li>拦截 file://、/Users、~/、桌面/相册/截图等本机文件引用。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.3.8</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

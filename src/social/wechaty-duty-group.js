@@ -1,6 +1,7 @@
 import qrcodeTerminal from 'qrcode-terminal'
 import { WechatyBuilder, ScanStatus } from 'wechaty'
 import { PuppetWechat4u } from 'wechaty-puppet-wechat4u'
+import { FileBox } from 'file-box'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
@@ -14,6 +15,8 @@ const WECHATY_MEMORY_NAME = path.join(paths.userDir, 'wechaty-duty-group')
 const WECHATY_MEMORY_FILE = `${WECHATY_MEMORY_NAME}.memory-card.json`
 const ROOM_REFRESH_STALE_MS = 2 * 60 * 1000
 const MESSAGE_HEALTH_STALE_MS = 10 * 60 * 1000
+const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
+const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
 
 let bot = null
 let status = 'idle' // idle | starting | qr_ready | logged_in | connected | error
@@ -35,6 +38,27 @@ let activePuppetName = ''
 let reconnectTimer = null
 let reconnectAttempts = 0
 let suppressReconnectUntil = 0
+
+export function extractPublicImageUrlsFromWechatText(content = '') {
+  const text = String(content || '')
+  const urls = new Set()
+  for (const match of text.matchAll(/!\[[^\]]*\]\((https?:\/\/[^)\s]+)\)/giu)) {
+    if (PUBLIC_IMAGE_URL_RE.test(match[1])) urls.add(match[1])
+  }
+  for (const match of text.matchAll(/https?:\/\/[^\s<>"'`）)]+/giu)) {
+    const url = match[0].replace(/[。。，，、；;]+$/u, '')
+    if (PUBLIC_IMAGE_URL_RE.test(url)) urls.add(url)
+  }
+  return [...urls].slice(0, 3)
+}
+
+function stripImageMarkdown(content = '', imageUrls = []) {
+  let text = String(content || '')
+  for (const url of imageUrls) {
+    text = text.replace(new RegExp(`!\\\\[[^\\\\]]*\\\\]\\\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\\\)`, 'g'), '')
+  }
+  return text.replace(/\n{3,}/g, '\n\n').trim()
+}
 restoreRuntimeSnapshot()
 
 function isLoginActive() {
@@ -198,18 +222,42 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     if (!room) return { ok: false, reason: `room not found: ${rid}` }
     const mentionId = String(opts.mentionId || '').trim()
     const body = String(content || '')
+    if (LOCAL_FILE_REFERENCE_RE.test(body)) {
+      const refusal = '为了保护机主隐私，微信群里不能发送或描述本机文件、桌面图片、截图、相册或 file:// 路径。可以发送公开网络图片链接。'
+      if (mentionId) {
+        try {
+          const contact = bot.Contact.load?.(mentionId) || await bot.Contact.find?.({ id: mentionId })
+          if (contact) await room.say(refusal, contact)
+          else await room.say(refusal)
+        } catch {
+          await room.say(refusal)
+        }
+      } else {
+        await room.say(refusal)
+      }
+      return { ok: false, blocked: true, reason: 'local_file_reference_in_wechat_outbound' }
+    }
+    const imageUrls = extractPublicImageUrlsFromWechatText(body)
+    const textBody = imageUrls.length ? (stripImageMarkdown(body, imageUrls) || '公开网络图片：') : body
     if (mentionId) {
       try {
         const contact = bot.Contact.load?.(mentionId) || await bot.Contact.find?.({ id: mentionId })
-        if (contact) await room.say(body, contact)
-        else await room.say(body)
+        if (contact) await room.say(textBody, contact)
+        else await room.say(textBody)
       } catch {
-        await room.say(body)
+        await room.say(textBody)
       }
     } else {
-      await room.say(body)
+      await room.say(textBody)
     }
-    return { ok: true, platform: 'wechaty-duty-group', roomId: rid }
+    for (const url of imageUrls) {
+      try {
+        await room.say(FileBox.fromUrl(url))
+      } catch (err) {
+        console.warn(`[Wechaty] 公开网络图片发送失败：${url} ${err?.message || err}`)
+      }
+    }
+    return { ok: true, platform: 'wechaty-duty-group', roomId: rid, images: imageUrls.length }
   } catch (err) {
     console.error(`[Wechaty] 群消息发送失败：${err?.message || err}`)
     return { ok: false, error: err?.message || String(err) }
