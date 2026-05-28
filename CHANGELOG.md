@@ -4,6 +4,63 @@
 
 
 
+## v0.4.0 - 2026-05-28
+
+### 大版本更新：微信群全量统计与定时总结
+
+- 新增微信群全量活动统计，不再只关注 @ 助手的消息：所有已接入群里的文字、图片、表情/表情包、链接/小程序都会写入专用统计表。
+- 新增 5 类排行榜：发言排行榜、发图排行榜、表情排行榜、链接排行榜、装逼排行榜。
+- “装逼排行榜”采用启发式关键词统计（如“拿捏/吊打/遥遥领先/不是我吹/基操/凡尔赛”等），用于群娱乐统计，不作为严肃评价。
+- 新增定时总结调度：支持阶段总结（30 分钟/1 小时/3 小时/6 小时/12 小时/每天一次）和每日 00:00 群聊日报。
+- 定时总结写入去重表，避免同一个群同一个时间段重复发送。
+- 支持设置页手动“立即发本群总结”，方便验证群消息通道和日报内容。
+
+### 设置页可视化
+
+- 微信群助手页新增“群统计与定时总结”面板。
+- 可视化配置：启用/关闭自动总结、选择阶段总结间隔、设置每日统计时间、分别开关发言/发图/表情/链接/装逼排行榜。
+- 当前群展示今日统计卡片：消息数、参与人数、图片、表情、链接、装逼次数。
+- 当前群展示排行榜卡片，排版与现有 Brain UI 暗色玻璃风格保持一致。
+
+### 稳定性与安全修复
+
+- 修复微信群里偶发回复英文内部协议文本 `I did not actually call the required tool...` 的严重问题。
+- 主循环兜底现在使用微信群原始 `user_text` 判断是否真的需要工具，不再用构造后的完整 prompt 误判。
+- 即使模型输出内部工具协议文本，也会替换为中文安全兜底，不再把内部执行状态暴露到群里。
+- Wechaty / ClawBot 入队时都会携带原始用户文本，方便主流程做正确兜底判断。
+- 群消息统计写库失败不会中断微信群 @ 回复主流程。
+
+### Honcho 成员记忆展示修复
+
+- Honcho 成员长期记忆读取不再只依赖 `session.peers()`；会从群消息 metadata 的 `sender_id / sender_name` 反推当前群成员 peer。
+- 成员长期记忆区域更稳定，适合查看“某成员在某群里的称呼、偏好、身份”等按群隔离记忆。
+- 对图片/表情/XML 结构化消息做展示清洗，设置页不再被大段微信 XML 污染。
+
+### 验证结果
+
+- `node --check src/social/wechat-group-stats.js` 通过。
+- `node --check src/social/wechat-group-digest.js` 通过。
+- `node --check src/index.js` 通过。
+- `node --check src/config.js` 通过。
+- `node --check src/api.js` 通过。
+- `node --check src/social/index.js` 通过。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/social/wechat-clawbot.js` 通过。
+- `node --check src/social/wechat-group-memory.js` 通过。
+- `node --check src/ui/brain-ui/app.js` 通过。
+- `node --check src/ui/brain-ui/app-shell.js` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
+### 部署注意事项
+
+- 更新后重启白龙马/Electron。
+- 进入 `设置 -> 微信群助手`，确认上方群组已勾选并保存。
+- 在“群统计与定时总结”中按需要开启阶段总结、每日统计和排行榜项；默认每日统计时间为 `00:00`。
+- 群消息统计只记录白龙马真实接入后收到的消息；升级前历史群聊不会自动补录。
+
+
 ## v0.3.10 - 2026-05-28
 
 ### 修复内容

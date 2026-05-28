@@ -5,6 +5,7 @@ import { FileBox } from 'file-box'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
+import { normalizeWeChatGroupDisplayText, recordWeChatGroupActivity } from './wechat-group-stats.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -553,17 +554,35 @@ async function handleMessage(message) {
       emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], room_id: targetRoomId })
     }
 
-    const text = String(message.text?.() || '').trim()
-    if (!text) return
+    const rawText = String(message.text?.() || '').trim()
+    let messageType = ''
+    try { messageType = message.type?.() ?? '' } catch {}
     lastMessageAt = new Date().toISOString()
     const talker = message.talker?.()
     const senderName = isSelf ? '我' : (talker?.name?.() || talker?.id || '未知成员')
     const groupId = `wechaty:${room.id}`
     const groupExternalId = makeWeChatGroupExternalId(groupId)
+    let activity = null
+    try {
+      activity = recordWeChatGroupActivity({
+        groupId,
+        groupName: topic,
+        senderId: talker?.id || senderName,
+        senderName,
+        text: rawText,
+        messageType,
+        mentionedSelf: false,
+        source: 'wechaty',
+      })
+    } catch (err) {
+      console.warn(`[WechatyStats] 写入群统计失败：${err?.message || err}`)
+    }
+    const text = activity?.displayText || normalizeWeChatGroupDisplayText(rawText, messageType)
+    if (!text) return
 
     let mentionedSelf = false
     try { mentionedSelf = !!(await message.mentionSelf?.()) } catch {}
-    if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(text)
+    if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(rawText || text)
     console.log(`[Wechaty] 收到群消息 topic="${topic}" sender="${senderName}" self=${isSelf} mention=${mentionedSelf} text=${text.slice(0, 100)}`)
 
     // 群消息先归档并写入当前群专属记忆库；默认不打扰、不回复。
@@ -594,7 +613,7 @@ async function handleMessage(message) {
       content: formatGroupLine(senderName, text),
       channel: WECHAT_GROUP_CHANNEL,
       external_party_id: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: talker?.id || '', mentioned_self: mentionedSelf, reply_mention_id: talker?.id || '' },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: talker?.id || '', mentioned_self: mentionedSelf, reply_mention_id: talker?.id || '', user_text: text, raw_user_text: rawText || text },
       timestamp: new Date().toISOString(),
     })
 
@@ -603,7 +622,7 @@ async function handleMessage(message) {
       noPersist: true,
       externalPartyIdOverride: `wechaty:room:${room.id}`,
       groupArchiveId: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: talker?.id || '', mentioned_self: mentionedSelf, reply_mention_id: talker?.id || '' },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: talker?.id || '', mentioned_self: mentionedSelf, reply_mention_id: talker?.id || '', user_text: text, raw_user_text: rawText || text },
     })
   } catch (err) {
     console.warn(`[Wechaty] 处理群消息失败：${err?.message || err}`)

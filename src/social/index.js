@@ -1,6 +1,7 @@
 import { startDiscordConnector } from './discord.js'
 import { startClawbotConnector } from './wechat-clawbot.js'
 import { startWechatyDutyGroupConnector } from './wechaty-duty-group.js'
+import { startWeChatGroupDigestScheduler } from './wechat-group-digest.js'
 import { getWechatyDutyGroupConfig } from '../config.js'
 
 const running = new Map() // platform → connector
@@ -24,6 +25,12 @@ export async function startSocialConnectors({ pushMessage, emitEvent } = {}) {
       console.error(`[social] ${platform} connector failed to start: ${error.message}`)
       emitEvent?.('social_status', { status: 'start_error', platform, error: error.message })
     }
+  }
+
+  try {
+    startWeChatGroupDigestScheduler()
+  } catch (error) {
+    console.warn('[social] wechat group digest scheduler failed:', error?.message || error)
   }
 
   return [...running.values()]

@@ -4018,7 +4018,8 @@ body.person-card-mode .person-card-panel,
   padding: 6px;
 }
 .wechaty-persona-panel,
-.wechaty-memory-manager {
+.wechaty-memory-manager,
+.wechaty-stats-panel {
   border: 1px solid var(--line);
   border-radius: 14px;
   padding: 12px;
@@ -4354,6 +4355,132 @@ body.person-card-mode .person-card-panel,
   background: rgba(251, 191, 36, 0.06);
   font-size: 11px;
 }
+.wechaty-stats-panel {
+  background:
+    radial-gradient(circle at top left, rgba(87,214,255,0.10), transparent 36%),
+    radial-gradient(circle at bottom right, rgba(255,212,121,0.08), transparent 42%),
+    rgba(255,255,255,0.025);
+}
+.wechaty-digest-config {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px;
+  border: 1px solid rgba(255,255,255,0.07);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.12);
+  margin-bottom: 10px;
+}
+.wechaty-digest-toggle,
+.wechaty-digest-ranks label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.wechaty-digest-toggle input,
+.wechaty-digest-ranks input {
+  accent-color: var(--cool);
+}
+.wechaty-digest-config .settings-select {
+  flex: 0 0 132px;
+  width: 132px;
+}
+.wechaty-digest-time {
+  flex: 0 0 94px;
+  width: 94px;
+}
+.wechaty-stats-cards {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 9px;
+  margin: 10px 0;
+}
+.wechaty-stat-card {
+  min-height: 74px;
+  border: 1px solid rgba(87,214,255,0.18);
+  border-radius: 14px;
+  padding: 10px;
+  background:
+    linear-gradient(160deg, rgba(87,214,255,0.12), rgba(255,255,255,0.025)),
+    rgba(0,0,0,0.16);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.04);
+}
+.wechaty-stat-card span {
+  display: block;
+  color: var(--ink3);
+  font-size: 10px;
+  letter-spacing: .12em;
+}
+.wechaty-stat-card b {
+  display: block;
+  margin-top: 5px;
+  color: var(--ink);
+  font-size: 22px;
+  line-height: 1;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.wechaty-stat-card em {
+  display: block;
+  margin-top: 6px;
+  color: var(--dim);
+  font-size: 10px;
+  font-style: normal;
+}
+.wechaty-leaderboards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 10px;
+}
+.wechaty-rank-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 10px;
+  background: rgba(0,0,0,0.16);
+}
+.wechaty-rank-card h5 {
+  margin: 0 0 8px;
+  color: var(--warm);
+  font-size: 11px;
+  letter-spacing: .04em;
+}
+.wechaty-rank-card ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.wechaty-rank-card li {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 0;
+  border-top: 1px solid rgba(255,255,255,0.045);
+  color: var(--ink2);
+  font-size: 11px;
+}
+.wechaty-rank-card li:first-child { border-top: none; }
+.wechaty-rank-card li b {
+  color: var(--cool);
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.wechaty-rank-card li span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wechaty-rank-card li em {
+  color: var(--ink);
+  font-style: normal;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+.wechaty-rank-card li.empty {
+  display: block;
+  color: var(--dim);
+}
 .wechaty-guard-list {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -4462,5 +4589,8 @@ body.person-card-mode .person-card-panel,
   .wechaty-login-actions,
   .wechaty-memory-actions {
     justify-content: flex-start;
+  }
+  .wechaty-stats-cards {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

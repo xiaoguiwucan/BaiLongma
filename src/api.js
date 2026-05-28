@@ -11,7 +11,7 @@ import { getQuotaStatus } from './quota.js'
 import { isRunning, stopLoop, startLoop } from './control.js'
 import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
-import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, WECHATY_PERSONA_PRESETS, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
+import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, getWeChatGroupDigestConfig, setWeChatGroupDigestConfig, WECHATY_PERSONA_PRESETS, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
@@ -24,6 +24,8 @@ import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWe
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
 import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
+import { getWeChatGroupStats } from './social/wechat-group-stats.js'
+import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
@@ -384,6 +386,35 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         summary: buildWeChatGroupSummary(messages),
         messages,
       })
+    }
+
+    // GET /social/wechat-groups/stats?group_id=xxx&range=today
+    // 群活动统计：文字/图片/表情/链接/装逼榜等，用于设置页和定时日报。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/stats') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
+      if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
+      const hours = Math.min(parseInt(url.searchParams.get('hours') || '24'), 24 * 90)
+      const range = url.searchParams.get('range') || ''
+      const from = url.searchParams.get('from') || ''
+      const to = url.searchParams.get('to') || ''
+      const limit = Math.min(parseInt(url.searchParams.get('limit') || '10'), 30)
+      return jsonResponse(res, 200, getWeChatGroupStats({ groupId: rawGroupId, from, to, hours, range, limit }))
+    }
+
+    // POST /social/wechat-groups/digest/send — 手动发送当前群统计总结，方便设置页验证。
+    if (req.method === 'POST' && url.pathname === '/social/wechat-groups/digest/send') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(async body => {
+        const result = await sendWeChatGroupDigestNow({
+          groupId: body.group_id || body.groupId,
+          groupName: body.group_name || body.groupName,
+          roomId: body.room_id || body.roomId,
+          mode: body.mode || 'interval',
+        })
+        jsonResponse(res, result.ok ? 200 : 409, result)
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
     }
 
     if (isSocialWebhookPath(url.pathname)) {
@@ -948,7 +979,7 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
 
     // GET /settings/social — read per-platform configuration status (plaintext keys not returned)
     if (req.method === 'GET' && url.pathname === '/settings/social') {
-      jsonResponse(res, 200, { ok: true, social: getSocialConfig(), wechatyDutyGroup: getWechatyDutyGroupConfig(), wechatyDutyGroupStatus: getWechatyDutyGroupStatus(), wechatyPersonaPresets: WECHATY_PERSONA_PRESETS, honcho: getHonchoConfig(), honchoStatus: getWeChatGroupMemoryStatus(), guardRules: getWeChatCommandGuardRules() })
+      jsonResponse(res, 200, { ok: true, social: getSocialConfig(), wechatyDutyGroup: getWechatyDutyGroupConfig(), wechatyDutyGroupStatus: getWechatyDutyGroupStatus(), wechatyPersonaPresets: WECHATY_PERSONA_PRESETS, honcho: getHonchoConfig(), honchoStatus: getWeChatGroupMemoryStatus(), wechatGroupDigest: getWeChatGroupDigestConfig(), guardRules: getWeChatCommandGuardRules() })
       return
     }
 
@@ -1002,6 +1033,22 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         } catch (err) {
           jsonResponse(res, 400, { ok: false, error: err.message })
         }
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
+    }
+
+    // GET /settings/wechat-groups/digest — 读取微信群统计/定时总结配置
+    if (req.method === 'GET' && url.pathname === '/settings/wechat-groups/digest') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      return jsonResponse(res, 200, { ok: true, digest: getWeChatGroupDigestConfig() })
+    }
+
+    // POST /settings/wechat-groups/digest — 保存微信群统计/定时总结配置
+    if (req.method === 'POST' && url.pathname === '/settings/wechat-groups/digest') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        const digest = setWeChatGroupDigestConfig(body || {})
+        jsonResponse(res, 200, { ok: true, digest })
       }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
       return
     }

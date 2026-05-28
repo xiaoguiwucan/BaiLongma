@@ -790,6 +790,81 @@ export function setWechatyDutyGroupRuntime(runtime = {}) {
   return getWechatyDutyGroupConfig()
 }
 
+// ── WeChat group statistics and scheduled digest config ──
+
+export const DEFAULT_WECHAT_GROUP_DIGEST_CONFIG = {
+  enabled: true,
+  intervalEnabled: false,
+  intervalMinutes: 180,
+  dailyStatsEnabled: true,
+  dailyStatsTime: '00:00',
+  messageLeaderboard: true,
+  imageLeaderboard: true,
+  emojiLeaderboard: true,
+  linkLeaderboard: true,
+  bragLeaderboard: true,
+}
+
+function normalizeDigestTime(value = '') {
+  const raw = String(value || '').trim()
+  const match = raw.match(/^([01]\d|2[0-3]):([0-5]\d)$/)
+  return match ? `${match[1]}:${match[2]}` : DEFAULT_WECHAT_GROUP_DIGEST_CONFIG.dailyStatsTime
+}
+
+function normalizeIntervalMinutes(value) {
+  const allowed = new Set([30, 60, 180, 360, 720, 1440])
+  const n = Number(value)
+  return allowed.has(n) ? n : DEFAULT_WECHAT_GROUP_DIGEST_CONFIG.intervalMinutes
+}
+
+export function getWeChatGroupDigestConfig() {
+  let stored = {}
+  try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social?.wechatGroupDigest || {} } catch {}
+  return {
+    enabled: stored.enabled !== false,
+    intervalEnabled: stored.intervalEnabled === true || stored.interval_enabled === true,
+    intervalMinutes: normalizeIntervalMinutes(stored.intervalMinutes ?? stored.interval_minutes),
+    dailyStatsEnabled: stored.dailyStatsEnabled !== false && stored.daily_stats_enabled !== false,
+    dailyStatsTime: normalizeDigestTime(stored.dailyStatsTime || stored.daily_stats_time || DEFAULT_WECHAT_GROUP_DIGEST_CONFIG.dailyStatsTime),
+    messageLeaderboard: stored.messageLeaderboard !== false && stored.message_leaderboard !== false,
+    imageLeaderboard: stored.imageLeaderboard !== false && stored.image_leaderboard !== false,
+    emojiLeaderboard: stored.emojiLeaderboard !== false && stored.emoji_leaderboard !== false,
+    linkLeaderboard: stored.linkLeaderboard !== false && stored.link_leaderboard !== false,
+    bragLeaderboard: stored.bragLeaderboard !== false && stored.brag_leaderboard !== false,
+  }
+}
+
+export function setWeChatGroupDigestConfig(updates = {}) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.social?.wechatGroupDigest || {}
+  const next = { ...current }
+  const boolKeys = [
+    'enabled',
+    'intervalEnabled',
+    'dailyStatsEnabled',
+    'messageLeaderboard',
+    'imageLeaderboard',
+    'emojiLeaderboard',
+    'linkLeaderboard',
+    'bragLeaderboard',
+  ]
+  for (const key of boolKeys) {
+    const snake = key.replace(/[A-Z]/g, m => `_${m.toLowerCase()}`)
+    if (Object.prototype.hasOwnProperty.call(updates, key)) next[key] = updates[key] === true
+    else if (Object.prototype.hasOwnProperty.call(updates, snake)) next[key] = updates[snake] === true
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'intervalMinutes') || Object.prototype.hasOwnProperty.call(updates, 'interval_minutes')) {
+    next.intervalMinutes = normalizeIntervalMinutes(updates.intervalMinutes ?? updates.interval_minutes)
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'dailyStatsTime') || Object.prototype.hasOwnProperty.call(updates, 'daily_stats_time')) {
+    next.dailyStatsTime = normalizeDigestTime(updates.dailyStatsTime || updates.daily_stats_time)
+  }
+  const social = { ...(existing.social || {}), wechatGroupDigest: next }
+  writeStoredConfig({ ...existing, social })
+  return getWeChatGroupDigestConfig()
+}
+
 // ── WeChat ClawBot credentials (written automatically after QR scan, not exposed in SOCIAL_ENV_KEYS) ──
 
 export function getClawbotCredentials() {

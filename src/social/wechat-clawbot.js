@@ -4,6 +4,7 @@ import { upsertClawbotToken, getAllClawbotTokens } from '../db.js'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, shouldWakeInWeChatGroup, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
+import { normalizeWeChatGroupDisplayText, recordWeChatGroupActivity } from './wechat-group-stats.js'
 
 let client = null
 let currentQrUrl = null   // set during login, cleared after scan
@@ -110,7 +111,8 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
     if (msg?.context_token && msg?.from_user_id) {
       try { upsertClawbotToken(msg.from_user_id, msg.context_token) } catch {}
     }
-    const text = (WeChatClient.extractText?.(msg) ?? extractText(msg)).trim()
+    const rawText = (WeChatClient.extractText?.(msg) ?? extractText(msg)).trim()
+    const text = normalizeWeChatGroupDisplayText(rawText, msg?.type || msg?.msg_type || '') || rawText
     if (!text) return
 
     const groupId = String(msg?.group_id || '').trim()
@@ -124,6 +126,11 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
         try { if (client.contextTokens instanceof Map) client.contextTokens.set(groupId, contextToken) } catch {}
       }
 
+      try {
+        recordWeChatGroupActivity({ groupId, senderId, senderName: senderId, text: rawText || text, messageType: msg?.type || msg?.msg_type || '', mentionedSelf: false, source: 'clawbot' })
+      } catch (err) {
+        console.warn(`[ClawBotStats] 写入群统计失败：${err?.message || err}`)
+      }
       const archived = archiveWeChatGroupMessage({ groupId, senderId, text })
       recordWeChatGroupMessage({ groupId, senderId, senderName: senderId, text, mentionedSelf: false, source: 'clawbot' }).catch(err => console.warn(`[Honcho] 写入群记忆失败：${err?.message || err}`))
       console.log(`[ClawBot] 群消息已归档 group=${groupId} sender=${senderId} text=${text.slice(0, 80)}`)
@@ -132,7 +139,7 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
         content: formatGroupLine(senderId, text),
         channel: WECHAT_GROUP_CHANNEL,
         external_party_id: groupExternalId,
-        social: { platform: 'wechat-clawbot', group_id: groupId, sender_id: senderId },
+        social: { platform: 'wechat-clawbot', group_id: groupId, sender_id: senderId, user_text: text, raw_user_text: rawText || text },
         timestamp: new Date().toISOString(),
       })
 
@@ -166,7 +173,7 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
       pushMessage(groupExternalId, prompt, WECHAT_GROUP_CHANNEL, {
         noPersist: true,
         externalPartyIdOverride: outboundId,
-        social: { platform: 'wechat-clawbot', group_id: groupId, sender_id: senderId, context_token: contextToken },
+        social: { platform: 'wechat-clawbot', group_id: groupId, sender_id: senderId, context_token: contextToken, user_text: text, raw_user_text: rawText || text },
       })
       return
     }

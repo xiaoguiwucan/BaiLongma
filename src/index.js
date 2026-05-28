@@ -348,6 +348,11 @@ function hasNonMessageToolCall(toolCallLog = []) {
   return toolCallLog.some(t => t.name && t.name !== 'send_message')
 }
 
+function isInternalToolProtocolFallback(content = '') {
+  const value = String(content || '').trim()
+  return /I did not actually call the required tool|cannot claim the operation completed|execute the tool first|required tool/i.test(value)
+}
+
 function isInvalidWechatMentionSkipFallback(content = '', msg = null) {
   const social = msg?.social || {}
   if (social.platform !== 'wechaty-duty-group' || social.mentioned_self !== true) return false
@@ -1260,9 +1265,10 @@ async function runTurn(input, label, msg = null) {
         .trim()
     )
 
-    if (fallbackContent && requiresToolForUserMessage(input) && !hasNonMessageToolCall(toolCallLog)) {
+    const intentText = msg?.social?.user_text || msg?.social?.raw_user_text || msg?.content || input
+    if (fallbackContent && (requiresToolForUserMessage(intentText) || isInternalToolProtocolFallback(fallbackContent)) && !hasNonMessageToolCall(toolCallLog)) {
       const timestamp = nowTimestamp()
-      const blockedContent = 'I did not actually call the required tool, so I cannot claim the operation completed. Please send again — I will execute the tool first, then reply based on the result.'
+      const blockedContent = '这条请求需要实际工具结果才能确认，我刚才没有拿到可靠结果，所以不能假装完成。请重新发一次，我会按安全规则处理。'
       console.warn(`[protocol fallback] Blocked a text reply that required a tool call but made none. from=${msg.fromId}`)
       if (isVoiceChannel(msg.channel) && !voiceSentenceEmitter?.spoke()) autoSpeakForVoiceReply(blockedContent, { voiceTurnId: msg?.voiceTurnId || null })
       deliverFallbackReply(msg, blockedContent, timestamp)
@@ -1279,7 +1285,9 @@ async function runTurn(input, label, msg = null) {
       })
     } else if (fallbackContent) {
       const timestamp = nowTimestamp()
-      const safeFallbackContent = isInvalidWechatMentionSkipFallback(fallbackContent, msg)
+      const safeFallbackContent = isInternalToolProtocolFallback(fallbackContent)
+        ? '我刚才的内部执行状态不可靠，不能把“已完成”当真。你再发一次，我会直接按你的问题处理。'
+        : isInvalidWechatMentionSkipFallback(fallbackContent, msg)
         ? buildWechatMentionSkipFallbackCorrection(msg)
         : fallbackContent
       if (safeFallbackContent !== fallbackContent) {

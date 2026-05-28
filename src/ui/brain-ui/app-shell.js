@@ -436,6 +436,45 @@ const createSettingsModal = () => `
                 </div>
               </div>
             </div>
+            <div class="wechaty-stats-panel" id="wechaty-stats-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">群统计与定时总结</div>
+                  <p class="settings-hint">记录所有已接入群的消息，不只记录 @：文字、图片、表情、链接和“装逼指数”都会进入统计。定时总结会发送到上方勾选的微信群。</p>
+                </div>
+                <div class="wechaty-memory-actions">
+                  <button class="settings-save-btn" id="wechaty-refresh-stats-btn" type="button">刷新统计</button>
+                  <button class="settings-save-btn primary" id="wechaty-send-digest-btn" type="button">立即发本群总结</button>
+                </div>
+              </div>
+              <div class="wechaty-digest-config">
+                <label class="wechaty-digest-toggle"><input id="wechaty-digest-enabled" type="checkbox" checked><span>启用群统计/自动总结</span></label>
+                <label class="wechaty-digest-toggle"><input id="wechaty-digest-interval-enabled" type="checkbox"><span>阶段总结</span></label>
+                <select class="settings-select" id="wechaty-digest-interval">
+                  <option value="30">每 30 分钟</option>
+                  <option value="60">每 1 小时</option>
+                  <option value="180">每 3 小时</option>
+                  <option value="360">每 6 小时</option>
+                  <option value="720">每 12 小时</option>
+                  <option value="1440">每天一次</option>
+                </select>
+                <label class="wechaty-digest-toggle"><input id="wechaty-digest-daily-enabled" type="checkbox" checked><span>每日统计</span></label>
+                <input class="settings-input wechaty-digest-time" id="wechaty-digest-daily-time" type="time" value="00:00">
+              </div>
+              <div class="wechaty-digest-config wechaty-digest-ranks">
+                <label><input id="wechaty-rank-message" type="checkbox" checked> 发言榜</label>
+                <label><input id="wechaty-rank-image" type="checkbox" checked> 发图榜</label>
+                <label><input id="wechaty-rank-emoji" type="checkbox" checked> 表情榜</label>
+                <label><input id="wechaty-rank-link" type="checkbox" checked> 链接榜</label>
+                <label><input id="wechaty-rank-brag" type="checkbox" checked> 装逼榜</label>
+                <button class="settings-save-btn" id="wechaty-save-digest-btn" type="button">保存总结设置</button>
+                <span class="settings-feedback" id="wechaty-digest-feedback"></span>
+              </div>
+              <div class="wechaty-stats-cards" id="wechaty-stats-cards">
+                <div class="wechaty-empty">选择左侧群并刷新统计后显示今日数据。</div>
+              </div>
+              <div class="wechaty-leaderboards" id="wechaty-leaderboards"></div>
+            </div>
           </div>
           <div class="settings-section">
             <div class="settings-section-label">Honcho 群知识库</div>
@@ -803,6 +842,20 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.0</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群统计与定时总结大版本：全量记录群消息，新增排行榜、日报和阶段总结设置。</p>
+                <ul class="release-note-points">
+                  <li>修复群里偶发回复英文内部协议文本的问题。</li>
+                  <li>全量统计文字、图片、表情、链接和装逼指数，不只记录 @ 消息。</li>
+                  <li>新增每日 00:00 群日报、阶段总结、手动立即发送本群总结。</li>
+                  <li>设置页新增统计卡片和发言/发图/表情/链接/装逼排行榜。</li>
+                  <li>成员长期记忆从消息元数据补全 peer，展示更稳定。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.3.10</span>

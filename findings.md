@@ -1,18 +1,12 @@
-# Findings: WeChat Memory Management, Persona Prompt, Safety Guard UI
+# Findings: WeChat Group Full Archive, Stats, Digest UI, and Reply Safety Fix
 
-待填。
+## Current request discoveries
+- 用户看到的英文 `I did not actually call the required tool...` 来自主流程工具调用兜底逻辑，不应暴露给微信群。需要改为中文安全文案，并优先使用原始用户文本判断是否真的需要工具。
+- 群记忆展示目前容易让用户误以为“长期记忆不存在”：需要把群长期记忆、成员长期记忆、原始聊天记录、统计数据明确分区展示。
+- 用户需要记录全量群消息，不只是 @ 消息；现有 Wechaty/ClawBot 已经有部分 archive/record 调用，但缺少独立统计表、排行 API、定时发送调度和可视化设置。
 
-
-## 2026-05-28 审查发现
-- Honcho 现有 `listWeChatGroupMemory()` 只列 session.messages 原始消息，UI 也只显示第一选中群，因此用户会觉得“看不到记忆”。需要新增按群概览 + 当前群详细列表，至少显示消息、总结、结论/卡片（如果 Honcho 后台已生成）。
-- Honcho SDK `Session` 支持 `messages()`、`summaries()`、`context()`、`delete()`，没有公开单条 message delete；`Peer.conclusionsOf(target).delete(id)` 支持删除结论。单条原始消息管理只能在当前版本提供“删除整个群 session / 删除结论”，不能假装删除单条消息。
-- 微信助手配置目前只有 enabled/groupNames/runtime；需要增加 personaPrompt 并在 `buildWeChatGroupCommandPrompt()` 注入。
-- 安全规则当前只有 10 条且 UI 只显示 id/label，需要扩展规则库并展示描述/示例/处理方式。
-
-
-## 2026-05-28 UI/交互决策
-- 设置弹窗扩大到 1080x820，避免微信群助手/记忆/黑名单内容挤在小区域里看不清。
-- 群记忆管理采用左群列表、右详情结构；详情分为自动摘要、长期结论/知识、原始消息记录。
-- 允许手动添加“本群长期记忆”，写入 Honcho conclusion；支持删除单条 conclusion；原始 message 不假装可单条删除，只支持清空整个本群 session。
-- 安全规则以卡片展示 label/id/严重等级/说明/示例/安全替代方案，让用户能直观看到“到底限制了什么”。
-- 保存群设置时保留过滤列表之外已勾选的群，避免用户搜索后保存导致其他群丢失。
+## 2026-05-28 code audit
+- `src/index.js` 的兜底分支在 `requiresToolForUserMessage(input)` 上判断；微信群入队的 `input` 是构造后的完整 prompt，里面必然包含“文件/链接/读取”等安全说明，所以会把普通群聊误判成“需要工具但没调用”，再把英文协议文本发出去。
+- `src/social/wechaty-duty-group.js` 和 `src/social/wechat-clawbot.js` 入队 social 元数据没有保存 `user_text`，主流程无法区分原始用户消息和 prompt。
+- `src/social/wechat-group-memory.js` 的成员记忆读取主要依赖 `session.peers()`；如果 session 初始缓存时未带成员 peer，或 Honcho peers 列表没返回成员，就会导致“成员长期记忆”区域为空。可从消息 metadata 的 `sender_id/sender_name` 反推成员 peers。
+- `src/social/wechat-groups.js` 已经有 `archiveWeChatGroupMessage()` 和抽取式总结，但没有独立统计表、媒体类型清洗、排行聚合、定时摘要配置和调度。

@@ -25,6 +25,16 @@ function normalizeText(text = '') {
   return String(text || '').replace(/\s+/g, ' ').trim()
 }
 
+function normalizeMemoryDisplayText(text = '') {
+  const value = normalizeText(text)
+  if (!value) return ''
+  if (/<msg[\s\S]{0,800}<emoji|<emoji\b|cdnurl=|emoji[^>]{0,120}(?:md5|len|aeskey)/iu.test(value)) return '[表情]'
+  if (/<img\b|<image\b|cdnthumburl=|cdnmidimgurl=/iu.test(value)) return '[图片]'
+  if (/^<appmsg\b|<weappinfo\b|小程序/u.test(value)) return '[小程序/链接]'
+  if ((/^<\?xml|^<msg\b|^<sysmsg\b/iu.test(value)) && value.length > 80) return '[微信结构化消息]'
+  return value.slice(0, 2400)
+}
+
 function safeIdPart(value = '') {
   return String(value || '').replace(/[^a-zA-Z0-9_-]+/g, '_').slice(0, 80) || 'unknown'
 }
@@ -67,7 +77,7 @@ function normalizeMessageItem(item) {
     id: String(item?.id || ''),
     kind: 'message',
     type: String(item?.metadata?.type || 'wechat_group_message'),
-    content: normalizeText(item?.content || ''),
+    content: normalizeMemoryDisplayText(item?.content || ''),
     speaker: normalizeText(messageSpeaker(item)),
     peerId: item?.peerId || item?.peer_id || '',
     sessionId: item?.sessionId || item?.session_id || '',
@@ -217,7 +227,7 @@ async function collectSessionSummaries(session) {
   }
 }
 
-async function collectConclusions({ assistantPeer, groupPeer, memberPeer, session, limit = 40, includeAllPeers = false } = {}) {
+async function collectConclusions({ assistantPeer, groupPeer, memberPeer, session, limit = 40, includeAllPeers = false, extraMemberPeers = [] } = {}) {
   const rows = []
   const errors = []
   const seen = new Set()
@@ -235,6 +245,10 @@ async function collectConclusions({ assistantPeer, groupPeer, memberPeer, sessio
 
   await addScope(groupPeer, 'group')
   if (memberPeer) await addScope(memberPeer, 'member')
+  for (const peer of extraMemberPeers || []) {
+    if (!peer?.id || peer.id === memberPeer?.id || peer.id === groupPeer?.id || peer.id === ASSISTANT_PEER_ID) continue
+    await addScope(peer, 'member')
+  }
 
   if (includeAllPeers) {
     try {
@@ -419,7 +433,25 @@ export async function listWeChatGroupMemory({ groupId, groupName = '', limit = 8
     const summaries = Array.isArray(summaryResult) ? summaryResult : []
     if (!Array.isArray(summaryResult) && summaryResult?.error) errors.push(`summaries: ${summaryResult.error}`)
 
-    const conclusionsResult = await collectConclusions({ assistantPeer, groupPeer, session, limit: size, includeAllPeers })
+    const extraMemberPeers = []
+    if (includeAllPeers && messageRows.length) {
+      const seenMembers = new Set()
+      for (const row of messageRows) {
+        const senderId = row?.metadata?.sender_id || ''
+        const senderName = row?.metadata?.sender_name || row?.speaker || ''
+        const memberPeerId = memberPeerIdFor(senderId, senderName)
+        if (!senderId && !senderName) continue
+        if (seenMembers.has(memberPeerId)) continue
+        seenMembers.add(memberPeerId)
+        try {
+          extraMemberPeers.push(await ensurePeer(honcho, memberPeerId, { type: 'wechat_member', sender_id: senderId, sender_name: senderName, group_id: gid, group_name: groupName }))
+        } catch (err) {
+          errors.push(`member-peer:${senderName || senderId}: ${err?.message || err}`)
+        }
+      }
+    }
+
+    const conclusionsResult = await collectConclusions({ assistantPeer, groupPeer, session, limit: size, includeAllPeers, extraMemberPeers })
     const conclusions = conclusionsResult.items || []
     if (conclusionsResult.errors?.length) errors.push(...conclusionsResult.errors.map(err => `conclusions: ${err}`))
 
