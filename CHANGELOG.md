@@ -2,6 +2,32 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.9 - 2026-05-28
+
+### 微信群聊天记录库持续入库修复
+
+- 修复“聊天记录库不更新 / 某些群不记录”的问题。
+- 根因：聊天记录库复用了“群统计与定时总结”的 `selectedGroups` 开关；如果某个群没有被勾选为统计/日报群，原始聊天流水也会被跳过。
+- 现在已拆分逻辑：微信群原始聊天记录只要程序运行并且 Wechaty 收到群消息，就会强制写入本机 SQLite `wechat_group_activity` 表。
+- “群统计与定时总结”的群组勾选只控制排行榜展示、阶段总结和每日 00:00 自动发送，不再影响原始聊天记录入库。
+- 非微信群助手接入群现在只做本地聊天记录入库，不进入 Honcho 长期记忆、大模型和自动回复链路，避免误打扰。
+
+### 数据安全说明
+
+- 修复前已用 SQLite `.backup` 给当前用户数据做了备份：`~/Library/Application Support/Bailongma/data/backups/jarvis-before-record-all-*.db`。
+- 本机当前 Electron 数据库为 `~/Library/Application Support/Bailongma/data/jarvis.db`；修复时查询到 `wechat_group_activity` 共有 479 条记录，并未被删除。
+- 截图里显示 16 条，是当前页面选中群和时间筛选范围下的结果；同库里 `PT站看片狂魔小群` 仍有 435 条记录。
+
+### 验证
+
+- 新增 `npm run test:wechat-record-all`，验证未勾选统计群时普通写入会被统计开关拦截，但 `force: true` 的聊天记录库入库必须成功。
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `npm run test:wechat-record-all` 通过。
+- `npm run test:social-targets` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.8 - 2026-05-28
 
 ### 微信群 @ 回复目标链路热修复

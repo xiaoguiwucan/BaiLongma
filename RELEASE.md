@@ -2,10 +2,11 @@
 
 ## Current Version
 
-- `0.4.8`
+- `0.4.9`
 
 ## What This Release Includes
 
+- v0.4.9 微信群聊天记录库持续入库修复：原始聊天流水不再受“群统计与定时总结”勾选项影响，只要程序运行且收到群消息就写入本机 SQLite。
 - v0.4.8 微信群 @ 回复目标链路热修复：分发层正确解析 `wechaty:room:<room>:member:<member>`，发送时使用真实 room_id，并把 member_id 作为兜底 @ 对象。
 - v0.4.7 微信群 @ 回复对象修复：按当前提问人的 sender_id / sender_name 精确 @，避免回复错人。
 - Windows NSIS installer
@@ -28,12 +29,12 @@ npm run build
 
 Installer output:
 
-- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.8.exe`
+- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.9.exe`
 - `D:\claude\BaiLongma\dist\latest.yml`
 
 ## Local Verification Checklist
 
-1. Install `Bailongma Setup 0.4.8.exe`.
+1. Install `Bailongma Setup 0.4.9.exe`.
 2. Launch the app and confirm the activation page appears on first run.
 3. Enter a valid API key and verify the app enters `brain-ui`.
 4. Uninstall the app.
@@ -55,9 +56,9 @@ npm run publish
 
 Published artifacts:
 
-- GitHub Release asset: `Bailongma Setup 0.4.8.exe`
+- GitHub Release asset: `Bailongma Setup 0.4.9.exe`
 - GitHub Release asset: `latest.yml`
-- GitHub Release asset: `Bailongma Setup 0.4.8.exe.blockmap`
+- GitHub Release asset: `Bailongma Setup 0.4.9.exe.blockmap`
 
 ## Notes On First Launch Of The Installer
 

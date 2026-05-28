@@ -973,6 +973,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.9</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群聊天记录库持续入库修复：原始聊天流水不再被统计/日报群组勾选拦截。</p>
+                <ul class="release-note-points">
+                  <li>只要程序运行且 Wechaty 收到群消息，就会写入本机 SQLite 聊天记录库。</li>
+                  <li>群统计与定时总结的勾选项只控制排行榜和自动发送，不再影响原始记录入库。</li>
+                  <li>非微信群助手接入群只做本地记录，不进入 Honcho、大模型或自动回复链路。</li>
+                  <li>修复前已为当前数据库创建 SQLite 备份，避免误判为数据丢失。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.8</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

@@ -594,11 +594,11 @@ async function handleMessage(message) {
     const room = message.room?.()
     if (!room) return
     const topic = await safeTopic(room)
-    if (!isAllowedGroupTopic(topic)) return
+    const assistantEnabledForGroup = isAllowedGroupTopic(topic)
 
-    targetRooms.set(topic, room)
+    if (assistantEnabledForGroup) targetRooms.set(topic, room)
     scheduleRoomMemberNameRefresh(room, topic)
-    if (!targetRoomId) {
+    if (assistantEnabledForGroup && !targetRoomId) {
       targetRoomId = room.id
       targetRoom = room
       status = 'connected'
@@ -653,6 +653,10 @@ async function handleMessage(message) {
         messageType,
         mentionedSelf,
         source: 'wechaty',
+        // 聊天记录库是原始流水账：只要程序运行并收到微信群消息就必须入库。
+        // 统计/日报的 selectedGroups 只控制“是否展示统计/是否定时发送总结”，
+        // 不能反过来拦截原始聊天记录，否则用户一取消统计勾选就会误以为聊天记录丢失。
+        force: true,
       })
     } catch (err) {
       console.warn(`[WechatyStats] 写入群统计失败：${err?.message || err}`)
@@ -662,6 +666,9 @@ async function handleMessage(message) {
 
     if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(rawText || text)
     console.log(`[Wechaty] 收到群消息 topic="${topic}" sender="${senderName}" self=${isSelf} mention=${mentionedSelf} text=${text.slice(0, 100)}`)
+
+    // 本地聊天记录库已经完成无条件入库；非“微信群助手接入群”只记录，不进入 Honcho/LLM/自动回复链路。
+    if (!assistantEnabledForGroup) return
 
     // 群消息先归档并写入当前群专属记忆库；默认不打扰、不回复。
     archiveWeChatGroupMessage({ groupId, senderId: senderName, text })
