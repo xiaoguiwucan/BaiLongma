@@ -2,6 +2,18 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.26 - 2026-05-28
+
+### 修复
+- 彻底修复斗图仍发送裸 URL 的问题：现在同时剥离 Markdown 图片、Markdown 链接和纯 URL。
+- 如果剥离 URL 后只剩一个 @ 昵称，也不会再发送文字气泡，直接发送图片/GIF。
+- 新增内部剥离逻辑验证，确认 `@用户 https://...gif` 会变成纯图片发送。
+
+### 验证
+- 通过裸 URL 剥离测试。
+- 通过 npm run test:wechat-record-all。
+- 通过 npm run test:wechat-guard。
+
 ## v0.4.25 - 2026-05-28
 
 ### 修复

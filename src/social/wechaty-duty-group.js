@@ -63,12 +63,20 @@ export function extractPublicImageUrlsFromWechatText(content = '') {
   return [...urls].slice(0, 3)
 }
 
-function stripImageMarkdown(content = '', imageUrls = []) {
+export function stripImageMarkdown(content = '', imageUrls = []) {
   let text = String(content || '')
   for (const url of imageUrls) {
-    text = text.replace(new RegExp(`!\\\\[[^\\\\]]*\\\\]\\\\(${url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\\\)`, 'g'), '')
+    const escaped = url.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    // 同时剥离 Markdown 图片、Markdown 链接和裸 URL；微信群里只发图片/GIF，不展示链接文本。
+    text = text.replace(new RegExp(`!\\[[^\\]]*\\]\\(${escaped}\\)`, 'g'), '')
+    text = text.replace(new RegExp(`\\[[^\\]]*\\]\\(${escaped}\\)`, 'g'), '')
+    text = text.replace(new RegExp(escaped, 'g'), '')
   }
-  return text.replace(/\n{3,}/g, '\n\n').trim()
+  return text
+    .replace(/https?:\/\/[^\s<>"'`）)]+/giu, '')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim()
 }
 
 function makeWechatyGroupReplyTargetId(roomId = '', senderId = '', senderName = '') {
@@ -370,7 +378,8 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
       return { ok: false, blocked: true, reason: 'local_file_reference_in_wechat_outbound' }
     }
     const imageUrls = extractPublicImageUrlsFromWechatText(body)
-    const textBody = imageUrls.length ? stripImageMarkdown(body, imageUrls) : body
+    let textBody = imageUrls.length ? stripImageMarkdown(body, imageUrls) : body
+    if (imageUrls.length && /^[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]{1,40}$/u.test(textBody.trim())) textBody = ''
     // 表情包/斗图场景不要把图片 URL 当文字发到群里；微信里应只看到图片/GIF。
     // 若模型额外写了自然语言说明，则先 @ 提问人发一句短文字；纯图片回复则完全不发链接文本。
     if (textBody.trim()) {

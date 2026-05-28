@@ -1,4 +1,16 @@
 
+## v0.4.26 - 2026-05-28
+
+### 修复
+- 彻底修复斗图仍发送裸 URL 的问题：现在同时剥离 Markdown 图片、Markdown 链接和纯 URL。
+- 如果剥离 URL 后只剩一个 @ 昵称，也不会再发送文字气泡，直接发送图片/GIF。
+- 新增内部剥离逻辑验证，确认 `@用户 https://...gif` 会变成纯图片发送。
+
+### 验证
+- 通过裸 URL 剥离测试。
+- 通过 npm run test:wechat-record-all。
+- 通过 npm run test:wechat-guard。
+
 ## v0.4.25 - 2026-05-28
 
 ### 修复
