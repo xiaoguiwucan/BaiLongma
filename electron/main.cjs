@@ -5,7 +5,7 @@ if (process.platform === 'win32') {
   } catch (_) {}
 }
 
-const { app, BrowserWindow, shell, dialog, Menu, ipcMain, Tray, nativeImage } = require('electron')
+const { app, BrowserWindow, shell, dialog, Menu, ipcMain, Tray, nativeImage, Notification } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const net = require('net')
@@ -112,6 +112,18 @@ global.bailongmaAppControl = {
     app.isQuiting = true
     app.relaunch()
     app.quit()
+  },
+  notify({ title = 'Bailongma', body = '', showWindow = false } = {}) {
+    try {
+      if (Notification.isSupported()) {
+        const notification = new Notification({ title, body, silent: false })
+        notification.on('click', () => showMainWindow())
+        notification.show()
+      }
+    } catch (err) {
+      console.warn('[main] notify failed', err?.message || String(err))
+    }
+    if (showWindow) showMainWindow()
   },
 }
 

@@ -2498,7 +2498,7 @@ function initTTSSettings() {
 
   function describeWechatyCachedSuffix(status = {}) {
     const parts = [];
-    if (status.rooms_stale || wechatyRoomsAreStale) parts.push('下方是上次缓存，不代表当前在线');
+    if (status.rooms_stale || wechatyRoomsAreStale) parts.push('下方是上次缓存，不代表当前在线，也不能接收 @ 消息');
     if (status.last_room_refresh_at) parts.push(`上次真实刷新 ${formatWechatyTime(status.last_room_refresh_at)}`);
     if (status.error) parts.push(`错误：${status.error}`);
     return parts.length ? `（${parts.join('；')}）` : '';
@@ -3219,26 +3219,26 @@ function initTTSSettings() {
       wechatySelectedGroupNames = new Set(wechatyConfiguredGroupNames);
     }
     const connected = status.online === true && status.status === "connected";
+    const offline = status.connection_state === "offline" || status.needs_relogin === true || (["disconnected", "error", "relogin_required", "group_lookup_error", "rooms_stale", "group_not_found"].includes(status.status) && !connected);
     const matchedCount = Object.keys(status.room_ids || {}).filter(k => status.room_ids[k]).length;
     if (wechatyQrArea) wechatyQrArea.style.display = status.qr ? "flex" : "none";
     if (wechatyQrImg && status.qr) wechatyQrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=${encodeURIComponent(status.qr)}`;
     if (wechatyLoginSub) {
       const user = status.login_user || status.last_login_user || '';
       const suffix = describeWechatyCachedSuffix(status);
-      if (status.status === "qr_ready") wechatyLoginSub.textContent = "等待扫码登录。请用要接入群聊的微信扫描下方二维码。";
-      else if (status.status === "starting") wechatyLoginSub.textContent = "正在恢复微信登录态；如果失效会出现二维码。";
-      else if (connected) wechatyLoginSub.textContent = `${user ? `已真实在线：${user}。` : '已真实在线。'}已接入 ${matchedCount} 个群，可接收 @ 消息。`;
-      else if (status.needs_relogin || status.rooms_stale || ["logged_in", "connected", "rooms_stale", "group_lookup_error", "rooms_pending", "group_not_found"].includes(status.status)) wechatyLoginSub.textContent = `${user ? `检测到历史登录：${user}。` : ''}当前不能确认微信群消息通道可用，请点“强制重新扫码”。${suffix}`;
-      else if (status.status === "disconnected" || status.status === "error") wechatyLoginSub.textContent = `${user ? `上次登录：${user}。` : ''}当前微信连接已断开，请点“强制重新扫码”。${suffix}`;
+      if (connected) wechatyLoginSub.textContent = `${user ? `已真实在线：${user}。` : '已真实在线。'}已接入 ${matchedCount} 个群，可接收 @ 消息。`;
+      else if (status.status === "qr_ready") wechatyLoginSub.textContent = "等待扫码登录。请用要接入群聊的微信扫描下方二维码；扫码前缓存群不能接收 @ 消息。";
+      else if (offline) wechatyLoginSub.textContent = `${user ? `上次登录：${user}。` : ''}微信助手已离线，缓存群不可接收 @ 消息。请点“强制重新扫码”。${suffix}`;
+      else if (status.status === "starting") wechatyLoginSub.textContent = "正在恢复微信登录态；超过 90 秒仍未真实在线会自动标记离线并提醒重新扫码。";
+      else if (status.rooms_stale || ["logged_in", "connected", "rooms_pending"].includes(status.status)) wechatyLoginSub.textContent = `${user ? `检测到历史登录：${user}。` : ''}当前不能确认微信群消息通道可用，请点“强制重新扫码”。${suffix}`;
       else wechatyLoginSub.textContent = "未登录。点击“登录/恢复微信”；如果没有出现二维码，请点“强制重新扫码”。";
     }
     if (connected) setWechatyStatus(`已真实连接 · 接入 ${matchedCount} 个群`, true);
-    else if (status.status === "qr_ready") setWechatyStatus(wechatyRoomsCache.length ? `等待扫码登录 · 下方保留上次 ${wechatyRoomsCache.length} 个群` : "等待扫码登录", false);
+    else if (status.status === "qr_ready") setWechatyStatus(wechatyRoomsCache.length ? `等待扫码 · 缓存 ${wechatyRoomsCache.length} 个群不可接收消息` : "等待扫码登录", false);
+    else if (offline) setWechatyStatus(`已离线 · 缓存群不可用，请重新扫码`, false);
     else if (status.status === "starting") setWechatyStatus("正在登录/恢复微信", false);
     else if (status.rooms_stale || status.status === "rooms_stale") setWechatyStatus(`未确认在线 · 仅显示上次缓存 ${wechatyRoomsCache.length} 个群`, false);
     else if (status.status === "logged_in" || status.status === "connected") setWechatyStatus("登录态存在但群消息通道不可确认", false);
-    else if (status.status === "disconnected") setWechatyStatus(`已断线 · 请强制重新扫码`, false);
-    else if (status.status === "error" || status.status === "group_lookup_error") setWechatyStatus(`连接异常 · 请强制重新扫码`, false);
     else setWechatyStatus(config.enabled === false ? "已关闭" : "未登录", false);
     renderWechatyRooms();
     renderWechatyMemoryGroups();
@@ -4558,6 +4558,16 @@ function initTTSSettings() {
 
   window.addEventListener("bailongma:social_status", (e) => {
     const d = e.detail;
+    if (d?.platform === "wechaty-duty-group") {
+      if (d.alert === "offline" || d.needs_relogin || d.connection_state === "offline") {
+        setWechatyStatus("已离线 · 缓存群不可用，请重新扫码", false);
+        if (wechatyLoginSub) wechatyLoginSub.textContent = d.hint || "微信助手已离线，无法接收群 @ 消息，请强制重新扫码。";
+        showFeedback(wechatyDutyFeedback, d.hint || "微信助手已离线，请强制重新扫码", true);
+      } else if (d.status === "connected" && d.online) {
+        setWechatyStatus("已真实连接", true);
+      }
+      return;
+    }
     if (d?.platform !== "wechat-clawbot") return;
     if (d.status === "connected") {
       stopClawbotPoll();

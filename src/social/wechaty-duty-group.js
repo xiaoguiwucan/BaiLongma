@@ -19,6 +19,8 @@ const ROOM_REFRESH_STALE_MS = 2 * 60 * 1000
 const MESSAGE_HEALTH_STALE_MS = 10 * 60 * 1000
 const MEMBER_NAME_REFRESH_STALE_MS = 10 * 60 * 1000
 const START_WATCHDOG_MS = 60 * 1000
+const OFFLINE_DETECT_INTERVAL_MS = 30 * 1000
+const STARTING_RELOGIN_REQUIRED_MS = 90 * 1000
 const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
 const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
 
@@ -43,6 +45,9 @@ let reconnectTimer = null
 let reconnectAttempts = 0
 let suppressReconnectUntil = 0
 let startWatchdogTimer = null
+let offlineDetectTimer = null
+let connectionAttemptStartedAt = 0
+let lastOfflineAlertKey = ''
 const memberNameRefreshAt = new Map()
 
 export function extractPublicImageUrlsFromWechatText(content = '') {
@@ -133,6 +138,70 @@ function isTrulyOnline() {
   return !!bot && isConnectedStatus() && hasCurrentResolvedRooms() && (isFreshRoomRefresh() || isMessageHealthy())
 }
 
+function emitWechatyStatusEvent(extra = {}) {
+  emitEventRef?.('social_status', {
+    platform: 'wechaty-duty-group',
+    status: extra.status || status,
+    group_names: [...targetGroupNames],
+    online: isTrulyOnline(),
+    rooms_stale: !!roomSnapshot.length && !isTrulyOnline(),
+    needs_relogin: needsWechatyRelogin(),
+    hint: getConnectionHint({ online: isTrulyOnline(), rooms: roomSnapshot }),
+    rooms: roomSnapshot,
+    login_user: isLoginActive() ? previousLoginUser() : '',
+    last_login_user: previousLoginUser(),
+    ...extra,
+  })
+}
+
+function notifyWechatyOffline(reason = '', { force = false } = {}) {
+  const key = `${status}:${reason}:${lastQr ? 'qr' : 'noqr'}`
+  if (!force && key === lastOfflineAlertKey) return
+  lastOfflineAlertKey = key
+  const hint = getConnectionHint({ online: false, rooms: roomSnapshot })
+  console.warn(`[Wechaty] 离线提醒：${hint}${reason ? ` (${reason})` : ''}`)
+  try {
+    globalThis.bailongmaAppControl?.notify?.({
+      title: '微信群助手已离线',
+      body: hint || '微信群助手当前不可接收 @ 消息，请重新扫码登录。',
+      urgency: 'critical',
+      showWindow: true,
+    })
+  } catch {}
+  emitWechatyStatusEvent({ alert: 'offline', reason, error: lastError })
+}
+
+function needsWechatyRelogin() {
+  if (isTrulyOnline()) return false
+  if (status === 'qr_ready') return false
+  if (status === 'starting' && connectionAttemptStartedAt && Date.now() - connectionAttemptStartedAt > STARTING_RELOGIN_REQUIRED_MS) return true
+  return ['logged_in', 'connected', 'rooms_stale', 'group_lookup_error', 'rooms_pending', 'group_not_found', 'error', 'disconnected', 'relogin_required'].includes(status)
+}
+
+function startOfflineDetector() {
+  if (offlineDetectTimer) return
+  offlineDetectTimer = setInterval(() => {
+    if (!wechatyGroupReplyEnabled) return
+    if (isTrulyOnline()) {
+      lastOfflineAlertKey = ''
+      return
+    }
+    if (needsWechatyRelogin()) {
+      if (status === 'starting') {
+        status = 'relogin_required'
+        lastError = lastError || '微信登录态恢复超时，需要重新扫码。'
+        persistRuntime(status)
+      }
+      notifyWechatyOffline('health_check')
+    }
+  }, OFFLINE_DETECT_INTERVAL_MS)
+}
+
+function stopOfflineDetector() {
+  if (offlineDetectTimer) clearInterval(offlineDetectTimer)
+  offlineDetectTimer = null
+}
+
 function previousLoginUser() {
   try {
     const runtime = getWechatyDutyGroupConfig().runtime || {}
@@ -220,6 +289,7 @@ export function getWechatyDutyGroupStatus() {
   const stale = !!rooms.length && !online
   return {
     status,
+    connection_state: online ? 'online' : (needsWechatyRelogin() ? 'offline' : (status === 'qr_ready' ? 'qr_ready' : 'connecting')),
     enabled: wechatyGroupReplyEnabled,
     group_name: targetGroupNames[0] || '',
     group_names: [...targetGroupNames],
@@ -236,7 +306,7 @@ export function getWechatyDutyGroupStatus() {
     cached_room_count: rooms.length,
     rooms,
     rooms_stale: stale,
-    needs_relogin: !online && ['logged_in', 'connected', 'group_lookup_error', 'rooms_pending', 'group_not_found', 'error', 'disconnected'].includes(status),
+    needs_relogin: needsWechatyRelogin(),
     hint: getConnectionHint({ online, rooms }),
     last_room_refresh_at: lastRoomRefreshAt || String(runtime.lastRoomRefreshAt || ''),
     last_message_at: lastMessageAt || String(runtime.lastMessageAt || ''),
@@ -383,6 +453,7 @@ export async function forceReloginWechatyDutyGroupConnector(opts = {}) {
 export async function stopWechatyDutyGroupConnector(options = {}) {
   suppressReconnect(8000)
   clearReconnectTimer()
+  if (!options.preserveRuntime) stopOfflineDetector()
   status = 'idle'
   lastQr = ''
   lastQrAscii = ''
@@ -408,6 +479,8 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
 
   clearReconnectTimer()
   status = 'starting'
+  connectionAttemptStartedAt = Date.now()
+  lastOfflineAlertKey = ''
   lastError = ''
   persistRuntime(status)
   lastQr = ''
@@ -457,7 +530,8 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     targetRoomId = ''
     console.log(`[Wechaty] 已断开/退出：${user?.name?.() || lastLoginUser || ''}`)
     persistRuntime(status)
-    emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], login_user: lastLoginUser, rooms: roomSnapshot })
+    emitWechatyStatusEvent({ login_user: lastLoginUser })
+    notifyWechatyOffline('logout', { force: true })
     if (!isReconnectSuppressed()) scheduleReconnect('logout')
   })
 
@@ -472,32 +546,34 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
         status = targetRoomId ? 'connected' : 'logged_in'
         console.warn(`[Wechaty] 忽略 wechat4u 暂态错误，保持当前连接：${lastError}`)
         persistRuntime(status)
-        emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], room_id: targetRoomId, warning: lastError, rooms: roomSnapshot })
+        emitWechatyStatusEvent({ room_id: targetRoomId, warning: lastError })
         return
       }
       if (hasResolvedRooms()) {
         status = 'group_lookup_error'
         console.warn(`[Wechaty] wechat4u 暂态错误但连接健康过期，标记为需确认/重登：${lastError}`)
         persistRuntime(status)
-        emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], warning: lastError, rooms: roomSnapshot })
+        emitWechatyStatusEvent({ warning: lastError })
         return
       }
       if (status === 'qr_ready' || status === 'starting') {
         console.warn(`[Wechaty] 等待登录期间忽略 wechat4u 暂态错误：${lastError}`)
         persistRuntime(status)
-        emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], warning: lastError, rooms: roomSnapshot })
+        emitWechatyStatusEvent({ warning: lastError })
         return
       }
     }
     if (!targetRoomId) status = 'error'
     console.error(`[Wechaty] 错误：${lastError}`)
     persistRuntime(status)
-    emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], room_id: targetRoomId, error: lastError, rooms: roomSnapshot })
+    emitWechatyStatusEvent({ room_id: targetRoomId, error: lastError })
+    notifyWechatyOffline('error')
     scheduleReconnect('error')
   })
 
   bot.on('message', handleMessage)
 
+  startOfflineDetector()
   armStartWatchdog(bot)
   bot.start().catch(err => {
     clearStartWatchdog()
@@ -505,7 +581,8 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     lastError = err?.message || String(err)
     persistRuntime(status)
     console.error(`[Wechaty] 启动失败：${lastError}`)
-    emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status: 'error', group_names: [...targetGroupNames], error: lastError })
+    emitWechatyStatusEvent({ status: 'error', error: lastError })
+    notifyWechatyOffline('start_failed')
   })
 
   return { platform: 'wechaty-duty-group', stop: stopWechatyDutyGroupConnector }
@@ -1197,6 +1274,7 @@ function isReconnectSuppressed() {
 function scheduleReconnect(reason = '') {
   if (!wechatyGroupReplyEnabled || isReconnectSuppressed()) return
   if (reconnectTimer) return
+  if (needsWechatyRelogin()) notifyWechatyOffline(reason || 'reconnect')
   reconnectAttempts += 1
   const delay = Math.min(120000, 15000 * reconnectAttempts)
   console.warn(`[Wechaty] ${reason} 后 ${Math.round(delay / 1000)} 秒尝试自动恢复连接`)
