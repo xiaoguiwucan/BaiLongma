@@ -3,7 +3,7 @@ import { WechatyBuilder, ScanStatus } from 'wechaty'
 import { PuppetWechat4u } from 'wechaty-puppet-wechat4u'
 import { FileBox } from 'file-box'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
-import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
+import { getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
 import { isWeChatInternalIdLike, listWeChatGroupMembers, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
 import { searchMemes } from './meme-search.js'
@@ -811,7 +811,7 @@ async function handleMessage(message) {
 
     console.log(`[Wechaty] 值班群消息${isSelf ? '（self）' : ''}${mentionedSelf ? '（@我）' : ''} ${senderName}: ${text.slice(0, 100)}`)
 
-    const adminVerified = isWechatyGroupAdminSender(senderId)
+    const adminVerified = isWechatyGroupAdminSender({ senderId, senderName, groupId, groupName: topic })
     const adminProtectionReply = adminVerified ? '' : buildAdminProtectionReply({ groupId, groupName: topic, senderId, text })
     if (adminProtectionReply) {
       await sendWechatyDutyGroupMessage(room.id, adminProtectionReply, { mentionId: senderId, mentionName: senderName })
@@ -1161,15 +1161,46 @@ function getConfiguredGroupNames() {
   }
 }
 
-function isWechatyGroupAdminSender(senderId = '') {
-  const sid = String(senderId || '').trim()
+function isWechatyGroupAdminSender(input = '') {
+  const payload = (input && typeof input === 'object') ? input : { senderId: input }
+  const sid = String(payload.senderId || '').trim()
+  const senderName = String(payload.senderName || '').trim()
+  const groupId = String(payload.groupId || '').trim()
+  const groupName = String(payload.groupName || '').trim()
   if (!sid) return false
   try {
     const cfg = getWechatyDutyGroupConfig()
     if (cfg.adminModeEnabled !== true) return false
-    const ids = Array.isArray(cfg.adminWechatIds) ? cfg.adminWechatIds : []
-    return ids.some(id => String(id || '').trim() === sid)
-  } catch {
+    const ids = Array.isArray(cfg.adminWechatIds) ? cfg.adminWechatIds.map(id => String(id || '').trim()).filter(Boolean) : []
+    if (ids.some(id => id === sid)) return true
+
+    // wechaty-puppet-wechat4u 的 sender_id 在重新登录后可能变化。
+    // 设置页虽然保存的是精确 sender_id，但如果历史管理员 ID 在同一个群里对应的微信昵称/群昵称
+    // 与当前发言人一致，则认为是同一个已选管理员，并把本次新 sender_id 自动补入配置。
+    // 这样既解决重登后管理员失效，又避免用户每次扫码后重新配置。
+    if (!senderName || !ids.length) return false
+    const members = listWeChatGroupMembers({ groupId, groupName, limit: 1000 }).members || []
+    const configuredAdminNames = new Set()
+    for (const id of ids) {
+      for (const member of members) {
+        if (String(member.sender_id || '').trim() !== id) continue
+        for (const name of [member.display_name, member.room_alias, member.contact_alias, member.contact_name]) {
+          const clean = String(name || '').trim()
+          if (clean) configuredAdminNames.add(clean)
+        }
+      }
+    }
+    if (!configuredAdminNames.has(senderName)) return false
+    try {
+      const nextIds = [...new Set([...ids, sid])]
+      setWechatyDutyGroupConfig({ adminWechatIds: nextIds })
+      console.warn(`[WechatyAdmin] 管理员 sender_id 已随登录变化，按同群昵称匹配自动补录：group="${groupName || groupId}" name="${senderName}" old_count=${ids.length} new_id="${sid}"`)
+    } catch (err) {
+      console.warn(`[WechatyAdmin] 管理员新 sender_id 自动补录失败：${err?.message || err}`)
+    }
+    return true
+  } catch (err) {
+    console.warn(`[WechatyAdmin] 管理员身份校验失败：${err?.message || err}`)
     return false
   }
 }

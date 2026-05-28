@@ -1,4 +1,21 @@
 
+## v0.4.29 - 2026-05-29
+
+### 修复
+- 修复 Wechaty 重新登录后管理员 sender_id 变化导致管理员权限失效的问题。
+- 当历史已选管理员 ID 在同一个群内对应的微信昵称/群昵称与当前发言人一致时，自动识别为同一管理员并补录新的 sender_id。
+- 解决管理员请求查看性格预设提示词时，程序界面已经生成内容但微信发送层仍提示 `local_file_reference_in_wechat_outbound` 的问题。
+
+### 说明
+- Wechaty Web 协议下 sender_id 可能随登录态变化；本版增加同群历史管理员昵称兜底，避免每次扫码后管理员权限丢失。
+- 首次命中兜底时日志会输出 `[WechatyAdmin] 管理员 sender_id 已随登录变化，按同群昵称匹配自动补录`，之后会恢复精确 sender_id 判断。
+- 普通群成员仍不能靠自称管理员绕过；必须先存在历史已选管理员记录，且在同一个群内匹配到对应昵称。
+
+### 验证
+- 通过 node --check：src/social/wechaty-duty-group.js、src/social/dispatch.js、src/social/wechat-groups.js。
+- 通过 npm run test:wechat-guard。
+- 通过 npm run test:wechat-record-all。
+
 ## v0.4.28 - 2026-05-29
 
 ### 修复
