@@ -6,6 +6,7 @@ import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLi
 import { getWechatyDutyGroupConfig, setWechatyDutyGroupRuntime } from '../config.js'
 import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChatGroupExplicitMemories } from './wechat-group-memory.js'
 import { isWeChatInternalIdLike, listWeChatGroupMembers, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
+import { searchMemes } from './meme-search.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -23,6 +24,7 @@ const OFFLINE_DETECT_INTERVAL_MS = 30 * 1000
 const STARTING_RELOGIN_REQUIRED_MS = 90 * 1000
 const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
 const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
+const DIRECT_MEME_REQUEST_RE = /(?:斗图|表情包|梗图|gif|动图|发.{0,4}表情|来.{0,4}表情|整.{0,4}表情|发.{0,3}图|来.{0,3}图|开心|难过|愤怒|生气|鄙视|无语|笑死|吃瓜|破防).{0,8}(?:表情|表情包|梗图|图|gif)?|(?:表情|表情包|梗图|gif|动图)$/iu
 
 let bot = null
 let status = 'idle' // idle | starting | qr_ready | logged_in | connected | error
@@ -830,6 +832,10 @@ async function handleMessage(message) {
       })
       .catch(err => console.warn(`[Honcho] 显式群记忆写入失败：${err?.message || err}`))
 
+    if (!adminVerified && await tryDirectMemeReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+      return
+    }
+
     emitEventRef?.('message_in', {
       from_id: groupExternalId,
       content: formatGroupLine(senderName, text),
@@ -868,7 +874,26 @@ async function handleMessage(message) {
 }
 
 
+function extractMemeQueryFromWechatText(text = '') {
+  return String(text || '')
+    .replace(/^[@＠][^\s      ，,：:、]{1,40}/u, '')
+    .replace(/(?:发|来|整|给|找|搜|搞|要|一个|一张|个|张|点|的|一下|吧|啊|呀|哈)/giu, ' ')
+    .replace(/(?:表情包|表情|梗图|斗图|gif|GIF|动图|图片|图)/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 24) || '表情包'
+}
 
+async function tryDirectMemeReply(room, text = '', { senderId = '', senderName = '', groupId = '', groupName = '' } = {}) {
+  if (!DIRECT_MEME_REQUEST_RE.test(String(text || ''))) return false
+  const query = extractMemeQueryFromWechatText(text)
+  const result = await searchMemes({ query, count: 8, seed: `${groupId}:${senderId}:${Date.now()}` })
+  const item = result?.items?.[0]
+  if (!result?.ok || !item?.url) return false
+  console.log(`[WechatyMeme] 直接表情包回复 topic="${groupName}" sender="${senderName}" query="${query}" url="${item.url}"`)
+  await sendWechatyDutyGroupMessage(room.id, item.url, { mentionId: senderId, mentionName: senderName })
+  return true
+}
 
 async function getWechatRawMessagePayload(message) {
   try {

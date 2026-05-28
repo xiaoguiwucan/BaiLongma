@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import { getWechatMemeConfig } from '../config.js'
 
 const SAFE_QUERY_BLOCK_RE = /(裸|色情|成人视频|黄色|三级片|露点|血腥|恐怖袭击|自杀|身份证|银行卡|密码|token|api\s*key)/iu
@@ -57,7 +58,30 @@ function scoreMemeItem(item = {}, query = '') {
   return score
 }
 
-export async function searchMemes({ query = '', provider = 'xiaoapi', count = null, page = 1 } = {}) {
+
+function shuffleDeterministic(items = [], seed = '') {
+  const list = [...items]
+  const salt = seed || `${Date.now()}-${Math.random()}`
+  return list
+    .map((item, index) => {
+      const hash = crypto.createHash('sha1').update(`${salt}:${item.url}:${index}`).digest('hex')
+      return { item, rank: hash }
+    })
+    .sort((a, b) => a.rank.localeCompare(b.rank))
+    .map(row => row.item)
+}
+
+function diversifyMemeItems(items = [], query = '', seed = '') {
+  if (!items.length) return []
+  const scored = items.map(item => ({ ...item, _score: scoreMemeItem(item, query) }))
+  const maxScore = Math.max(...scored.map(item => item._score || 0))
+  // 只在高质量候选池里随机，避免永远第一张，也避免随机到尺寸/域名明显差的图。
+  const pool = scored.filter(item => Number(item._score || 0) >= maxScore - 2)
+  const picked = shuffleDeterministic(pool.length >= 3 ? pool : scored, seed)
+  return picked.map(({ _score, ...item }) => item)
+}
+
+export async function searchMemes({ query = '', provider = 'xiaoapi', count = null, page = 1, seed = '' } = {}) {
   const config = getWechatMemeConfig()
   if (config.enabled === false) return { ok: false, tool: 'meme_search', error: 'meme search disabled' }
   const clean = cleanQuery(query) || '表情包'
@@ -78,7 +102,7 @@ export async function searchMemes({ query = '', provider = 'xiaoapi', count = nu
     try { json = JSON.parse(text) } catch {}
     if (!res.ok || !json) return { ok: false, tool: 'meme_search', status: res.status, error: 'invalid meme api response', preview: text.slice(0, 300) }
     const rawItems = Array.isArray(json.data) ? json.data : []
-    const items = rawItems.map(row => {
+    const itemsRaw = rawItems.map(row => {
       const imageUrl = normalizeImageUrl(row.img_url || row.url || '')
       return {
         url: imageUrl,
@@ -89,9 +113,8 @@ export async function searchMemes({ query = '', provider = 'xiaoapi', count = nu
         source: 'xiaoapi',
       }
     }).filter(item => item.url && isAllowedMemeUrl(item.url, config))
-      .sort((a, b) => scoreMemeItem(b, clean) - scoreMemeItem(a, clean))
-      .slice(0, limit)
-    return { ok: true, tool: 'meme_search', provider: 'xiaoapi', query: clean, endpoint: url.toString(), count: items.length, items }
+    const items = diversifyMemeItems(itemsRaw, clean, seed || `${clean}:${Date.now()}`).slice(0, limit)
+    return { ok: true, tool: 'meme_search', provider: 'xiaoapi', query: clean, endpoint: url.toString(), randomized: true, count: items.length, items }
   } catch (err) {
     return { ok: false, tool: 'meme_search', provider: 'xiaoapi', query: clean, error: err?.name === 'AbortError' ? 'request timeout' : (err?.message || String(err)) }
   } finally {
