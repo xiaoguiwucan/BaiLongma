@@ -2,6 +2,30 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.7 - 2026-05-28
+
+### 微信群 @ 回复对象修复
+
+- 修复微信群里“被 @ 后回复时总是 @ 错人 / @ 到管理员 / @ 到上一位成员”的问题。
+- 现在每条群消息都会生成专属回复目标，按当前提问人的 sender_id / sender_name 精确回复。
+- 发送时优先在当前群成员列表里按 contact.id 精确找人，找不到就不模糊猜测，宁可不 @ 也不 @ 错。
+- 群消息 prompt 里会明确写出“本轮必须回复当前提问人”，降低 LLM 选错 target_id 的概率。
+
+### 记忆说明
+
+- 聊天记忆不是把整个数据库全量塞给模型。
+- 每轮只注入：当前群的长期记忆、当前成员记忆、最近 24h 群聊流水、群内摘要、关键词召回、任务/上下文相关记忆。
+- 全量群聊天记录仍保存在 SQLite，用于筛选、统计、导出和回溯，但不会把所有历史一次性塞进上下文。
+
+### 验证
+
+- `node --check src/social/wechaty-duty-group.js` 通过。
+- `node --check src/social/dispatch.js` 通过。
+- `node --check src/social/wechat-groups.js` 通过。
+- `npm run test:wechat-guard` 通过。
+- `npm run test:wechat-memory` 通过。
+- `git diff --check` 通过。
+
 ## v0.4.6 - 2026-05-28
 
 ### LLM 模型池

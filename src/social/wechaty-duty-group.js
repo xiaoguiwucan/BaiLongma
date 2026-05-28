@@ -63,6 +63,40 @@ function stripImageMarkdown(content = '', imageUrls = []) {
   }
   return text.replace(/\n{3,}/g, '\n\n').trim()
 }
+
+function makeWechatyGroupReplyTargetId(roomId = '', senderId = '', senderName = '') {
+  const roomKey = encodeURIComponent(String(roomId || 'unknown-room').trim())
+  const memberKey = encodeURIComponent(String(senderId || senderName || 'unknown-member').trim())
+  return `wechaty:room:${roomKey}:member:${memberKey}`
+}
+
+async function resolveWechatyMentionContact(room, mentionId = '') {
+  const wanted = String(mentionId || '').trim()
+  if (!wanted || !room || !bot) return null
+
+  // 优先从“当前群成员列表”按 contact.id 精确找人。
+  // 不能用昵称/备注兜底，否则群成员改名或同名时又会 @ 错人。
+  try {
+    const members = await room.memberAll()
+    const found = (members || []).find(contact => getWechatyContactId(contact) === wanted)
+    if (found) return found
+  } catch {}
+
+  // Contact.load 是按微信内部 UserName 精确加载；如果拿不到成员对象就宁可不 @，
+  // 也不要按名字模糊查，避免把回复错 @ 到上一位提问人/管理员。
+  try {
+    const loaded = bot.Contact.load?.(wanted)
+    if (loaded) {
+      const loadedId = getWechatyContactId(loaded)
+      if (!loadedId || loadedId === wanted) return loaded
+    }
+  } catch {}
+  try {
+    const found = await bot.Contact.find?.({ id: wanted })
+    if (found && getWechatyContactId(found) === wanted) return found
+  } catch {}
+  return null
+}
 restoreRuntimeSnapshot()
 
 function isLoginActive() {
@@ -225,17 +259,16 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     if (!room && rid === targetRoomId) room = await resolveTargetRooms()
     if (!room) return { ok: false, reason: `room not found: ${rid}` }
     const mentionId = String(opts.mentionId || '').trim()
+    const mentionName = String(opts.mentionName || '').trim()
     const body = String(content || '')
+    const mentionContact = mentionId ? await resolveWechatyMentionContact(room, mentionId) : null
+    if (mentionId) {
+      console.log(`[Wechaty] 准备发送群回复 room="${rid}" mention_id="${mentionId}" mention_name="${mentionName || ''}" resolved=${mentionContact ? 'yes' : 'no'}`)
+    }
     if (LOCAL_FILE_REFERENCE_RE.test(body)) {
       const refusal = '为了保护机主隐私，微信群里不能发送或描述本机文件、桌面图片、截图、相册或 file:// 路径。可以发送公开网络图片链接。'
-      if (mentionId) {
-        try {
-          const contact = bot.Contact.load?.(mentionId) || await bot.Contact.find?.({ id: mentionId })
-          if (contact) await room.say(refusal, contact)
-          else await room.say(refusal)
-        } catch {
-          await room.say(refusal)
-        }
+      if (mentionContact) {
+        await room.say(refusal, mentionContact)
       } else {
         await room.say(refusal)
       }
@@ -243,14 +276,8 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     }
     const imageUrls = extractPublicImageUrlsFromWechatText(body)
     const textBody = imageUrls.length ? (stripImageMarkdown(body, imageUrls) || '公开网络图片：') : body
-    if (mentionId) {
-      try {
-        const contact = bot.Contact.load?.(mentionId) || await bot.Contact.find?.({ id: mentionId })
-        if (contact) await room.say(textBody, contact)
-        else await room.say(textBody)
-      } catch {
-        await room.say(textBody)
-      }
+    if (mentionContact) {
+      await room.say(textBody, mentionContact)
     } else {
       await room.say(textBody)
     }
@@ -612,6 +639,9 @@ async function handleMessage(message) {
     try { mediaInfo = await persistWechatMessageMedia(message, { groupId, groupName: topic, senderId }) } catch (err) { console.warn(`[WechatyStats] 保存群媒体失败：${err?.message || err}`) }
     const statsRawText = mediaInfo?.stored ? `${rawText || normalizeWeChatGroupDisplayText(rawText, messageType)}
 [媒体文件] ${mediaInfo.relativePath}`.trim() : rawText
+    let mentionedSelf = false
+    try { mentionedSelf = !!(await message.mentionSelf?.()) } catch {}
+    if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(rawText)
     let activity = null
     try {
       activity = recordWeChatGroupActivity({
@@ -621,7 +651,7 @@ async function handleMessage(message) {
         senderName,
         text: statsRawText,
         messageType,
-        mentionedSelf: false,
+        mentionedSelf,
         source: 'wechaty',
       })
     } catch (err) {
@@ -630,8 +660,6 @@ async function handleMessage(message) {
     const text = activity?.displayText || normalizeWeChatGroupDisplayText(rawText, messageType)
     if (!text) return
 
-    let mentionedSelf = false
-    try { mentionedSelf = !!(await message.mentionSelf?.()) } catch {}
     if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(rawText || text)
     console.log(`[Wechaty] 收到群消息 topic="${topic}" sender="${senderName}" self=${isSelf} mention=${mentionedSelf} text=${text.slice(0, 100)}`)
 
@@ -668,18 +696,32 @@ async function handleMessage(message) {
       content: formatGroupLine(senderName, text),
       channel: WECHAT_GROUP_CHANNEL,
       external_party_id: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text, wechat_admin: adminVerified },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', reply_mention_name: senderName || '', user_text: text, raw_user_text: rawText || text, wechat_admin: adminVerified },
       timestamp: new Date().toISOString(),
     })
 
-    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, mentionedSelf: true, adminVerified })
-    pushMessageRef?.(`wechaty:room:${room.id}`, prompt, WECHAT_GROUP_CHANNEL, {
+    const replyTargetId = makeWechatyGroupReplyTargetId(room.id, senderId || senderName, senderName)
+    const replySocial = {
+      platform: 'wechaty-duty-group',
+      group_name: topic,
+      room_id: room.id,
+      sender_name: senderName,
+      sender_id: senderId || '',
+      mentioned_self: mentionedSelf,
+      reply_mention_id: senderId || '',
+      reply_mention_name: senderName || '',
+      user_text: text,
+      raw_user_text: rawText || text,
+      wechat_admin: adminVerified,
+    }
+    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, mentionedSelf: true, adminVerified, replyTargetId })
+    pushMessageRef?.(replyTargetId, prompt, WECHAT_GROUP_CHANNEL, {
       noPersist: true,
       noPrune: true,
       noPreempt: true,
       externalPartyIdOverride: `wechaty:room:${room.id}`,
       groupArchiveId: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', user_text: text, raw_user_text: rawText || text, wechat_admin: adminVerified },
+      social: replySocial,
     })
   } catch (err) {
     console.warn(`[Wechaty] 处理群消息失败：${err?.message || err}`)

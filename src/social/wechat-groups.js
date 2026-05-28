@@ -153,7 +153,7 @@ export function buildWeChatGroupSummary(messages = []) {
   ].filter(Boolean).join('\n')
 }
 
-export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', senderId = '', senderName = '', text = '', mentionedSelf = false, adminVerified = false } = {}) {
+export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', senderId = '', senderName = '', text = '', mentionedSelf = false, adminVerified = false, replyTargetId = '' } = {}) {
   const groupExternalId = makeWeChatGroupExternalId(groupId)
   const messages = getRecentWeChatGroupMessages(groupExternalId, { limit: 100, hours: 24 })
   const transcript = messages.map(row => `${row.timestamp?.slice(5, 16) || ''} ${row.content}`).join('\n')
@@ -194,6 +194,7 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     adminBlock,
     '',
     `微信群${groupName ? `「${groupName}」` : ''}成员 ${senderName || senderId || '未知成员'} 已经 @ 你并发来消息。`,
+    replyTargetId ? `本轮回复必须调用 send_message(target_id="${replyTargetId}")；系统会自动投递到当前微信群并 @ 这个真实提问人，不要改成群主/管理员/上一位成员。` : '',
     `用户原文：${rawText}`,
     `去掉开头 @ 后的实际请求：${commandText}`,
     '',

@@ -2,11 +2,11 @@
 
 ## Current Version
 
-- `0.4.6`
+- `0.4.7`
 
 ## What This Release Includes
 
-- v0.4.6 LLM 多模型池与自动故障切换：可配置多个 LLM profile，按优先级启停/排序/设为当前；额度不足、限流、认证失败、模型不可用、5xx 或网络超时时自动切换备用模型。
+- v0.4.7 微信群 @ 回复对象修复：按当前提问人的 sender_id / sender_name 精确 @，避免回复错人。
 - Windows NSIS installer
 - GitHub Releases auto-update metadata
 - First-run activation flow
@@ -27,12 +27,12 @@ npm run build
 
 Installer output:
 
-- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.6.exe`
+- `D:\claude\BaiLongma\dist\Bailongma Setup 0.4.7.exe`
 - `D:\claude\BaiLongma\dist\latest.yml`
 
 ## Local Verification Checklist
 
-1. Install `Bailongma Setup 0.4.6.exe`.
+1. Install `Bailongma Setup 0.4.7.exe`.
 2. Launch the app and confirm the activation page appears on first run.
 3. Enter a valid API key and verify the app enters `brain-ui`.
 4. Uninstall the app.
@@ -54,9 +54,9 @@ npm run publish
 
 Published artifacts:
 
-- GitHub Release asset: `Bailongma Setup 0.4.6.exe`
+- GitHub Release asset: `Bailongma Setup 0.4.7.exe`
 - GitHub Release asset: `latest.yml`
-- GitHub Release asset: `Bailongma Setup 0.4.6.exe.blockmap`
+- GitHub Release asset: `Bailongma Setup 0.4.7.exe.blockmap`
 
 ## Notes On First Launch Of The Installer
 

@@ -973,6 +973,19 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.7</span>
+                  <span class="release-note-date">2026-05-28</span>
+                </div>
+                <p class="release-note-summary">微信群 @ 回复对象修复：按当前提问人的 sender_id / sender_name 精确 @ 回去，不再误 @ 管理员或上一位成员。</p>
+                <ul class="release-note-points">
+                  <li>每条群消息生成独立回复目标，send_message 会明确指向当前提问人。</li>
+                  <li>发送时优先在当前群成员列表里按 contact.id 精确找人，找不到就不模糊猜测。</li>
+                  <li>群消息 prompt 中会明确要求回复当前提问人，减少模型选错 target_id 的概率。</li>
+                  <li>顺带解释了当前聊天记忆不是全库直塞，而是按群/成员/最近上下文分层注入。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.6</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>

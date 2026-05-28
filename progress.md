@@ -49,3 +49,5 @@
 - v0.4.6：初步 `node --check` 已通过 config、llm、api、index、Brain UI JS 和 app-shell。
 - v0.4.6：已完成临时配置冒烟测试：在备份/恢复 `config.json` 的前提下新增两个假模型 profile、保存 failover 策略、确认 `/settings` 公共 profile 不泄露 `apiKey` 字段，并恢复原配置文件。
 - v0.4.6：最终验证通过：node --check 全部相关文件通过，wechat guard/memory 测试通过，git diff --check 通过；已重启 Electron 并确认 `/settings` 返回模型池 profiles、activeProfileId 和 failover，且不返回明文 API Key。
+- 2026-05-28 v0.4.7：已修复微信群 @ 回复对象，改为按当前提问人的 sender_id / sender_name 生成专属 reply target，并在发送时优先按群成员精确匹配，避免再 @ 到管理员或上一位成员。
+- 2026-05-28 v0.4.7：已补充对聊天记忆机制的说明：不是全库直塞，而是分层注入（群长期记忆、成员记忆、最近群聊流水、摘要、关键词召回）。

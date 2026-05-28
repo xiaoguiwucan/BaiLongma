@@ -113,7 +113,10 @@ async function sendClawbot({ userId }, content) {
 }
 
 async function sendWechaty({ roomId }, content, options = {}) {
-  return sendWechatyDutyGroupMessage(roomId, content, { mentionId: options?.social?.reply_mention_id || options?.replyMentionId || '' })
+  return sendWechatyDutyGroupMessage(roomId, content, {
+    mentionId: options?.social?.reply_mention_id || options?.social?.sender_id || options?.replyMentionId || '',
+    mentionName: options?.social?.reply_mention_name || options?.social?.sender_name || options?.replyMentionName || '',
+  })
 }
 
 export async function dispatchSocialMessage(targetId, content, options = {}) {
@@ -136,4 +139,3 @@ export async function dispatchSocialMessage(targetId, content, options = {}) {
       return null
   }
 }
-
