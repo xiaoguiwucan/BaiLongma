@@ -5061,8 +5061,9 @@ body.person-card-mode .person-card-panel,
 .wechaty-report-preview {
   display: block;
   width: 100%;
-  height: min(72vw, 760px);
-  min-height: 420px;
+  aspect-ratio: 1080 / 1350;
+  height: auto;
+  min-height: 0;
   border: 0;
   border-radius: 12px;
   background: #f2ecdf;
