@@ -6,7 +6,8 @@ import { paths } from '../paths.js'
 
 const LIMIT_FILE = path.join(paths.dataDir, 'skill-image-generation-limits.json')
 const OUTPUT_DIR = path.join(paths.dataDir, 'generated-images')
-const IMAGE_REQUEST_RE = /(?:生成|画|绘制|做|制作|出|来|给|设计|创作).{0,40}(?:图片|图像|插画|海报|头像|壁纸|封面|logo|图标|照片|图)|(?:生图|画图|生成图|生成图片|AI图|ai图|出图)/iu
+const IMAGE_REQUEST_RE = /(?:生成|画|绘制|做|制作|设计|创作).{0,40}(?:图片|图像|插画|海报|头像|壁纸|封面|logo|图标|照片|图)|(?:生图|画图|生成图|生成图片|AI图|ai图|出图)/iu
+const IMAGE_UNDERSTANDING_RE = /(?:看|看看|识别|识图|读|读取|分析|判断|解释|理解|ocr|OCR|报错|错误|内容|里面|里边|图里|图片里|图中|引用|这张图|这图|截图里|照片里|看图|读图)/u
 const HIGH_QUALITY_RE = /(?:高清|高质量|精细|2k|4k|8k|超清|大图|高分辨率|高分辨)/iu
 
 function readLimits() {
@@ -23,7 +24,9 @@ function hourKey(date = new Date()) {
 }
 
 export function isWechatImageGenerationRequest(text = '') {
-  return IMAGE_REQUEST_RE.test(String(text || ''))
+  const value = String(text || '')
+  if (IMAGE_UNDERSTANDING_RE.test(value) && /(?:\[图片\]|图片|图|截图|照片|引用)/u.test(value)) return false
+  return IMAGE_REQUEST_RE.test(value)
 }
 
 function extractPrompt(text = '') {

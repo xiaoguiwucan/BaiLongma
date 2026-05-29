@@ -100,6 +100,15 @@ function safeRelativePath(rel = '') {
   return value
 }
 
+function extractStoredMediaPaths(text = '') {
+  const rows = []
+  for (const match of String(text || '').matchAll(/\[媒体文件\]\s+([^\n\r]+)/gu)) {
+    const rel = safeRelativePath(match[1] || '')
+    if (rel) rows.push(rel)
+  }
+  return [...new Set(rows)]
+}
+
 export function upsertWeChatImageMediaItem({ groupId = '', groupName = '', senderId = '', senderName = '', mediaInfo = {}, sourceText = '', messageType = '' } = {}) {
   ensureSchema()
   const filePath = String(mediaInfo.filePath || '').trim()
@@ -220,6 +229,55 @@ export async function maybeDescribeWeChatImageMedia({ mediaItem, wait = false } 
   if (wait) return await task
   task.catch(err => console.warn(`[WechatImageVision] 图片识别失败：${err?.message || err}`))
   return { ok: true, scheduled: true, id: mediaItem.id }
+}
+
+export async function backfillWeChatImageMediaFromActivity({ groupId = '', groupName = '', limit = 200, describe = false } = {}) {
+  ensureSchema()
+  const db = getDB()
+  const filters = [`(raw_text LIKE '%[媒体文件]%' OR display_text LIKE '%[媒体文件]%')`]
+  const params = []
+  if (groupId) { filters.push('group_id = ?'); params.push(String(groupId)) }
+  if (groupName) { filters.push('group_name = ?'); params.push(String(groupName)) }
+  const rows = db.prepare(`
+    SELECT id, group_id, group_name, sender_id, sender_name, message_type, raw_text, display_text, timestamp
+    FROM wechat_group_activity
+    WHERE ${filters.join(' AND ')}
+    ORDER BY id DESC
+    LIMIT ?
+  `).all(...params, Math.min(Math.max(Number(limit || 200), 1), 2000))
+  let scanned = 0
+  let imported = 0
+  let described = 0
+  const errors = []
+  for (const row of rows) {
+    const rels = extractStoredMediaPaths(`${row.raw_text || ''}\n${row.display_text || ''}`)
+    for (const rel of rels) {
+      scanned += 1
+      const filePath = path.join(paths.userDir, rel)
+      try {
+        const result = upsertWeChatImageMediaItem({
+          groupId: row.group_id,
+          groupName: row.group_name,
+          senderId: row.sender_id,
+          senderName: row.sender_name,
+          messageType: row.message_type,
+          sourceText: row.display_text || row.raw_text || '',
+          mediaInfo: { filePath, relativePath: rel, type: inferMimeType(filePath) },
+        })
+        if (result?.ok) {
+          imported += 1
+          if (describe && result.item?.id) {
+            const desc = await describeWeChatImageMedia({ mediaId: result.item.id })
+            if (desc?.ok || desc?.skipped) described += 1
+            else if (desc?.error) errors.push(`${rel}: ${desc.error}`)
+          }
+        }
+      } catch (err) {
+        errors.push(`${rel}: ${err?.message || err}`)
+      }
+    }
+  }
+  return { ok: errors.length === 0, scanned, imported, described, errors: errors.slice(0, 20) }
 }
 
 export function getWeChatImageMemoryContext({ groupId = '', limit = 12, query = '' } = {}) {
