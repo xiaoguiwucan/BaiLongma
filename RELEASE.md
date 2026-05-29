@@ -1,3 +1,28 @@
+## v0.4.61 - 2026-05-29
+
+### 发布主题
+网络能力设置页 UI 精修：让 Brave Key 池、兜底渠道和保存动作更清楚、更好操作。
+
+### 更新内容
+1. 设置窗口整体加宽加高，网络能力页不再挤在 600px 小弹窗里。
+2. 网络能力页新增顶部总览区，直接说明 Brave 优先、失败自动走兜底链路。
+3. 新增 4 个能力状态卡片：Brave Key 池、网页搜索、图片直发、链接守卫。
+4. Brave Key 1~10 改成独立卡片槽位，每个槽位显示“本地 / ENV / 空”，并保留覆盖、留空保留、清空能力。
+5. Serper、Jina、SearXNG 拆成独立兜底渠道卡片，状态和配置输入分区展示。
+6. 保存区改为底部操作条，按钮文案改成“保存网络能力设置”，避免用户不知道保存作用范围。
+7. 状态展示统一为胶囊组件，绿色代表本地可用，蓝色代表环境变量，灰色代表未配置。
+
+### 部署方法
+```bash
+git clone https://github.com/xiaoguiwucan/BaiLongma.git
+cd BaiLongma
+git checkout v0.4.61
+npm install
+./start-jarvis-background.sh
+```
+
+### 验证
+- `node --check src/ui/brain-ui/app-shell.js src/ui/brain-ui/app.js`
 
 ## v0.4.60 - 2026-05-29
 

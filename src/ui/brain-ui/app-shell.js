@@ -1195,67 +1195,136 @@ const createSettingsModal = () => `
           </div>
         </div>
 
-        <!-- ── 上网搜索 tab ── -->
+        <!-- ── 网络能力 tab ── -->
         <div class="settings-tab" data-tab="web-search">
-          <div class="settings-section">
-            <div class="settings-section-label">网络搜索 / 图片搜索</div>
-            <p class="settings-hint">Agent 调用 web_search 时会优先使用 Brave Key 池；某个 Key 无额度、限流或认证失败会自动切到下一个。Brave 全部不可用时再按 Serper → SearXNG → Bing → Jina → DuckDuckGo 兜底。微信群“找图/发网络图片”会优先使用 Brave Images，再用 Bing Images 兜底。</p>
+          <div class="network-panel">
+            <section class="network-hero" aria-label="网络能力总览">
+              <div class="network-hero-copy">
+                <div class="network-eyebrow">NETWORK CAPABILITY</div>
+                <h3>网络能力中枢</h3>
+                <p>把网页搜索、公开图片搜索、链接真实查看和 Brave Key 池放到一个清晰面板里。默认 Brave 优先，失败后自动走兜底链路。</p>
+              </div>
+              <div class="network-route-card" aria-label="搜索链路">
+                <span>搜索链路</span>
+                <strong>Brave</strong>
+                <em>→ Serper → SearXNG → Bing → Jina → DuckDuckGo</em>
+              </div>
+            </section>
 
-            <div class="settings-subsection-title">Brave Search Key 池（最多 10 个）</div>
-            <p class="settings-hint">Brave 同时用于网页搜索和公开网络图片搜索。输入新 Key 会覆盖对应槽位；留空表示保留原值；勾选“清空”会删除该槽位。</p>
-            <div class="wechaty-meme-grid" id="websearch-brave-key-grid">
-              ${Array.from({ length: 10 }, (_, i) => `
-                <label>
-                  <span>Brave Key ${i + 1}</span>
-                  <input class="settings-input websearch-brave-key" type="password" data-index="${i}" placeholder="留空保留">
-                  <label class="settings-label" style="margin-top:6px;font-size:12px;color:var(--ink2);"><input type="checkbox" class="websearch-brave-clear" data-index="${i}"> 清空此 Key</label>
-                  <small class="settings-config-info" id="websearch-status-brave-${i}">—</small>
+            <section class="network-stat-grid" aria-label="网络能力状态摘要">
+              <article class="network-stat-card primary">
+                <span class="network-stat-icon">B</span>
+                <div>
+                  <strong>Brave Key 池</strong>
+                  <small>10 槽位自动轮换</small>
+                </div>
+              </article>
+              <article class="network-stat-card">
+                <span class="network-stat-icon">W</span>
+                <div>
+                  <strong>网页搜索</strong>
+                  <small>优先 Brave，失败回落</small>
+                </div>
+              </article>
+              <article class="network-stat-card">
+                <span class="network-stat-icon">IMG</span>
+                <div>
+                  <strong>图片直发</strong>
+                  <small>微信群直接发图/GIF</small>
+                </div>
+              </article>
+              <article class="network-stat-card guard">
+                <span class="network-stat-icon">✓</span>
+                <div>
+                  <strong>链接守卫</strong>
+                  <small>禁止假装“正在查看”</small>
+                </div>
+              </article>
+            </section>
+
+            <section class="network-card network-card-main">
+              <div class="network-card-head">
+                <div>
+                  <div class="settings-section-label">Brave Search Key 池</div>
+                  <p>主力配置区：最多 10 个 Key。留空会保留原值；输入新 Key 覆盖当前槽；勾选清空会删除当前槽。</p>
+                </div>
+                <span class="network-status-pill is-empty" id="websearch-status-brave-pool">—</span>
+              </div>
+
+              <div class="network-key-grid" id="websearch-brave-key-grid">
+                ${Array.from({ length: 10 }, (_, i) => `
+                  <div class="network-key-card">
+                    <div class="network-key-top">
+                      <span class="network-key-index">KEY ${String(i + 1).padStart(2, '0')}</span>
+                      <small class="network-key-status is-empty" id="websearch-status-brave-${i}">—</small>
+                    </div>
+                    <input class="settings-input websearch-brave-key" type="password" data-index="${i}" aria-label="Brave Key ${i + 1}" placeholder="粘贴新 Key；留空保留">
+                    <label class="network-clear-row">
+                      <input type="checkbox" class="websearch-brave-clear" data-index="${i}">
+                      <span>清空此槽</span>
+                    </label>
+                  </div>
+                `).join('')}
+              </div>
+            </section>
+
+            <section class="network-provider-grid" aria-label="兜底搜索渠道">
+              <article class="network-provider-card">
+                <div class="network-provider-head">
+                  <div>
+                    <span>Serper</span>
+                    <small>Google SERP JSON，稳定兜底</small>
+                  </div>
+                  <span class="network-status-pill is-empty" id="websearch-status-serper">—</span>
+                </div>
+                <label class="network-field" for="websearch-serper-key">
+                  <span>API Key</span>
+                  <input class="settings-input" type="password" id="websearch-serper-key" placeholder="留空则不修改">
                 </label>
-              `).join('')}
-            </div>
+                <p>在 <a href="https://serper.dev" target="_blank">serper.dev</a> 获取；用于 Brave 不可用时继续搜索。</p>
+              </article>
 
-            <div class="settings-row">
-              <label class="settings-label" for="websearch-serper-key">Serper API Key</label>
-              <input class="settings-input" type="password" id="websearch-serper-key" placeholder="留空则不修改">
-            </div>
-            <p class="settings-hint">在 <a href="https://serper.dev" target="_blank" style="color:var(--cool)">serper.dev</a> 注册后获取（每月 2500 次免费）。Google SERP JSON 接口，最稳定。</p>
+              <article class="network-provider-card">
+                <div class="network-provider-head">
+                  <div>
+                    <span>Jina</span>
+                    <small>s.jina.ai 搜索兜底</small>
+                  </div>
+                  <span class="network-status-pill is-empty" id="websearch-status-jina">—</span>
+                </div>
+                <label class="network-field" for="websearch-jina-key">
+                  <span>API Key</span>
+                  <input class="settings-input" type="password" id="websearch-jina-key" placeholder="留空则不修改">
+                </label>
+                <p>在 <a href="https://jina.ai" target="_blank">jina.ai</a> 获取；作为 Bing 失效时的额外兜底。</p>
+              </article>
 
-            <div class="settings-row">
-              <label class="settings-label" for="websearch-jina-key">Jina API Key</label>
-              <input class="settings-input" type="password" id="websearch-jina-key" placeholder="留空则不修改">
-            </div>
-            <p class="settings-hint">在 <a href="https://jina.ai" target="_blank" style="color:var(--cool)">jina.ai</a> 获取（有免费额度）。s.jina.ai 搜索接口，作为 Bing 失效时的额外兜底。</p>
+              <article class="network-provider-card">
+                <div class="network-provider-head">
+                  <div>
+                    <span>SearXNG</span>
+                    <small>自托管元搜索实例</small>
+                  </div>
+                  <span class="network-status-pill is-empty" id="websearch-status-searxng">—</span>
+                </div>
+                <label class="network-field" for="websearch-searxng-url">
+                  <span>实例 URL</span>
+                  <input class="settings-input" type="text" id="websearch-searxng-url" placeholder="https://your-searxng-instance.com">
+                </label>
+                <p>选填，必须带 <code>http://</code> 或 <code>https://</code>。清空输入并保存可删除本地 URL。</p>
+              </article>
+            </section>
 
-            <div class="settings-row">
-              <label class="settings-label" for="websearch-searxng-url">SearXNG URL</label>
-              <input class="settings-input" type="text" id="websearch-searxng-url" placeholder="https://your-searxng-instance.com">
-            </div>
-            <p class="settings-hint">选填。自托管 SearXNG 实例地址（去隐私的元搜索引擎）。要带 http:// 或 https://。</p>
-          </div>
-
-          <div class="settings-section">
-            <div class="settings-section-label">当前状态</div>
-            <div class="settings-config-row">
-              <span class="settings-config-type">Brave Key 池</span>
-              <span class="settings-config-info" id="websearch-status-brave-pool">—</span>
-            </div>
-            <div class="settings-config-row">
-              <span class="settings-config-type">Serper</span>
-              <span class="settings-config-info" id="websearch-status-serper">—</span>
-            </div>
-            <div class="settings-config-row">
-              <span class="settings-config-type">Jina</span>
-              <span class="settings-config-info" id="websearch-status-jina">—</span>
-            </div>
-            <div class="settings-config-row">
-              <span class="settings-config-type">SearXNG</span>
-              <span class="settings-config-info" id="websearch-status-searxng">—</span>
-            </div>
-          </div>
-
-          <div class="settings-section settings-section-action">
-            <button class="settings-save-btn" id="settings-save-web-search" type="button">保存</button>
-            <span class="settings-feedback" id="settings-web-search-feedback"></span>
+            <section class="network-action-bar">
+              <div>
+                <strong>保存后立即生效</strong>
+                <small>Key 明文不会回显；只显示“本地 / 环境变量 / 空”状态，避免泄露。</small>
+              </div>
+              <div class="network-action-controls">
+                <button class="settings-save-btn primary" id="settings-save-web-search" type="button">保存网络能力设置</button>
+                <span class="settings-feedback" id="settings-web-search-feedback"></span>
+              </div>
+            </section>
           </div>
         </div>
 
@@ -1322,6 +1391,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.61</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">网络能力设置页 UI 精修：Key 池、兜底渠道和保存动作更清楚。</p>
+                <ul class="release-note-points">
+                  <li>设置窗口加宽加高，网络能力页新增顶部总览、能力状态卡片和底部保存操作条。</li>
+                  <li>Brave Key 1~10 改为卡片式槽位，状态显示本地 / ENV / 空，清空操作更直观。</li>
+                  <li>Serper、Jina、SearXNG 改为独立兜底渠道卡片，状态统一为胶囊组件。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.60</span>

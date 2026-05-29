@@ -5319,12 +5319,14 @@ function initTTSSettings() {
         const el = document.getElementById(id);
         if (!el) return;
         const truncated = extra && extra.length > 60 ? extra.slice(0, 60) + "…" : extra;
+        const state = configured ? (fromEnv ? "is-env" : "is-ok") : "is-empty";
+        el.className = `network-status-pill ${state}`;
         if (configured) {
-          el.textContent = `已配置${fromEnv ? "（环境变量）" : ""}${truncated ? ` · ${truncated}` : ""}`;
-          el.style.color = "var(--ok, #4caf50)";
+          el.textContent = `${fromEnv ? "环境变量" : "已配置"}${truncated ? ` · ${truncated}` : ""}`;
+          el.title = truncated ? String(extra || "") : "";
         } else {
-          el.textContent = "未配置（兜底链中跳过）";
-          el.style.color = "var(--ink2)";
+          el.textContent = "未配置";
+          el.title = "兜底链中跳过";
         }
       };
       setStatus("websearch-status-serper",  !!webSearch?.serperConfigured, !!webSearch?.serperFromEnv);
@@ -5334,14 +5336,19 @@ function initTTSSettings() {
       const bravePool = document.getElementById("websearch-status-brave-pool");
       if (bravePool) {
         const count = Number(webSearch?.braveConfiguredCount || 0);
-        bravePool.textContent = count ? `已配置 ${count}/${webSearch?.bravePoolSize || 10} 个 Key（本地 ${webSearch?.braveStoredCount || 0}，环境变量 ${webSearch?.braveEnvCount || 0}）` : "未配置（Brave 搜索跳过）";
-        bravePool.style.color = count ? "var(--ok, #4caf50)" : "var(--ink2)";
+        bravePool.className = `network-status-pill ${count ? "is-ok" : "is-empty"}`;
+        bravePool.textContent = count
+          ? `${count}/${webSearch?.bravePoolSize || 10} 可用 · 本地 ${webSearch?.braveStoredCount || 0} · ENV ${webSearch?.braveEnvCount || 0}`
+          : "未配置";
+        bravePool.title = count ? "Brave 网页搜索和图片搜索会优先使用该 Key 池" : "未配置 Brave，搜索会直接走兜底链";
       }
       (webSearch?.braveSlots || []).forEach(slot => {
         const el = document.getElementById(`websearch-status-brave-${slot.index}`);
         if (!el) return;
-        el.textContent = slot.configured ? "已配置" : slot.fromEnv ? "环境变量" : "空";
-        el.style.color = (slot.configured || slot.fromEnv) ? "var(--ok, #4caf50)" : "var(--ink2)";
+        const state = slot.configured ? "is-ok" : slot.fromEnv ? "is-env" : "is-empty";
+        el.className = `network-key-status ${state}`;
+        el.textContent = slot.configured ? "本地" : slot.fromEnv ? "ENV" : "空";
+        el.title = slot.configured ? "本地已保存 Key" : slot.fromEnv ? "由环境变量提供" : "此槽位未配置";
       });
     } catch {}
   }
