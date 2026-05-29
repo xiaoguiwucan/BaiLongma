@@ -1307,6 +1307,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.55</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">识图渠道测试改为真实多模态调用，不再把 /models 可用误判为图片识别可用。</p>
+                <ul class="release-note-points">
+                  <li>测试连通会发送一张测试图片到 chat.completions，返回非空才算识图可用。</li>
+                  <li>识图状态区分“最近成功 / 最近失败 / 待真实识图”。</li>
+                  <li>图片库状态会显示最近失败摘要，例如 503、超时或返回空内容。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.54</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>

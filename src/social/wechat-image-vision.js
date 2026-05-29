@@ -945,10 +945,30 @@ export function getWeChatImageVisionStatus() {
   const scalar = sql => {
     try { return Number(Object.values(db.prepare(sql).get() || {})[0] || 0) } catch { return 0 }
   }
+  const latestDone = (() => {
+    try {
+      return db.prepare(`SELECT id, group_name, sender_name, vision_model, vision_provider, described_at, updated_at FROM wechat_group_media_items WHERE description <> '' ORDER BY COALESCE(NULLIF(described_at,''), updated_at) DESC, id DESC LIMIT 1`).get() || null
+    } catch { return null }
+  })()
+  const latestError = (() => {
+    try {
+      return db.prepare(`SELECT id, group_name, sender_name, vision_model, vision_provider, vision_status, vision_error, updated_at FROM wechat_group_media_items WHERE vision_status IN ('error','no_model') OR vision_error <> '' ORDER BY updated_at DESC, id DESC LIMIT 1`).get() || null
+    } catch { return null }
+  })()
+  const doneMs = Date.parse(latestDone?.described_at || latestDone?.updated_at || '')
+  const errorMs = Date.parse(latestError?.updated_at || '')
+  const health = !runtime
+    ? 'no_model'
+    : (latestError && (!Number.isFinite(doneMs) || (Number.isFinite(errorMs) && errorMs >= doneMs)))
+      ? 'error'
+      : latestDone
+        ? 'ok'
+        : 'configured'
   return {
     enabled: cfg.enabled !== false,
     autoDescribe: cfg.autoDescribe !== false,
     configured: !!runtime,
+    health,
     runtime: runtime ? { provider: runtime.provider, model: runtime.model, baseURL: runtime.baseURL, source: runtime.source } : null,
     worker: { running: !!pendingDescribeJob },
     counts: {
@@ -957,6 +977,8 @@ export function getWeChatImageVisionStatus() {
       pending: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE vision_status IN ('pending','running','error','no_model') AND description = ''"),
       base64: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE base64 <> ''"),
     },
+    latest_done: latestDone,
+    latest_error: latestError,
   }
 }
 

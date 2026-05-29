@@ -2,6 +2,21 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.55 - 2026-05-29
+
+### 修复
+- 修复 Skill 识图渠道状态误导问题：以前“测试连通/可用”主要代表配置存在或 `/models` 可连通，但这不能证明图片输入真的可用。
+- 识图渠道的“测试连通”改为真实调用 `chat.completions` 并发送一张 1x1 测试图，只有模型返回非空内容才算识图可用。
+- 识图状态卡不再简单显示“可用”，而是区分“已配置待真实识图 / 最近识图成功 / 已配置但最近失败”，并显示最近失败摘要。
+
+### 诊断结论
+- 当前用户配置的 Skill 识图渠道确实被程序读取并使用了；失败原因是渠道真实识图接口返回 `503 Service temporarily unavailable`。
+- LLM Profile 里的 `gpt-5.4` 虽然名字像多模态，但实际对图片返回空内容，不能作为可靠识图模型。
+
+### 验证
+- 通过 `node --check src/config.js src/social/wechat-image-vision.js src/ui/brain-ui/app.js`。
+- 本机真实调用 `/settings/skills/test-channel` 测试当前识图渠道，已能准确返回 503，而不是误显示可用。
+
 ## v0.4.54 - 2026-05-29
 
 ### 新增

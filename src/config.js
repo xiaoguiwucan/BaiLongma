@@ -2125,6 +2125,46 @@ export async function testSkillModelChannel({ skill = 'imageGeneration', channel
   const timer = setTimeout(() => controller.abort(), 10000)
   const started = Date.now()
   try {
+    if (kind === 'imageVision') {
+      // 识图渠道不能只测 /models：很多中转 /models 正常，但图片 chat.completions 会 503/空返回。
+      // 这里用 1x1 PNG 做真实多模态调用，成功且返回非空才算“识图可用”。
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
+      const res = await fetch(`${normalized.baseUrl.replace(/\/$/, '')}/chat/completions`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${normalized.apiKey}`,
+          'Content-Type': 'application/json',
+          Accept: 'application/json',
+        },
+        body: JSON.stringify({
+          model: normalized.model,
+          temperature: 0,
+          max_tokens: 40,
+          messages: [
+            {
+              role: 'user',
+              content: [
+                { type: 'text', text: '这是识图连通测试。请只回答：识图正常' },
+                { type: 'image_url', image_url: { url: `data:image/png;base64,${tinyPng}` } },
+              ],
+            },
+          ],
+        }),
+        signal: controller.signal,
+      })
+      const text = await res.text()
+      let json = null
+      try { json = JSON.parse(text) } catch {}
+      const latencyMs = Date.now() - started
+      if (!res.ok) {
+        const message = json?.error?.message || json?.message || text.slice(0, 240) || `HTTP ${res.status}`
+        return { ok: false, status: res.status, latencyMs, error: message, channel: { ...normalized, apiKey: undefined, configured: true }, mode: 'vision_chat_completions' }
+      }
+      const content = String(json?.choices?.[0]?.message?.content || '').trim()
+      if (!content) return { ok: false, status: res.status, latencyMs, error: '识图接口连通但返回空内容', channel: { ...normalized, apiKey: undefined, configured: true }, mode: 'vision_chat_completions' }
+      return { ok: true, status: res.status, latencyMs, message: content.slice(0, 120), channel: { ...normalized, apiKey: undefined, configured: true }, mode: 'vision_chat_completions' }
+    }
+
     const res = await fetch(`${normalized.baseUrl.replace(/\/$/, '')}/models`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${normalized.apiKey}`, Accept: 'application/json' },

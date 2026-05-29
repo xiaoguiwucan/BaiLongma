@@ -4298,12 +4298,26 @@ function initTTSSettings() {
     const configured = !!runtime || !!config.configured;
     if (skillVisionStatus) {
       const channelCount = (config.channels || []).filter(ch => ch.enabled !== false && ch.configured).length;
-      skillVisionStatus.textContent = configured ? `● 可用 ${runtime?.model || config.model || ''}${channelCount ? ` / ${channelCount} 渠道` : ''}` : '○ 未配置识图模型';
-      skillVisionStatus.classList.toggle('ok', configured);
+      const health = status?.health || "";
+      const modelText = runtime?.model || config.model || "";
+      if (!configured) {
+        skillVisionStatus.textContent = '○ 未配置识图模型';
+        skillVisionStatus.classList.remove('ok');
+      } else if (health === "error") {
+        skillVisionStatus.textContent = `⚠ 已配置但最近失败 ${modelText}${channelCount ? ` / ${channelCount} 渠道` : ''}`;
+        skillVisionStatus.classList.remove('ok');
+      } else if (health === "ok") {
+        skillVisionStatus.textContent = `● 最近识图成功 ${modelText}${channelCount ? ` / ${channelCount} 渠道` : ''}`;
+        skillVisionStatus.classList.add('ok');
+      } else {
+        skillVisionStatus.textContent = `● 已配置待真实识图 ${modelText}${channelCount ? ` / ${channelCount} 渠道` : ''}`;
+        skillVisionStatus.classList.toggle('ok', configured);
+      }
     }
     if (skillVisionCounts) {
       const counts = status?.counts || {};
-      skillVisionCounts.textContent = `图片入库：${counts.total || 0}，已描述：${counts.described || 0}，待处理：${counts.pending || 0}，base64：${counts.base64 || 0}`;
+      const latestError = status?.latest_error?.vision_error ? `；最近失败：${String(status.latest_error.vision_error).slice(0, 120)}` : "";
+      skillVisionCounts.textContent = `图片入库：${counts.total || 0}，已描述：${counts.described || 0}，待处理：${counts.pending || 0}，base64：${counts.base64 || 0}${latestError}`;
     }
     if (hasConfig) {
       setSkillChannelState("vision", normalizeSkillChannelsForUi(config, "vision"), config.activeChannelId || "");
