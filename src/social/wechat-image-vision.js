@@ -63,6 +63,176 @@ function compactSearchText(value = '') {
   return normalizeSearchText(value).replace(/[\s\p{P}\p{S}_-]+/gu, '')
 }
 
+function pad2(value) {
+  return String(value).padStart(2, '0')
+}
+
+function toLocalIso(date) {
+  if (!(date instanceof Date) || Number.isNaN(date.getTime())) return ''
+  const offset = -date.getTimezoneOffset()
+  const sign = offset >= 0 ? '+' : '-'
+  const abs = Math.abs(offset)
+  return `${date.getFullYear()}-${pad2(date.getMonth() + 1)}-${pad2(date.getDate())}` +
+    `T${pad2(date.getHours())}:${pad2(date.getMinutes())}:${pad2(date.getSeconds())}` +
+    `${sign}${pad2(Math.floor(abs / 60))}:${pad2(abs % 60)}`
+}
+
+function startOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 0, 0, 0, 0)
+}
+
+function endOfLocalDay(date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate(), 23, 59, 59, 999)
+}
+
+function parseDateOnlyFromQuery(text = '', now = new Date()) {
+  const value = String(text || '')
+  let base = null
+  let label = ''
+
+  const explicitYmd = value.match(/(20\d{2})[年./-]\s*(\d{1,2})[月./-]\s*(\d{1,2})\s*(?:日|号)?/u)
+  if (explicitYmd) {
+    base = new Date(Number(explicitYmd[1]), Number(explicitYmd[2]) - 1, Number(explicitYmd[3]))
+    label = `${explicitYmd[1]}-${pad2(explicitYmd[2])}-${pad2(explicitYmd[3])}`
+  }
+
+  if (!base) {
+    const explicitMd = value.match(/(?:^|[^\d])(\d{1,2})\s*月\s*(\d{1,2})\s*(?:日|号)?/u)
+    if (explicitMd) {
+      base = new Date(now.getFullYear(), Number(explicitMd[1]) - 1, Number(explicitMd[2]))
+      label = `${pad2(explicitMd[1])}月${pad2(explicitMd[2])}日`
+    }
+  }
+
+  if (!base) {
+    const slashMd = value.match(/(?:^|[^\d])(\d{1,2})[./-](\d{1,2})(?:$|[^\d])/u)
+    if (slashMd) {
+      base = new Date(now.getFullYear(), Number(slashMd[1]) - 1, Number(slashMd[2]))
+      label = `${pad2(slashMd[1])}-${pad2(slashMd[2])}`
+    }
+  }
+
+  if (!base) {
+    const daysAgo = value.match(/(\d{1,2})\s*天前/u)
+    const offsetDays = daysAgo ? Number(daysAgo[1])
+      : /大前天/u.test(value) ? 3
+        : /前天/u.test(value) ? 2
+          : /昨天|昨日/u.test(value) ? 1
+            : /今天|今日|本日/u.test(value) ? 0
+              : null
+    if (offsetDays !== null) {
+      base = new Date(now.getFullYear(), now.getMonth(), now.getDate() - offsetDays)
+      label = offsetDays === 0 ? '今天' : offsetDays === 1 ? '昨天' : offsetDays === 2 ? '前天' : `${offsetDays}天前`
+    }
+  }
+
+  return base ? { date: base, label } : null
+}
+
+function parseTimeOfDayFromQuery(text = '') {
+  const value = String(text || '')
+  const period = (() => {
+    if (/凌晨/u.test(value)) return { start: 0, end: 6, label: '凌晨' }
+    if (/早上|早晨|上午/u.test(value)) return { start: 6, end: 12, label: '上午' }
+    if (/中午/u.test(value)) return { start: 11, end: 14, label: '中午' }
+    if (/下午/u.test(value)) return { start: 12, end: 18, label: '下午' }
+    if (/傍晚/u.test(value)) return { start: 17, end: 20, label: '傍晚' }
+    if (/晚上|夜里|夜晚|晚间/u.test(value)) return { start: 18, end: 24, label: '晚上' }
+    return null
+  })()
+
+  const hm = value.match(/(?:^|[^\d])([01]?\d|2[0-3])\s*[:：]\s*([0-5]\d)(?:$|[^\d])/u)
+  const hourWord = value.match(/(?:^|[^\d])([01]?\d|2[0-3])\s*(?:点|时)(半|[0-5]?\d分?)?(?:左右|前后|多)?/u)
+  let hour = null
+  let minute = 0
+  let exact = false
+  if (hm) {
+    hour = Number(hm[1])
+    minute = Number(hm[2])
+    exact = true
+  } else if (hourWord) {
+    hour = Number(hourWord[1])
+    const rawMinute = String(hourWord[2] || '')
+    minute = rawMinute === '半' ? 30 : Number(rawMinute.replace(/[^\d]/g, '') || 0)
+    exact = true
+  }
+  if (hour !== null && period?.label === '下午' && hour >= 1 && hour <= 11) hour += 12
+  if (hour !== null && period?.label === '晚上' && hour >= 1 && hour <= 11) hour += 12
+
+  return { period, hour, minute, exact }
+}
+
+function parseImageTimeIntent(text = '', now = new Date()) {
+  const value = String(text || '')
+  const recent = /刚才|刚刚|刚发|刚发的|上面|前面|最近|方才/u.test(value)
+  const datePart = parseDateOnlyFromQuery(value, now)
+  const timePart = parseTimeOfDayFromQuery(value)
+  const hasPeriod = !!timePart.period
+  const hasExactTime = timePart.hour !== null
+
+  if (!datePart && !hasPeriod && !hasExactTime && !recent) return { active: false }
+
+  if (recent && !datePart && !hasPeriod && !hasExactTime) {
+    const start = new Date(now.getTime() - 2 * 60 * 60 * 1000)
+    return {
+      active: true,
+      label: '最近2小时',
+      recent: true,
+      startMs: start.getTime(),
+      endMs: now.getTime(),
+      startIso: toLocalIso(start),
+      endIso: toLocalIso(now),
+    }
+  }
+
+  let base = datePart?.date || new Date(now.getFullYear(), now.getMonth(), now.getDate())
+  let start = startOfLocalDay(base)
+  let end = endOfLocalDay(base)
+  let targetMs = 0
+  let label = datePart?.label || '今天'
+
+  if (hasPeriod) {
+    start = new Date(base.getFullYear(), base.getMonth(), base.getDate(), timePart.period.start, 0, 0, 0)
+    end = timePart.period.end >= 24
+      ? new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59, 999)
+      : new Date(base.getFullYear(), base.getMonth(), base.getDate(), timePart.period.end, 0, 0, 0)
+    label += timePart.period.label
+  }
+
+  if (hasExactTime) {
+    const target = new Date(base.getFullYear(), base.getMonth(), base.getDate(), timePart.hour, timePart.minute, 0, 0)
+    targetMs = target.getTime()
+    const windowMinutes = String(value || '').includes('左右') || String(value || '').includes('前后') ? 75 : (timePart.minute ? 45 : 75)
+    start = new Date(targetMs - windowMinutes * 60 * 1000)
+    end = new Date(targetMs + windowMinutes * 60 * 1000)
+    label += `${pad2(timePart.hour)}:${pad2(timePart.minute)}附近`
+  }
+
+  return {
+    active: true,
+    label,
+    recent,
+    exact: hasExactTime,
+    targetMs,
+    startMs: start.getTime(),
+    endMs: end.getTime(),
+    startIso: toLocalIso(start),
+    endIso: toLocalIso(end),
+  }
+}
+
+function scoreImageTime(row = {}, timeIntent = {}) {
+  if (!timeIntent?.active) return 0
+  const rowMs = Date.parse(row.created_at || row.described_at || row.updated_at || '')
+  if (!Number.isFinite(rowMs)) return -8
+  if (rowMs < timeIntent.startMs || rowMs > timeIntent.endMs) return -16
+  if (timeIntent.targetMs) {
+    const diffMinutes = Math.abs(rowMs - timeIntent.targetMs) / 60000
+    return Math.max(6, 36 - Math.floor(diffMinutes / 3))
+  }
+  return timeIntent.recent ? 14 : 18
+}
+
 function inferMimeType(filePath = '', fallback = '') {
   const value = String(fallback || '').toLowerCase()
   if (value.startsWith('image/')) return value
@@ -330,6 +500,7 @@ function extractImageSearchTerms(text = '') {
   const cleaned = normalizeText(text)
     .replace(/^[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]{1,40}/u, ' ')
     .replace(/(?:发|发送|转发|传|给我|发我|拿给我|那张|这张|刚才|刚刚|上面|前面|原图|图片|图|照片|引用|一下|吧|啊|呀|哈|的)/gu, ' ')
+    .replace(/(?:今天|今日|本日|昨天|昨日|前天|大前天|最近|上午|早上|早晨|中午|下午|傍晚|晚上|夜里|夜晚|凌晨|晚间|\d{1,2}\s*天前|\d{1,2}\s*[:：]\s*[0-5]\d|\d{1,2}\s*(?:点|时)(?:半|[0-5]?\d分?)?(?:左右|前后|多)?|20\d{2}[年./-]\s*\d{1,2}[月./-]\s*\d{1,2}\s*(?:日|号)?|\d{1,2}\s*月\s*\d{1,2}\s*(?:日|号)?)/gu, ' ')
     .replace(/\s+/g, ' ')
     .trim()
   const tokens = []
@@ -390,6 +561,7 @@ export function findWeChatImageMediaForRequest({ groupId = '', groupName = '', q
   const db = getDB()
   const gid = String(groupId || '').trim()
   const name = String(groupName || '').trim()
+  const timeIntent = parseImageTimeIntent(query)
   const filters = [`relative_path <> ''`]
   const params = []
   if (gid || name) {
@@ -398,11 +570,15 @@ export function findWeChatImageMediaForRequest({ groupId = '', groupName = '', q
     if (name) { sub.push('group_name = ?'); params.push(name) }
     filters.push(`(${sub.join(' OR ')})`)
   }
+  if (timeIntent.active && timeIntent.startIso && timeIntent.endIso) {
+    filters.push(`created_at >= ? AND created_at <= ?`)
+    params.push(timeIntent.startIso, timeIntent.endIso)
+  }
   const rows = db.prepare(`
     SELECT * FROM wechat_group_media_items
     WHERE ${filters.join(' AND ')}
-    ORDER BY described_at DESC, id DESC
-    LIMIT 120
+    ORDER BY created_at DESC, described_at DESC, id DESC
+    LIMIT ${timeIntent.active ? 600 : 160}
   `).all(...params)
   const terms = expandImageSearchTerms(extractImageSearchTerms(query), query)
   const queryNorm = normalizeSearchText(query)
@@ -426,11 +602,23 @@ export function findWeChatImageMediaForRequest({ groupId = '', groupName = '', q
     if ((queryCompact.includes('newapi') || /new\s*api/u.test(queryNorm)) && /new\s*api|newapi/u.test(hay)) score += 10
     if (/力佬|大力/u.test(query) && (/大力/u.test(row.description || '') || compactSearchText(row.sender_name || '').includes('dali'))) score += 8
     if (!row.description && /(?:刚才|刚刚|上面|前面|最近|他发|她发|发的)/u.test(query)) score += 1
+    score += scoreImageTime(row, timeIntent)
     return { row, score }
-  }).filter(item => item.score > 0 || terms.length === 0)
-    .sort((a, b) => b.score - a.score || Number(b.row.id || 0) - Number(a.row.id || 0))
+  }).filter(item => item.score > 0 || terms.length === 0 || timeIntent.active)
+    .sort((a, b) => b.score - a.score || Date.parse(b.row.created_at || '') - Date.parse(a.row.created_at || '') || Number(b.row.id || 0) - Number(a.row.id || 0))
     .slice(0, Math.min(Math.max(Number(limit || 8), 1), 30))
-  return { ok: true, terms, items: scored.map(item => ({ ...item.row, _score: item.score })) }
+  return {
+    ok: true,
+    terms,
+    timeIntent: timeIntent.active ? {
+      label: timeIntent.label,
+      startIso: timeIntent.startIso,
+      endIso: timeIntent.endIso,
+      exact: !!timeIntent.exact,
+      recent: !!timeIntent.recent,
+    } : null,
+    items: scored.map(item => ({ ...item.row, _score: item.score })),
+  }
 }
 
 export function resolveWeChatImageMediaFile(row = {}) {

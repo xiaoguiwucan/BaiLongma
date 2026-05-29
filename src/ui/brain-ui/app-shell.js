@@ -1180,6 +1180,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.45</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">增强微信群图片检索时间理解，可按时间、成员和图片内容联合找图。</p>
+                <ul class="release-note-points">
+                  <li>支持今天/昨天/几月几日/上午下午晚上/几点几分/刚才最近等自然时间表达。</li>
+                  <li>图片转发会把时间范围、发送者昵称/别名、识图描述和 OCR 内容一起打分。</li>
+                  <li>真实 PT 群图片库已验证“今天09:15力佬发的newapi图”可命中对应图片。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.44</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>
