@@ -134,43 +134,131 @@ function normalizeWechatyMentionIds(opts = {}) {
   return out
 }
 
-async function resolveWechatyMentionContacts(room, mentionIds = []) {
-  const contacts = []
-  const seen = new Set()
-  for (const mentionId of mentionIds) {
-    const contact = await resolveWechatyMentionContact(room, mentionId)
-    const contactId = getWechatyContactId(contact)
-    if (!contact || !contactId || seen.has(contactId)) continue
-    seen.add(contactId)
-    contacts.push(contact)
-  }
-  return contacts
+function normalizeWechatyMentionName(value = '') {
+  const text = cleanWechatyDisplayCandidate(String(value || '').replace(/^[@＠]+/u, ''))
+  if (!text || /^(未知成员|unknown)$/iu.test(text) || isWeChatInternalIdLike(text)) return ''
+  // 微信 @ 前缀里不能带换行；过长名字通常不是群昵称，避免把整段回复拼进 @ 后面。
+  return text.replace(/[\r\n]+/g, ' ').replace(/\s{2,}/g, ' ').trim().slice(0, 40)
 }
 
-async function sayWechatyWithMentions(room, text, mentionContacts = []) {
+function normalizeWechatyMentionTargets(opts = {}) {
+  const ids = normalizeWechatyMentionIds(opts)
+  const names = Array.isArray(opts.mentionNames)
+    ? opts.mentionNames
+    : Array.isArray(opts.mention_names)
+      ? opts.mention_names
+      : []
+  const fallbackName = opts.mentionName || opts.mention_name || ''
+  return ids.map((id, index) => ({
+    id,
+    name: normalizeWechatyMentionName(names[index] || (ids.length === 1 ? fallbackName : '')),
+  }))
+}
+
+function lookupStoredWechatyMemberName(room, mentionId = '') {
+  const roomId = String(room?.id || '').trim()
+  const id = String(mentionId || '').trim()
+  if (!roomId || !id) return ''
+  try {
+    const members = listWeChatGroupMembers({ groupId: `wechaty:${roomId}`, limit: 1000 }).members || []
+    const row = members.find(item => String(item.sender_id || '').trim() === id)
+    return normalizeWechatyMentionName(row?.display_name || row?.room_alias || row?.contact_alias || row?.contact_name || '')
+  } catch {}
+  return ''
+}
+
+async function resolveWechatyMentionDisplayName(room, contact, mentionId = '', explicitName = '') {
+  const candidates = []
+  pushWechatyCandidate(candidates, explicitName)
+  // 群内显示名优先。这里是最终发出去的 @ 文本，必须是群里可见的昵称，而不是内部 sender_id。
+  try { pushWechatyCandidate(candidates, await room?.alias?.(contact)) } catch {}
+  try { pushWechatyCandidate(candidates, contact?.name?.()) } catch {}
+  try {
+    const parts = contact
+      ? await resolveWechatyMemberNameParts(room, contact, mentionId)
+      : await resolveWechatyMemberNamePartsFromId(room, mentionId, { hydrate: true })
+    pushWechatyCandidate(candidates, parts.roomAlias)
+    pushWechatyCandidate(candidates, parts.displayName)
+    pushWechatyCandidate(candidates, parts.contactName)
+  } catch {}
+  pushWechatyCandidate(candidates, lookupStoredWechatyMemberName(room, mentionId))
+  return candidates.map(normalizeWechatyMentionName).find(Boolean) || ''
+}
+
+async function resolveWechatyMentionTargets(room, mentionTargets = []) {
+  const targets = []
+  const seen = new Set()
+  for (const target of mentionTargets) {
+    const mentionId = String(target?.id || '').trim()
+    if (!mentionId || seen.has(mentionId)) continue
+    const contact = await resolveWechatyMentionContact(room, mentionId)
+    const contactId = getWechatyContactId(contact)
+    const resolvedId = contactId || mentionId
+    if (seen.has(resolvedId)) continue
+    const name = await resolveWechatyMentionDisplayName(room, contact, resolvedId, target?.name || '')
+    if (!contact && !name) continue
+    seen.add(resolvedId)
+    targets.push({ id: resolvedId, contact, name })
+  }
+  return targets
+}
+
+function stripLeadingWechatMentionText(text = '') {
+  let value = String(text || '').trim()
+  // 去掉模型可能自己加的开头 @xxx，统一由底层用真实提问人的群昵称拼接，避免 @错人/空 @/重复 @。
+  for (let i = 0; i < 5; i++) {
+    const next = value.replace(/^[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]{0,40}[\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]*/u, '').trim()
+    if (next === value) break
+    value = next
+  }
+  return value || String(text || '').trim()
+}
+
+function buildManualWechatMentionText(text = '', targets = []) {
+  const names = targets.map(item => normalizeWechatyMentionName(item?.name || '')).filter(Boolean)
+  if (!names.length) return String(text || '')
+  const prefix = names.map(name => `@${name}`).join('\u2005')
+  return `${prefix}\u2005${stripLeadingWechatMentionText(text)}`
+}
+
+function isWechat4uPuppetActive() {
+  return /wechat4u/iu.test(activePuppetName || '') || !!bot?.puppet?.wechat4u
+}
+
+async function sayWechatyWithMentions(room, text, mentionTargets = []) {
   const cleanText = String(text || '')
-  const contacts = Array.isArray(mentionContacts) ? mentionContacts.filter(Boolean) : []
+  const targets = Array.isArray(mentionTargets) ? mentionTargets.filter(Boolean) : []
+  const contacts = targets.map(item => item.contact).filter(Boolean)
+  const manualText = buildManualWechatMentionText(cleanText, targets)
+  if (targets.length && isWechat4uPuppetActive()) {
+    // wechaty-puppet-wechat4u 的 messageSendText 会忽略 mentionIdList。
+    // 只传 Contact 会发出一个空的 “@ ”，手机端也收不到真正 @ 提醒。
+    // 因此 Web WeChat 链路必须手动拼出 “@群昵称<特殊空格>正文”。
+    if (manualText !== cleanText) return room.say(manualText)
+    console.warn('[Wechaty] 未解析到可见 @ 昵称，降级为普通文本发送')
+    return room.say(cleanText)
+  }
   if (!contacts.length) return room.say(cleanText)
   if (contacts.length === 1) {
     try {
       return await room.say(cleanText, contacts[0])
     } catch (err) {
-      console.warn(`[Wechaty] 单人 @ 发送失败，降级为不 @ 发送：${err?.message || err}`)
-      return room.say(cleanText)
+      console.warn(`[Wechaty] 单人 @ 发送失败，降级为手动 @ 文本：${err?.message || err}`)
+      return room.say(manualText || cleanText)
     }
   }
   try {
-    return await room.say(cleanText, contacts)
+    return await room.say(cleanText, ...contacts)
   } catch (err) {
     try {
-      return await room.say(cleanText, ...contacts)
+      return await room.say(cleanText, contacts)
     } catch (err2) {
       try {
         console.warn(`[Wechaty] 多人 @ 发送失败，降级为只 @ 第一人：${err2?.message || err2 || err}`)
         return await room.say(cleanText, contacts[0])
       } catch (err3) {
-        console.warn(`[Wechaty] 多人 @ 降级后仍失败，最终改为不 @ 发送：${err3?.message || err3}`)
-        return room.say(cleanText)
+        console.warn(`[Wechaty] 多人 @ 降级后仍失败，最终改为手动 @ 文本：${err3?.message || err3}`)
+        return room.say(manualText || cleanText)
       }
     }
   }
@@ -424,17 +512,17 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     }
     if (!room && rid === targetRoomId) room = await resolveTargetRooms()
     if (!room) return { ok: false, reason: `room not found: ${rid}` }
-    const mentionIds = normalizeWechatyMentionIds(opts)
-    const mentionName = String(opts.mentionName || '').trim()
+    const mentionTargets = normalizeWechatyMentionTargets(opts)
+    const mentionIds = mentionTargets.map(item => item.id)
     const body = String(content || '')
-    const mentionContacts = await resolveWechatyMentionContacts(room, mentionIds)
+    const resolvedMentionTargets = await resolveWechatyMentionTargets(room, mentionTargets)
     if (mentionIds.length) {
-      console.log(`[Wechaty] 准备发送群回复 room="${rid}" mention_ids="${mentionIds.join(',')}" mention_name="${mentionName || ''}" resolved=${mentionContacts.length}/${mentionIds.length}`)
+      console.log(`[Wechaty] 准备发送群回复 room="${rid}" mention_ids="${mentionIds.join(',')}" mention_names="${resolvedMentionTargets.map(item => item.name || '').join(',')}" resolved=${resolvedMentionTargets.length}/${mentionIds.length}`)
     }
     const adminBypass = opts.adminBypass === true || opts.social?.wechat_admin === true
     if (!adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
       const refusal = '为了保护机主隐私，微信群里不能发送或描述本机文件、桌面图片、截图、相册或 file:// 路径。可以发送公开网络图片链接。'
-      await sayWechatyWithMentions(room, refusal, mentionContacts)
+      await sayWechatyWithMentions(room, refusal, resolvedMentionTargets)
       return { ok: false, blocked: true, reason: 'local_file_reference_in_wechat_outbound' }
     }
     if (adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
@@ -446,7 +534,7 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     // 表情包/斗图场景不要把图片 URL 当文字发到群里；微信里应只看到图片/GIF。
     // 若模型额外写了自然语言说明，则先 @ 提问人发一句短文字；纯图片回复则完全不发链接文本。
     if (textBody.trim()) {
-      await sayWechatyWithMentions(room, textBody, mentionContacts)
+      await sayWechatyWithMentions(room, textBody, resolvedMentionTargets)
     }
     const imageResults = await Promise.allSettled(imageUrls.map(async url => {
       await room.say(FileBox.fromUrl(url))
@@ -906,7 +994,7 @@ ${imageVisionText}`.trim() : rawText
     const safety = adminVerified ? { allowed: true, adminBypass: true } : checkWeChatGroupCommandSafety(text)
     if (!safety.allowed) {
       const refusal = safety.reason
-      await sendWechatyDutyGroupMessage(room.id, refusal, { mentionId: senderId })
+      await sendWechatyDutyGroupMessage(room.id, refusal, { mentionId: senderId, mentionName: senderName })
       recordWeChatGroupAssistantReply({ groupId, groupName: topic, reply: refusal, targetMemberName: senderName, source: 'wechaty' }).catch(() => {})
       return
     }

@@ -2,6 +2,22 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.51 - 2026-05-29
+
+### 修复
+- 修复 Web 微信 / `wechaty-puppet-wechat4u` 发送 @ 时只显示一个空 `@`、手机端收不到 @ 提醒的问题。
+- 普通微信群回复、管理员保护/拒绝、安全拦截、斗图、生图、转发图片等所有 `sendWechatyDutyGroupMessage` 路径统一使用真实群昵称拼接 `@昵称`。
+- LLM 渠道连通告警的 @ 人员会根据保存的真实 sender_id 解析当前群昵称，不再只显示空 @。
+
+### 稳定性 / 安全
+- 普通群聊回复仍由底层强制锁定本轮真实提问人的 sender_id，不相信模型自己选择的 target，避免 @ 到群主、管理员或上一位成员。
+- 若模型回复内容自己带了开头 @，发送前会去掉并重建为真实提问人的群昵称，避免出现 `@` 后直接接正文或 @ 错别名/外号。
+- 非 wechat4u puppet 仍优先使用 Wechaty 原生 mention；失败时降级为手动 `@昵称` 文本。
+
+### 验证
+- 通过 `node --check`：wechaty-duty-group、llm-connectivity-monitor、Brain UI app。
+- 通过 `npm run test:wechat-guard`。
+
 ## v0.4.50 - 2026-05-29
 
 ### 新增

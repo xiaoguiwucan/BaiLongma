@@ -1,4 +1,19 @@
 
+## v0.4.51 - 2026-05-29
+
+### 修复
+- 修复微信群回复和 LLM 渠道告警里 @ 昵称显示不正确的问题：不再出现只有空 `@`、`@` 后直接接正文、或 @ 到别名/外号导致手机端没有提醒。
+- Web 微信 / `wechaty-puppet-wechat4u` 会忽略 Wechaty 的 mentionIdList，所以本版本改为用真实群昵称手动拼出 `@昵称` + 微信特殊空格 + 正文。
+
+### 行为说明
+- 普通群聊回复仍然按真实 sender_id 锁定本轮提问人；模型就算选错 target，底层也会强制改回真实提问人。
+- 如果大模型回复内容开头自己写了 @，发送前会清理掉，再统一换成真实提问人的群昵称。
+- LLM 渠道告警选择的 @ 人员会从群成员库/当前群资料中解析昵称后再发送。
+
+### 验证
+- `node --check src/social/wechaty-duty-group.js src/llm-connectivity-monitor.js src/ui/brain-ui/app.js`
+- `npm run test:wechat-guard`
+
 ## v0.4.50 - 2026-05-29
 
 ### 新增

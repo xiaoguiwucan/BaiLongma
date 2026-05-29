@@ -1291,6 +1291,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.51</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">修复微信群 @ 昵称显示：回复和渠道告警不再出现空 @ 或 @ 后直接接正文。</p>
+                <ul class="release-note-points">
+                  <li>Web 微信链路会手动拼出真实群昵称，确保手机端能看到明确 @ 对象。</li>
+                  <li>普通群回复仍锁定真实提问人 sender_id，模型选错 target 也会被底层纠正。</li>
+                  <li>模型自己写的开头 @ 会被清理并重建为正确群昵称。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.50</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>
