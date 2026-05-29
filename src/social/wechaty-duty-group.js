@@ -977,9 +977,12 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
       console.log('[WechatyAdmin] 已验证管理员回复绕过微信群本机隐私发送拦截')
     }
     const imageUrls = extractPublicImageUrlsFromWechatText(body)
+    const localImageFiles = Array.isArray(opts.imageFilePaths)
+      ? opts.imageFilePaths.map(v => String(v || '').trim()).filter(Boolean)
+      : []
     let textBody = imageUrls.length ? stripImageMarkdown(body, imageUrls) : body
-    if (imageUrls.length && /^[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]{1,40}$/u.test(textBody.trim())) textBody = ''
-    // 表情包/斗图场景不要把图片 URL 当文字发到群里；微信里应只看到图片/GIF。
+    if ((imageUrls.length || localImageFiles.length) && /^[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]{1,40}$/u.test(textBody.trim())) textBody = ''
+    // 表情包/斗图/图片战报场景不要把图片 URL 当文字发到群里；微信里应只看到图片/GIF/海报。
     // 若模型额外写了自然语言说明，则先 @ 提问人发一句短文字；纯图片回复则完全不发链接文本。
     if (textBody.trim()) {
       await withWechatySendTimeout(sayWechatyWithMentions(room, textBody, resolvedMentionTargets), opts.timeoutMs || 15000, 'wechat text send')
@@ -994,7 +997,19 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
         console.warn(`[Wechaty] 公开网络图片发送失败：${imageUrls[i]} ${result.reason?.message || result.reason}`)
       }
     }
-    const sentImages = imageResults.filter(item => item.status === 'fulfilled').length
+    const localImageResults = await Promise.allSettled(localImageFiles.map(async filePath => {
+      const stat = fs.statSync(filePath)
+      if (!stat.isFile()) throw new Error(`not a file: ${filePath}`)
+      await withWechatySendTimeout(room.say(FileBox.fromFile(filePath)), opts.timeoutMs || 30000, 'wechat local image send')
+      return filePath
+    }))
+    for (let i = 0; i < localImageResults.length; i++) {
+      const result = localImageResults[i]
+      if (result.status === 'rejected') {
+        console.warn(`[Wechaty] 本地图片发送失败：${localImageFiles[i]} ${result.reason?.message || result.reason}`)
+      }
+    }
+    const sentImages = imageResults.filter(item => item.status === 'fulfilled').length + localImageResults.filter(item => item.status === 'fulfilled').length
     if (!textBody.trim() && !sentImages) return { ok: false, platform: 'wechaty-duty-group', roomId: rid, reason: 'no text or image sent' }
     return { ok: true, platform: 'wechaty-duty-group', roomId: rid, images: sentImages }
   } catch (err) {

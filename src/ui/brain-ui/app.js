@@ -5249,7 +5249,7 @@ function initTTSSettings() {
         }),
       });
       const data = await res.json();
-      if (data.ok) showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "已发送本群总结");
+      if (data.ok) showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.sent_as === "image" ? "已发送本群图片战报" : "已发送本群文字总结");
       else showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.error || data.sendResult?.reason || "发送失败", true);
     } catch {
       showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "发送总结请求失败", true);

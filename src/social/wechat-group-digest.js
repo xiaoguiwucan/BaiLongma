@@ -3,6 +3,7 @@ import { nowTimestamp } from '../time.js'
 import { getWechatyDutyGroupStatus, sendWechatyDutyGroupMessage } from './wechaty-duty-group.js'
 import { buildWeChatGroupStatsDigest, getWeChatGroupStats, hasDigestBeenSent, markDigestSent, normalizeStatsGroupId } from './wechat-group-stats.js'
 import { recordWeChatGroupAssistantReply } from './wechat-group-memory.js'
+import { renderWeChatGroupStatsPosterPng } from './wechat-group-report-renderer.js'
 
 let digestTimer = null
 let digestRunning = false
@@ -106,12 +107,34 @@ export async function sendWeChatGroupDigestNow({ groupId, groupName = '', roomId
     groupName = groupName || found?.groupName || ''
   }
   if (!roomId) return { ok: false, error: '没有找到可发送的 Wechaty roomId，请确认微信群助手真实在线并已勾选该群。', summary, stats }
-  const result = await sendWechatyDutyGroupMessage(roomId, summary)
+  let poster = null
+  let result = null
+  let usedPoster = false
+  try {
+    poster = await renderWeChatGroupStatsPosterPng(
+      { ...stats, group_name: groupName || stats.group_name },
+      { templateId: cfg.reportTemplate || 'guochao-red-gold' }
+    )
+    if (poster?.ok && poster.filePath) {
+      result = await sendWechatyDutyGroupMessage(roomId, '', {
+        imageFilePaths: [poster.filePath],
+        timeoutMs: 45000,
+      })
+      usedPoster = !!result?.ok
+    }
+  } catch (err) {
+    poster = { ok: false, error: err?.message || String(err) }
+    console.warn(`[WechatDigest] HTML 图片战报生成/发送失败，回退文字总结：${poster.error}`)
+  }
+  if (!result?.ok) {
+    result = await sendWechatyDutyGroupMessage(roomId, summary)
+  }
   if (result?.ok) {
     if (markSent && periodKey) markDigestSent({ groupId: gid, digestType: mode, periodKey, sentAt: nowTimestamp() })
-    recordWeChatGroupAssistantReply({ groupId: gid, groupName, reply: summary, targetMemberName: '群聊定时总结', source: `wechat-${mode}-digest` }).catch(() => {})
+    const reply = usedPoster ? `[群聊图片战报] ${cfg.reportTemplate || 'guochao-red-gold'} ${poster?.filePath || ''}` : summary
+    recordWeChatGroupAssistantReply({ groupId: gid, groupName, reply, targetMemberName: '群聊定时总结', source: `wechat-${mode}-digest` }).catch(() => {})
   }
-  return { ok: !!result?.ok, group_id: gid, group_name: groupName, room_id: roomId, summary, stats, sendResult: result }
+  return { ok: !!result?.ok, group_id: gid, group_name: groupName, room_id: roomId, summary, stats, poster, sent_as: usedPoster ? 'image' : 'text', sendResult: result }
 }
 
 async function maybeSend(mode, group, periodKey) {
