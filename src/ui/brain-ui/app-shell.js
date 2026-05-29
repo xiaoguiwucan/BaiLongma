@@ -1307,6 +1307,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.57</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">修复微信群图片解析真实接口可用但后台报空内容的问题，当前识图状态已恢复正常。</p>
+                <ul class="release-note-points">
+                  <li>识图调用改为原始 fetch 解析中转响应，不再被 OpenAI SDK 响应格式兼容问题误判为空。</li>
+                  <li>专用 Skill 识图渠道优先于当前 LLM，减少空返回和超时等待。</li>
+                  <li>陈旧 running 图片任务会自动重排队，状态区会区分待处理、解析中和失败数。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.56</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>

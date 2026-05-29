@@ -2,6 +2,28 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.57 - 2026-05-29
+
+### 修复
+- 修复微信群图片解析“真实 fetch 调用能成功，但后台解析总是报 `识图模型返回空内容`”的问题。原因是当前中转的 `chat.completions` 响应可被原始 fetch 正常解析，但 OpenAI SDK 在该响应格式下返回字符串对象，导致后台读不到 `choices[0].message.content`。
+- 微信图片识别调用改为与连通测试一致的原始 `fetch + JSON` 解析，并兼容字符串内容、数组内容和非 2xx 错误体，避免再次把有效识图结果误判为空。
+- 调整识图候选优先级：用户在 Skill 页面显式配置的“识图模型渠道”优先于当前 LLM 模型；当前 LLM 只作为兜底，避免聊天模型空返回/超时拖慢后台图片解析。
+- 识图候选去重不再把 provider 计入 key，同一 Base URL + 模型 + Key 不会因为来自“当前模型 / Skill / LLM Profile”而重复请求。
+- 开始重新解析图片时会清空旧错误，避免 UI 显示“正在解析”但仍挂着上一轮失败原因。
+- 自动将超过 15 分钟的陈旧 `running` 图片任务重排为 `pending`，防止 Electron 重启或旧代码异常退出后永久显示“解析中”。
+- 识图状态接口不再把“历史单张坏图/文件缺失”的最新错误误判为整体渠道不可用；状态区新增失败数、解析中数和真实待处理数。
+
+### 实时验证
+- 当前程序已重启加载新代码。
+- `/settings/skills/image-vision/status` 显示 `health=ok`，当前运行时为 `skill:gpt-5.4 识图主渠道`。
+- 实时补解析验证通过：旧卡死图片 id 42、48 已成功解析；新收到图片 id 155、157、158、160、161、165、168、170、171 等已写入描述。
+- 当前数据库没有真实 `running/pending` 卡死任务；剩余未解析项主要是历史 `error`，包括文件缺失/base64 为空或单张图片超时。
+
+### 验证
+- 通过 `node --check src/social/wechat-image-vision.js`。
+- 通过 `npm run test:wechat-guard`、`npm run test:social-targets`。
+- 本机真实调用数据库图片测试：原始 fetch 能返回图片描述，后台修复后连续解析成功。
+
 ## v0.4.56 - 2026-05-29
 
 ### 修复

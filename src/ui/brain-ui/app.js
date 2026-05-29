@@ -4317,7 +4317,7 @@ function initTTSSettings() {
     if (skillVisionCounts) {
       const counts = status?.counts || {};
       const latestError = status?.latest_error?.vision_error ? `；最近失败：${String(status.latest_error.vision_error).slice(0, 120)}` : "";
-      skillVisionCounts.textContent = `图片入库：${counts.total || 0}，已描述：${counts.described || 0}，待处理：${counts.pending || 0}，base64：${counts.base64 || 0}${latestError}`;
+      skillVisionCounts.textContent = `图片入库：${counts.total || 0}，已描述：${counts.described || 0}，待处理：${counts.pending || 0}，解析中：${counts.running || 0}，失败：${counts.error || 0}，base64：${counts.base64 || 0}${latestError}`;
     }
     if (hasConfig) {
       setSkillChannelState("vision", normalizeSkillChannelsForUi(config, "vision"), config.activeChannelId || "");

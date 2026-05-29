@@ -1,7 +1,6 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import OpenAI from 'openai'
 import { getDB } from '../db.js'
 import { paths } from '../paths.js'
 import { nowTimestamp } from '../time.js'
@@ -267,7 +266,9 @@ function normalizeRuntimeBaseURL(value = '') {
 function runtimeKey(runtime = {}) {
   // source 只表示“来自当前模型/LLM 列表/识图备用”，不能参与去重。
   // 否则同一个中转 + 同一个模型会被当前模型和 LLM Profile 重复调用，图片解析失败时会白等一轮超时。
-  return [runtime.provider || '', runtime.model || '', normalizeRuntimeBaseURL(runtime.baseURL || ''), String(runtime.apiKey || '').slice(-10)].join('|')
+  // provider 也不能参与去重：同一个 baseURL + model + key 通过“当前模型/Skill/LLM 列表”
+  // 进入候选时，实际调用的是同一个接口，重复请求只会拖慢后台识图。
+  return [runtime.model || '', normalizeRuntimeBaseURL(runtime.baseURL || ''), String(runtime.apiKey || '').slice(-10)].join('|')
 }
 
 function getVisionRuntimeCandidates(cfg = getSkillImageVisionCredentials()) {
@@ -279,15 +280,15 @@ function getVisionRuntimeCandidates(cfg = getSkillImageVisionCredentials()) {
     if (!candidates.some(item => runtimeKey(item) === key)) candidates.push(normalized)
   }
 
-  // 当前 LLM 可能名字看起来支持视觉，但中转站实际只返回空内容。
-  // 因此它只能作为候选之一，失败/空内容时必须继续尝试备用识图模型。
-  if (cfg.preferCurrentMultimodal && isVisionCapableModel(config.model) && config.apiKey && config.baseURL) {
-    push({ provider: config.provider || 'current', model: config.model, apiKey: config.apiKey, baseURL: config.baseURL, source: 'current' })
-  }
-
-  // 显式“识图模型”是用户在图片理解菜单里专门配置的模型，优先级应高于普通 LLM 列表。
+  // 显式“识图模型”是用户在图片理解菜单里专门配置的模型，必须优先于普通 LLM。
+  // 否则当前聊天模型虽然名字支持视觉，但中转实际可能空返回/超时，会拖慢所有后台图片解析。
   for (const channel of getSkillImageVisionRuntimeCandidates()) {
     push({ provider: channel.provider || 'vision', model: channel.model, apiKey: channel.apiKey, baseURL: channel.baseUrl, source: `skill:${channel.name || channel.id || channel.model}` })
+  }
+
+  // 当前 LLM 只作为兜底候选：如果专用识图渠道不可用，再尝试它。
+  if (cfg.preferCurrentMultimodal && isVisionCapableModel(config.model) && config.apiKey && config.baseURL) {
+    push({ provider: config.provider || 'current', model: config.model, apiKey: config.apiKey, baseURL: config.baseURL, source: 'current' })
   }
 
   for (const profile of config.llmProfiles || []) {
@@ -322,6 +323,22 @@ function extractStoredMediaPaths(text = '') {
     if (rel) rows.push(rel)
   }
   return [...new Set(rows)]
+}
+
+function resetStaleRunningMedia(db) {
+  // Electron 被强制重启/旧代码异常退出时，个别图片会永久停在 running。
+  // 超过 15 分钟的 running 不可能仍由当前进程处理，自动重排队，保证界面状态真实。
+  try {
+    const staleBefore = toLocalIso(new Date(Date.now() - 15 * 60 * 1000))
+    db.prepare(`
+      UPDATE wechat_group_media_items
+      SET vision_status='pending', vision_error='', updated_at=?
+      WHERE vision_status='running'
+        AND description = ''
+        AND updated_at <> ''
+        AND updated_at < ?
+    `).run(nowTimestamp(), staleBefore)
+  } catch {}
 }
 
 export function upsertWeChatImageMediaItem({ groupId = '', groupName = '', senderId = '', senderName = '', mediaInfo = {}, sourceText = '', messageType = '' } = {}) {
@@ -385,26 +402,61 @@ async function callVisionModel(row, runtime, cfg) {
   // 真实测试显示部分大图在 gpt-5.4 上需要 30 秒左右才能返回；
   // 这里不能再硬压到 25 秒，否则可用渠道会被误判超时。前台已先回复“正在识别”，允许按设置等待。
   const timeoutSeconds = Math.min(Math.max(Number(cfg.apiTimeoutSeconds || 45), 5), 180)
-  const client = new OpenAI({ apiKey: runtime.apiKey, baseURL: runtime.baseURL, timeout: timeoutSeconds * 1000 })
-  const res = await client.chat.completions.create({
-    model: runtime.model,
-    temperature: 0.1,
-    max_tokens: 420,
-    messages: [
-      {
-        role: 'system',
-        content: '你是微信群图片识别器。只描述图片可见内容，不要编造来源、人物身份或隐私。输出中文，适合后续让普通文本模型理解这张图。',
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutSeconds * 1000)
+  try {
+    const res = await fetch(`${normalizeRuntimeBaseURL(runtime.baseURL)}/chat/completions`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${runtime.apiKey}`,
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
       },
-      {
-        role: 'user',
-        content: [
-          { type: 'text', text: '请识别这张微信群图片，输出三段：内容描述、关键标签、如果图中有文字请摘录。保持简洁但信息完整。' },
-          { type: 'image_url', image_url: { url: `data:${row.mime_type || 'image/png'};base64,${base64}` } },
+      body: JSON.stringify({
+        model: runtime.model,
+        temperature: 0.1,
+        max_tokens: 420,
+        messages: [
+          {
+            role: 'system',
+            content: '你是微信群图片识别器。只描述图片可见内容，不要编造来源、人物身份或隐私。输出中文，适合后续让普通文本模型理解这张图。',
+          },
+          {
+            role: 'user',
+            content: [
+              { type: 'text', text: '请识别这张微信群图片，输出三段：内容描述、关键标签、如果图中有文字请摘录。保持简洁但信息完整。' },
+              { type: 'image_url', image_url: { url: `data:${row.mime_type || 'image/png'};base64,${base64}` } },
+            ],
+          },
         ],
-      },
-    ],
-  })
-  return normalizeText(res?.choices?.[0]?.message?.content || '')
+      }),
+      signal: controller.signal,
+    })
+    const text = await res.text()
+    let json = null
+    try { json = JSON.parse(text) } catch {}
+    if (!res.ok) {
+      const message = json?.error?.message || json?.message || text.slice(0, 240) || `HTTP ${res.status}`
+      throw new Error(message)
+    }
+    const message = json?.choices?.[0]?.message || {}
+    const rawContent = (() => {
+      if (typeof message.content === 'string') return message.content
+      if (Array.isArray(message.content)) {
+        return message.content
+          .map(part => typeof part === 'string' ? part : (part?.text || part?.content || ''))
+          .filter(Boolean)
+          .join('\n')
+      }
+      return message.text || json?.choices?.[0]?.text || ''
+    })()
+    return normalizeText(rawContent)
+  } catch (err) {
+    if (err?.name === 'AbortError') throw new Error('Request timed out.')
+    throw err
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export async function describeWeChatImageMedia({ mediaId, force = false } = {}) {
@@ -439,7 +491,7 @@ async function describeWeChatImageMediaInternal({ mediaId, force = false } = {})
   const errors = []
   for (const runtime of runtimes) {
     try {
-      db.prepare(`UPDATE wechat_group_media_items SET vision_status='running', vision_provider=?, vision_model=?, updated_at=? WHERE id=?`).run(runtime.provider, runtime.model, nowTimestamp(), mediaId)
+      db.prepare(`UPDATE wechat_group_media_items SET vision_status='running', vision_provider=?, vision_model=?, vision_error='', updated_at=? WHERE id=?`).run(runtime.provider, runtime.model, nowTimestamp(), mediaId)
       const description = await callVisionModel(row, runtime, cfg)
       if (!description) throw new Error('识图模型返回空内容')
       const labels = extractLabels(description)
@@ -521,6 +573,7 @@ function rowToImageMediaItem(row = {}) {
 export function listWeChatImageMediaItems({ groupId = '', groupName = '', q = '', status = '', sender = '', from = '', to = '', limit = 60, offset = 0 } = {}) {
   ensureSchema()
   const db = getDB()
+  resetStaleRunningMedia(db)
   const filters = [`relative_path <> ''`]
   const params = []
   const gid = String(groupId || '').trim()
@@ -626,6 +679,7 @@ export function listWeChatImageMediaItems({ groupId = '', groupName = '', q = ''
 export async function processPendingWeChatImageMedia({ groupId = '', groupName = '', limit = 5, retryErrors = true } = {}) {
   ensureSchema()
   const db = getDB()
+  resetStaleRunningMedia(db)
   const filters = [`relative_path <> ''`, `description = ''`]
   const params = []
   const gid = String(groupId || '').trim()
@@ -942,6 +996,7 @@ export function deleteWeChatImageMediaItem({ id, deleteFile = true } = {}) {
 export function getWeChatImageVisionStatus() {
   ensureSchema()
   const db = getDB()
+  resetStaleRunningMedia(db)
   const cfg = getSkillImageVisionCredentials()
   const runtime = resolveVisionRuntime(cfg)
   const scalar = sql => {
@@ -959,9 +1014,12 @@ export function getWeChatImageVisionStatus() {
   })()
   const doneMs = Date.parse(latestDone?.described_at || latestDone?.updated_at || '')
   const errorMs = Date.parse(latestError?.updated_at || '')
+  const recentDoneMs = Date.now() - 6 * 60 * 60 * 1000
   const health = !runtime
     ? 'no_model'
-    : (latestError && (!Number.isFinite(doneMs) || (Number.isFinite(errorMs) && errorMs >= doneMs)))
+    : (Number.isFinite(doneMs) && doneMs >= recentDoneMs)
+      ? 'ok'
+      : (latestError && (!Number.isFinite(doneMs) || (Number.isFinite(errorMs) && errorMs >= doneMs)))
       ? 'error'
       : latestDone
         ? 'ok'
@@ -976,7 +1034,9 @@ export function getWeChatImageVisionStatus() {
     counts: {
       total: scalar('SELECT COUNT(*) FROM wechat_group_media_items'),
       described: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE description <> ''"),
-      pending: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE vision_status IN ('pending','running','error','no_model') AND description = ''"),
+      pending: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE vision_status IN ('pending','running','no_model') AND description = ''"),
+      running: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE vision_status = 'running' AND description = ''"),
+      error: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE vision_status = 'error' AND description = ''"),
       base64: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE base64 <> ''"),
     },
     latest_done: latestDone,
