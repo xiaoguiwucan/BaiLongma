@@ -746,6 +746,7 @@ async function handleMessage(message) {
     lastMessageAt = new Date().toISOString()
     const talker = message.talker?.()
     const rawWechatPayload = await getWechatRawMessagePayload(message)
+    const rawPayloadText = compactRawPayloadForQuote(rawWechatPayload)
     const rawSenderName = extractRawWechatSenderName(rawWechatPayload)
     const senderId = getWechatyContactId(talker)
     const senderParts = isSelf ? { displayName: '我', roomAlias: '', contactAlias: '', contactName: '我', wechatId: '', wxid: '', stableKey: '', rawIdentity: '' } : await resolveWechatyMemberNameParts(room, talker, senderId)
@@ -904,7 +905,19 @@ ${imageVisionText}`.trim() : rawText
       raw_user_text: rawText || text,
       wechat_admin: adminVerified,
     }
-    const prompt = await buildWeChatGroupCommandPrompt({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, mentionedSelf: true, adminVerified, replyTargetId })
+    const prompt = await buildWeChatGroupCommandPrompt({
+      groupId,
+      groupName: topic,
+      senderId: senderId || senderName,
+      senderName,
+      text,
+      rawText: rawText || text,
+      rawPayloadText,
+      messageType,
+      mentionedSelf: true,
+      adminVerified,
+      replyTargetId,
+    })
     pushMessageRef?.(replyTargetId, prompt, WECHAT_GROUP_CHANNEL, {
       noPersist: true,
       noPrune: true,
@@ -990,6 +1003,35 @@ async function getWechatRawMessagePayload(message) {
     if (bot?.puppet?.messageRawPayload && message?.id) return await bot.puppet.messageRawPayload(message.id)
   } catch {}
   try { return message?.payload || null } catch { return null }
+}
+
+function compactRawPayloadForQuote(rawPayload) {
+  if (!rawPayload || typeof rawPayload !== 'object') return ''
+  const parts = []
+  for (const key of [
+    'Content',
+    'OriginalContent',
+    'MMActualContent',
+    'MsgSource',
+    'Url',
+    'FileName',
+    'AppMsgType',
+    'Type',
+  ]) {
+    const value = rawPayload?.[key]
+    if (value == null) continue
+    const text = String(value || '').trim()
+    if (!text) continue
+    parts.push(`${key}: ${text}`)
+  }
+  try {
+    const payloadText = String(rawPayload?.payload || rawPayload?.xml || '').trim()
+    if (payloadText) parts.push(payloadText)
+  } catch {}
+  return parts
+    .join('\n')
+    .replace(/\s+/g, ' ')
+    .slice(0, 6000)
 }
 
 function extractRawWechatSenderName(rawPayload) {

@@ -4,6 +4,7 @@ import { getWechatyDutyGroupConfig } from '../config.js'
 import { getWeChatGroupMemoryContext } from './wechat-group-memory.js'
 import { getWeChatGroupArchiveEvidence, listWeChatGroupMembers } from './wechat-group-stats.js'
 import { getWeChatImageMemoryContext } from './wechat-image-vision.js'
+import { buildWeChatQuoteContextBlock, extractWeChatQuoteContext } from './wechat-quote-context.js'
 
 export const WECHAT_GROUP_CHANNEL = 'WECHAT_CLAWBOT_GROUP'
 
@@ -156,7 +157,19 @@ export function buildWeChatGroupSummary(messages = []) {
   ].filter(Boolean).join('\n')
 }
 
-export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', senderId = '', senderName = '', text = '', mentionedSelf = false, adminVerified = false, replyTargetId = '' } = {}) {
+export async function buildWeChatGroupCommandPrompt({
+  groupId,
+  groupName = '',
+  senderId = '',
+  senderName = '',
+  text = '',
+  rawText = '',
+  rawPayloadText = '',
+  messageType = '',
+  mentionedSelf = false,
+  adminVerified = false,
+  replyTargetId = ''
+} = {}) {
   const groupExternalId = makeWeChatGroupExternalId(groupId)
   const messages = getRecentWeChatGroupMessages(groupExternalId, { limit: 100, hours: 24 })
   const transcript = messages.map(row => `${row.timestamp?.slice(5, 16) || ''} ${row.content}`).join('\n')
@@ -174,9 +187,14 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
       adminMembers = adminIds.map(id => members.find(member => String(member.sender_id || '') === String(id || '')) || { sender_id: id, display_name: id }).filter(Boolean)
     }
   } catch {}
-  const rawText = String(text || '').trim()
-  const commandText = stripLeadingWechatMentions(rawText) || rawText
-  const memeHints = buildWeChatMemeHints(commandText || rawText)
+  const displayText = String(text || '').trim()
+  const userRawText = String(rawText || displayText).trim()
+  const quoteRawText = String(rawPayloadText || rawText || displayText).trim()
+  const quoteContext = extractWeChatQuoteContext({ text: displayText || userRawText, rawText: quoteRawText, messageType })
+  const quoteContextBlock = buildWeChatQuoteContextBlock({ text: displayText || userRawText, rawText: quoteRawText, messageType })
+  const commandSource = quoteContext?.ok && quoteContext.currentText ? quoteContext.currentText : displayText || userRawText
+  const commandText = stripLeadingWechatMentions(commandSource) || commandSource
+  const memeHints = buildWeChatMemeHints(commandText || displayText || userRawText)
   const verifiedMentionBlock = mentionedSelf
     ? [
         '<wechat-mention-verification>',
@@ -222,8 +240,14 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     '',
     `微信群${groupName ? `「${groupName}」` : ''}成员 ${senderName || senderId || '未知成员'} 已经 @ 你并发来消息。`,
     replyTargetId ? `本轮回复必须调用 send_message(target_id="${replyTargetId}")；系统会自动投递到当前微信群并 @ 这个真实提问人，不要改成群主/管理员/上一位成员。` : '',
-    `用户原文：${rawText}`,
+    `用户原文：${userRawText}`,
+    displayText && displayText !== userRawText ? `规范化/增强文本：${displayText}` : '',
     `去掉开头 @ 后的实际请求：${commandText}`,
+    '',
+    quoteContextBlock,
+    quoteContextBlock
+      ? '引用消息处理规则：如果用户说“这条/上面/引用/这个/图片里/链接里/语音里/视频里/小程序里”，优先使用 <wechat-quoted-message>；只在回答需要依据时短短引用一句，不要复述整段，不要把 XML/base64/完整历史发出来。'
+      : '',
     '',
     memeHints,
     '',

@@ -78,3 +78,10 @@
 - Redesigned image library filters as full-size controls with search/reset buttons.
 - Added per-card edit parser content/tags and delete image actions.
 - Syntax checks and existing WeChat tests passed.
+
+### 2026-05-29 v0.4.48 quote context
+- User requested quoted chat content support for text/image/link/voice/miniprogram/video with token-saving behavior.
+- Added `src/social/wechat-quote-context.js` to parse visible WeChat quote text plus compact XML metadata for text/image/voice/video/link/miniprogram/emoji cases.
+- Integrated compact `<wechat-quoted-message>` prompt block into WeChat group replies; parser input may use raw payload, but prompt only exposes sender/type/summary/current request/URL metadata.
+- Wechaty now passes compact raw payload metadata for quote extraction, while ClawBot passes raw text and message type.
+- Added `scripts/test-wechat-quote-context.mjs` and `npm run test:wechat-quote-context`; initial syntax checks and quote parser tests pass.

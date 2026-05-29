@@ -1233,6 +1233,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.48</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">微信群新增引用消息上下文理解，引用文字/图片/语音/视频/链接/小程序后能按引用回答。</p>
+                <ul class="release-note-points">
+                  <li>新增精简引用上下文块，只给类型、发送者、摘要、URL/标题和引用后的当前请求。</li>
+                  <li>不把原始 XML、base64、完整历史塞进模型，减少 token 和误判。</li>
+                  <li>图片引用优先结合图片解析库；语音无转写时明确说明，不编造内容。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.47</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>

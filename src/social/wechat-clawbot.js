@@ -165,7 +165,15 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
         })
         .catch(err => console.warn(`[Honcho] ClawBot 显式群记忆写入失败：${err?.message || err}`))
 
-      const prompt = await buildWeChatGroupCommandPrompt({ groupId, senderId, senderName: senderId, text, mentionedSelf: true })
+      const prompt = await buildWeChatGroupCommandPrompt({
+        groupId,
+        senderId,
+        senderName: senderId,
+        text,
+        rawText: rawText || text,
+        messageType: msg?.type || msg?.msg_type || '',
+        mentionedSelf: true,
+      })
       // 无 token 时仍可入队让本地窗口显示/处理；出站回群可能失败并在日志中提示。
       const outboundId = contextToken
         ? `wechat:clawbot:group:${groupId}:ctx:${encodeURIComponent(contextToken)}`

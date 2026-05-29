@@ -134,3 +134,9 @@
 2. [complete] 前端筛选控件视觉和可用性优化：大尺寸下拉/输入、查询/重置按钮、布局不挤压。
 3. [complete] 图片卡片新增编辑解析内容/标签和删除图片交互，删除后刷新统计。
 4. [in_progress] 验证、版本文档、GitHub Release、重启程序。
+
+## v0.4.48 Quote Context / Token-Saving Plan
+1. [complete] 新增微信引用消息解析器：支持文本、图片、链接、小程序、语音、视频等结构化摘要。
+2. [complete] 将引用上下文接入微信群 @ 回复 prompt，只注入短摘要/元数据，不注入 XML/base64/大段历史。
+3. [complete] 自动判定回复是否需要引用依据：需要时用短句“引用 @某某：…”；不需要不引用。
+4. [in_progress] 增加解析测试，版本文档、Release、重启。
