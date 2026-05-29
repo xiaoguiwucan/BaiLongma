@@ -1,4 +1,25 @@
 
+## v0.4.50 - 2026-05-29
+
+### 新增
+- LLM 渠道连通通知新增“按群选择 @ 人员”：每个通知微信群可加载成员列表、按微信昵称搜索并勾选具体通知对象。
+- 后端配置新增 `notifyMentionsByGroup`，按群保存真实 sender_id；通知发送时通过 Wechaty 解析真实成员并 @。
+- Wechaty 群消息发送支持多人 @，原有单人 @ 回复逻辑保持兼容；若 @ 发送被 Wechaty/微信侧拒绝，会降级为普通群通知，不让整条告警丢失。
+
+### 交互优化
+- 通知群卡片新增“通知时 @ 人员”子区域，能清楚看到该群已选多少人。
+- 未加载成员时会保留已保存的 sender_id，不会因为打开设置页导致 @ 配置丢失。
+- 通知群计数补充显示已选 @ 人员总数。
+
+### 行为说明
+- 不选择 @ 人员时只发群通知，不会误 @ 全员。
+- 手动“立即检测并通知”会先保存当前配置，再按最新群组/@ 人员发送。
+- 定时通知仍默认关闭；启用后也会在软件启动后一整个检测间隔内禁止自动通知，避免重启/恢复微信时误刷群。
+
+### 验证
+- 通过 `node --check`：config、llm-connectivity-monitor、wechaty-duty-group、api、social/index、Brain UI app、app-shell。
+- 通过 `npm run test:wechat-quote-context`、`npm run test:wechat-guard`、`npm run test:wechat-record-all`。
+
 ## v0.4.49 - 2026-05-29
 
 ### 新增

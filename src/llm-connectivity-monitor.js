@@ -11,6 +11,7 @@ let lastError = ''
 let lastStatusByProfile = new Map()
 let lastPeriodKey = ''
 let startupPeriodKey = ''
+let suppressAutoNotifyUntil = 0
 
 function localTime(date = new Date()) {
   try {
@@ -73,6 +74,42 @@ function matchesSelectedGroup(room = {}, selected = []) {
     normalizeGroupKey(topic),
   ].filter(Boolean))
   return selected.some(item => keys.has(String(item || '').trim()) || keys.has(normalizeGroupKey(item)))
+}
+
+function notifyMentionGroupKeys(group = {}) {
+  const rid = String(group.roomId || group.id || '').trim()
+  const topic = String(group.groupName || group.topic || '').trim()
+  return [
+    rid,
+    topic,
+    rid ? `wechaty:${rid}` : '',
+    topic ? `wechaty:${topic}` : '',
+    normalizeGroupKey(rid),
+    normalizeGroupKey(topic),
+  ].filter(Boolean)
+}
+
+function resolveNotifyMentionIdsForGroup(cfg = {}, group = {}) {
+  const map = cfg.notifyMentionsByGroup && typeof cfg.notifyMentionsByGroup === 'object'
+    ? cfg.notifyMentionsByGroup
+    : {}
+  const keys = new Set(notifyMentionGroupKeys(group))
+  const normalizedKeys = new Set([...keys].map(key => normalizeGroupKey(key)))
+  const ids = []
+  const seen = new Set()
+  const add = (value = '') => {
+    const id = String(value || '').trim()
+    if (!id || seen.has(id)) return
+    seen.add(id)
+    ids.push(id)
+  }
+  for (const [rawKey, values] of Object.entries(map)) {
+    const key = String(rawKey || '').trim()
+    if (!key) continue
+    if (!keys.has(key) && !normalizedKeys.has(normalizeGroupKey(key))) continue
+    for (const item of Array.isArray(values) ? values : []) add(item)
+  }
+  return ids.slice(0, 20)
 }
 
 function resolveNotifyGroups(cfg = {}) {
@@ -157,8 +194,9 @@ async function sendNotifications(results = [], cfg = {}, { forceNotify = false }
   const text = buildNotificationText(results, cfg)
   const sent = []
   for (const group of groups) {
-    const result = await sendWechatyDutyGroupMessage(group.roomId, text)
-    sent.push({ ...group, ok: !!result?.ok, result })
+    const mentionIds = resolveNotifyMentionIdsForGroup(cfg, group)
+    const result = await sendWechatyDutyGroupMessage(group.roomId, text, { mentionIds })
+    sent.push({ ...group, mention_count: mentionIds.length, ok: !!result?.ok, result })
   }
   lastNotifyAt = nowTimestamp()
   return { ok: sent.some(item => item.ok), groups: sent, text }
@@ -210,6 +248,7 @@ export async function runLLMConnectivityMonitorTick({ force = false } = {}) {
   const now = new Date()
   const key = intervalPeriodKey(cfg.intervalMinutes, now)
   if (!force) {
+    if (suppressAutoNotifyUntil && Date.now() < suppressAutoNotifyUntil) return { ok: true, skipped: true, reason: 'startup_interval_no_autonotify' }
     if (startupPeriodKey && startupPeriodKey === key) return { ok: true, skipped: true, reason: 'startup_period_no_autonotify' }
     if (lastPeriodKey === key) return { ok: true, skipped: true, reason: 'period_already_checked' }
   }
@@ -232,7 +271,9 @@ export function getLLMConnectivityMonitorStatus() {
 
 export function startLLMConnectivityMonitorScheduler() {
   const cfg = getLLMConnectivityMonitorConfig()
-  startupPeriodKey = intervalPeriodKey(cfg.intervalMinutes || 60, new Date())
+  const intervalMinutes = Math.max(Number(cfg.intervalMinutes || 60), 5)
+  startupPeriodKey = intervalPeriodKey(intervalMinutes, new Date())
+  suppressAutoNotifyUntil = Date.now() + intervalMinutes * 60 * 1000
   if (monitorTimer) return { ok: true, already_running: true, status: getLLMConnectivityMonitorStatus() }
   monitorTimer = setInterval(() => {
     runLLMConnectivityMonitorTick().catch(err => {

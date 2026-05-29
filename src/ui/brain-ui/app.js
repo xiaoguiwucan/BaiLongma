@@ -2230,9 +2230,10 @@ function initTTSSettings() {
   let cachedLLMProfiles = [];
   let cachedActiveLLM = null;
   let cachedLLMFailover = { enabled: true, cooldownSeconds: 180, maxAttempts: 4 };
-  let cachedLLMMonitor = { enabled: false, intervalMinutes: 60, notifyMode: "changes", selectedProfileIds: [], selectedGroups: [] };
+  let cachedLLMMonitor = { enabled: false, intervalMinutes: 60, notifyMode: "changes", selectedProfileIds: [], selectedGroups: [], notifyMentionsByGroup: {} };
   let cachedLLMMonitorStatus = {};
   let cachedLLMMonitorRooms = [];
+  let llmMonitorMentionCache = {};
   let dbImageOffset = 0;
   let dbImageHasMore = false;
   let dbImageAutoRefreshTimer = null;
@@ -2407,11 +2408,159 @@ function initTTSSettings() {
     return String(value || "").trim().replace(/^wechaty:/u, "");
   }
 
+  function llmMonitorGroupKeys(room = {}) {
+    const rid = String(room.id || room.groupKey || "").trim();
+    const topic = String(room.topic || "").trim();
+    return [rid, topic, rid ? `wechaty:${rid}` : "", topic ? `wechaty:${topic}` : "", normalizeLLMMonitorGroupValue(rid), normalizeLLMMonitorGroupValue(topic)].filter(Boolean);
+  }
+
   function llmMonitorGroupSelected(room = {}, selected = []) {
     const rid = String(room.id || "").trim();
     const topic = String(room.topic || "").trim();
-    const keys = new Set([rid, topic, `wechaty:${rid}`, normalizeLLMMonitorGroupValue(rid), normalizeLLMMonitorGroupValue(topic)].filter(Boolean));
+    const keys = new Set(llmMonitorGroupKeys({ id: rid, topic }));
     return selected.some(item => keys.has(String(item || "").trim()) || keys.has(normalizeLLMMonitorGroupValue(item)));
+  }
+
+  function llmMonitorMentionIdsForGroup(cfg = cachedLLMMonitor, room = {}) {
+    const map = cfg?.notifyMentionsByGroup && typeof cfg.notifyMentionsByGroup === "object" ? cfg.notifyMentionsByGroup : {};
+    const keys = new Set(llmMonitorGroupKeys(room));
+    const normalized = new Set([...keys].map(key => normalizeLLMMonitorGroupValue(key)));
+    const out = [];
+    const seen = new Set();
+    const add = (value = "") => {
+      const id = String(value || "").trim();
+      if (!id || seen.has(id)) return;
+      seen.add(id);
+      out.push(id);
+    };
+    Object.entries(map).forEach(([rawKey, values]) => {
+      const key = String(rawKey || "").trim();
+      if (!key) return;
+      if (!keys.has(key) && !normalized.has(normalizeLLMMonitorGroupValue(key))) return;
+      (Array.isArray(values) ? values : []).forEach(add);
+    });
+    return out;
+  }
+
+  function llmMonitorMemberId(member = {}) {
+    return String(member.sender_id || member.wxid || member.wechat_id || member.stable_key || "").trim();
+  }
+
+  function llmMonitorMemberName(member = {}) {
+    return member.display_name || member.room_alias || member.contact_alias || member.contact_name || member.wechat_id || member.wxid || member.sender_id || "未知成员";
+  }
+
+  function findLLMMonitorGroupCard(groupKey = "") {
+    const key = String(groupKey || "").trim();
+    if (!key || !llmMonitorGroupList) return null;
+    return [...llmMonitorGroupList.querySelectorAll(".llm-monitor-group-card")].find(card => card.dataset.groupKey === key) || null;
+  }
+
+  function renderLLMMonitorMentionList(groupKey = "") {
+    const card = findLLMMonitorGroupCard(groupKey);
+    if (!card) return;
+    const list = card.querySelector(".llm-monitor-mention-list");
+    const count = card.querySelector(".llm-monitor-mention-count");
+    if (!list) return;
+    const topic = card.dataset.topic || "";
+    const savedIds = llmMonitorMentionIdsForGroup(cachedLLMMonitor, { id: groupKey, topic });
+    const selectedSet = new Set(savedIds);
+    const loaded = card.dataset.membersLoaded === "true";
+    const keyword = String(card.querySelector(".llm-monitor-mention-search")?.value || "").trim().toLowerCase();
+    let members = Array.isArray(llmMonitorMentionCache[groupKey]) ? llmMonitorMentionCache[groupKey] : [];
+    const knownIds = new Set(members.map(llmMonitorMemberId).filter(Boolean));
+    for (const id of savedIds) {
+      if (!knownIds.has(id)) {
+        members.push({ sender_id: id, display_name: "已保存成员", group_name: topic || "当前群", savedOnly: true });
+      }
+    }
+    if (keyword) {
+      members = members.filter(member => [
+        llmMonitorMemberName(member),
+        member.group_name,
+        member.room_alias,
+        member.contact_alias,
+        member.contact_name,
+        member.wechat_id,
+        member.wxid,
+        member.sender_id,
+      ].some(value => String(value || "").toLowerCase().includes(keyword)));
+    }
+    if (count) count.textContent = savedIds.length ? `已选 ${savedIds.length} 人` : "未选择 @ 人员";
+    if (!loaded && !members.length) {
+      list.innerHTML = `<div class="llm-monitor-mention-empty">点击“加载成员”后按微信昵称勾选；不选则只发群通知，不 @ 人。</div>`;
+      return;
+    }
+    if (!members.length) {
+      list.innerHTML = `<div class="llm-monitor-mention-empty">${keyword ? "没有匹配的成员。" : "暂无成员数据。先在微信群助手里刷新昵称，或等群里有人发言后再试。"}</div>`;
+      return;
+    }
+    list.innerHTML = members.slice(0, 240).map(member => {
+      const id = llmMonitorMemberId(member);
+      const checked = selectedSet.has(id) ? " checked" : "";
+      const stale = member.savedOnly ? " stale" : "";
+      const sub = member.savedOnly ? `保存的 sender_id：${id}` : (member.group_name || member.last_seen_display || id);
+      return `<label class="llm-monitor-mention-member${stale}" title="${escapeHtml(id)}">
+        <input class="llm-monitor-mention-checkbox" type="checkbox" value="${escapeHtml(id)}"${checked}>
+        <span><b>${escapeHtml(llmMonitorMemberName(member))}</b><em>${escapeHtml(sub)}</em></span>
+      </label>`;
+    }).join("");
+  }
+
+  function updateLLMMonitorGroupCardStates() {
+    if (!llmMonitorGroupList) return;
+    [...llmMonitorGroupList.querySelectorAll(".llm-monitor-group-card")].forEach(card => {
+      const checked = !!card.querySelector(".llm-monitor-group-checkbox")?.checked;
+      card.classList.toggle("disabled", !checked);
+      const note = card.querySelector(".llm-monitor-mention-note");
+      if (note) note.textContent = checked ? "这些人会在渠道异常通知里被 @。" : "未勾选这个群时，@ 人员配置不会生效。";
+    });
+  }
+
+  async function loadLLMMonitorGroupMembers(groupKey = "", { silent = false } = {}) {
+    const card = findLLMMonitorGroupCard(groupKey);
+    if (!card) return;
+    const btn = card.querySelector(".llm-monitor-mention-load");
+    const list = card.querySelector(".llm-monitor-mention-list");
+    const topic = card.dataset.topic || "";
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = "加载中…";
+    }
+    if (list && !silent) list.innerHTML = `<div class="llm-monitor-mention-empty">正在读取群成员昵称…</div>`;
+    try {
+      const requestGroupId = groupKey.startsWith("wechaty:") ? groupKey : `wechaty:${groupKey}`;
+      const params = new URLSearchParams({ group_id: requestGroupId, group_name: topic, limit: "800" });
+      const data = await fetch(`${API}/social/wechat-groups/members?${params.toString()}`).then(r => r.json());
+      if (!data.ok) throw new Error(data.error || "读取群成员失败");
+      llmMonitorMentionCache[groupKey] = Array.isArray(data.members) ? data.members : [];
+      card.dataset.membersLoaded = "true";
+      renderLLMMonitorMentionList(groupKey);
+      if (!silent) showFeedback(llmMonitorFeedback, `已加载 ${llmMonitorMentionCache[groupKey].length} 个群成员`);
+    } catch (err) {
+      if (list) list.innerHTML = `<div class="llm-monitor-mention-empty error">${escapeHtml(err?.message || "读取群成员失败")}</div>`;
+      if (!silent) showFeedback(llmMonitorFeedback, err?.message || "读取群成员失败", true);
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = "加载成员";
+      }
+    }
+  }
+
+  function collectLLMMonitorSelectedMentionCount() {
+    if (!llmMonitorGroupList) return 0;
+    let total = 0;
+    [...llmMonitorGroupList.querySelectorAll(".llm-monitor-group-card")].forEach(card => {
+      const groupChecked = !!card.querySelector(".llm-monitor-group-checkbox")?.checked;
+      if (!groupChecked) return;
+      const groupKey = card.dataset.groupKey || "";
+      const topic = card.dataset.topic || "";
+      const loaded = card.dataset.membersLoaded === "true";
+      if (loaded) total += card.querySelectorAll(".llm-monitor-mention-checkbox:checked").length;
+      else total += llmMonitorMentionIdsForGroup(cachedLLMMonitor, { id: groupKey, topic }).length;
+    });
+    return total;
   }
 
   function renderLLMMonitorResults(status = {}) {
@@ -2483,17 +2632,39 @@ function initTTSSettings() {
       return;
     }
     llmMonitorGroupList.innerHTML = candidates.map(room => {
+      const groupKey = String(room.id || room.topic || "").trim();
       const checked = llmMonitorGroupSelected(room, selected) ? " checked" : "";
       const subtitle = room.savedOnly ? "已保存但当前未在线" : (room.stale ? "缓存/未选中 @ 回复" : "当前可通知");
-      return `<label class="llm-monitor-item" title="${escapeHtml(room.id || "")}">
-        <input class="llm-monitor-group-checkbox" type="checkbox" value="${escapeHtml(room.id || room.topic || "")}" data-topic="${escapeHtml(room.topic || "")}"${checked}>
-        <span>
-          <b>${escapeHtml(room.topic || room.id || "微信群")}</b>
-          <em>${escapeHtml(subtitle)} · ${escapeHtml(String(room.id || "").slice(0, 18))}</em>
-        </span>
-      </label>`;
+      const mentionCount = llmMonitorMentionIdsForGroup(cfg, { id: groupKey, topic: room.topic }).length;
+      return `<div class="llm-monitor-group-card${checked ? "" : " disabled"}" data-group-key="${escapeHtml(groupKey)}" data-topic="${escapeHtml(room.topic || "")}" data-members-loaded="false">
+        <label class="llm-monitor-item" title="${escapeHtml(room.id || "")}">
+          <input class="llm-monitor-group-checkbox" type="checkbox" value="${escapeHtml(groupKey)}" data-topic="${escapeHtml(room.topic || "")}"${checked}>
+          <span>
+            <b>${escapeHtml(room.topic || room.id || "微信群")}</b>
+            <em>${escapeHtml(subtitle)} · ${escapeHtml(String(room.id || "").slice(0, 18))}</em>
+          </span>
+        </label>
+        <div class="llm-monitor-mentions">
+          <div class="llm-monitor-mention-head">
+            <div>
+              <b>通知时 @ 人员</b>
+              <em class="llm-monitor-mention-note">${checked ? "这些人会在渠道异常通知里被 @。" : "未勾选这个群时，@ 人员配置不会生效。"}</em>
+            </div>
+            <span class="llm-monitor-mention-count">${mentionCount ? `已选 ${mentionCount} 人` : "未选择 @ 人员"}</span>
+          </div>
+          <div class="llm-monitor-mention-tools">
+            <input class="settings-input llm-monitor-mention-search" type="search" placeholder="按微信昵称搜索成员…">
+            <button class="settings-save-btn llm-monitor-mention-load" type="button">加载成员</button>
+          </div>
+          <div class="llm-monitor-mention-list">
+            <div class="llm-monitor-mention-empty">${mentionCount ? `已保存 ${mentionCount} 个 @ 人员；点击“加载成员”可查看昵称并调整。` : "点击“加载成员”后按微信昵称勾选；不选则只发群通知，不 @ 人。"}</div>
+          </div>
+        </div>
+      </div>`;
     }).join("");
+    candidates.forEach(room => renderLLMMonitorMentionList(String(room.id || room.topic || "").trim()));
     updateLLMMonitorCounts();
+    updateLLMMonitorGroupCardStates();
   }
 
   function updateLLMMonitorCounts() {
@@ -2501,8 +2672,9 @@ function initTTSSettings() {
     const profileTotal = llmMonitorProfileList ? llmMonitorProfileList.querySelectorAll(".llm-monitor-profile-checkbox").length : 0;
     const groupChecked = llmMonitorGroupList ? llmMonitorGroupList.querySelectorAll(".llm-monitor-group-checkbox:checked").length : 0;
     const groupTotal = llmMonitorGroupList ? llmMonitorGroupList.querySelectorAll(".llm-monitor-group-checkbox").length : 0;
+    const mentionChecked = llmMonitorGroupList ? llmMonitorGroupList.querySelectorAll(".llm-monitor-group-checkbox:checked").length && collectLLMMonitorSelectedMentionCount() : 0;
     if (llmMonitorProfileCount) llmMonitorProfileCount.textContent = profileTotal ? `${profileChecked}/${profileTotal} 个` : "0 个";
-    if (llmMonitorGroupCount) llmMonitorGroupCount.textContent = groupTotal ? `${groupChecked}/${groupTotal} 个` : "0 个";
+    if (llmMonitorGroupCount) llmMonitorGroupCount.textContent = groupTotal ? `${groupChecked}/${groupTotal} 个群${mentionChecked ? ` · @${mentionChecked} 人` : ""}` : "0 个";
   }
 
   function renderLLMMonitor(config = {}, status = {}, profiles = cachedLLMProfiles, wechatyStatus = {}) {
@@ -2512,6 +2684,7 @@ function initTTSSettings() {
       notifyMode: config.notifyMode || "changes",
       selectedProfileIds: Array.isArray(config.selectedProfileIds) ? config.selectedProfileIds : [],
       selectedGroups: Array.isArray(config.selectedGroups) ? config.selectedGroups : [],
+      notifyMentionsByGroup: config.notifyMentionsByGroup && typeof config.notifyMentionsByGroup === "object" ? config.notifyMentionsByGroup : {},
     };
     cachedLLMMonitorStatus = status || {};
     if (llmMonitorEnabled) llmMonitorEnabled.checked = cachedLLMMonitor.enabled;
@@ -2530,12 +2703,29 @@ function initTTSSettings() {
     const selectedGroups = llmMonitorGroupList
       ? [...llmMonitorGroupList.querySelectorAll(".llm-monitor-group-checkbox:checked")].map(input => input.value).filter(Boolean)
       : [];
+    const notifyMentionsByGroup = {};
+    if (llmMonitorGroupList) {
+      [...llmMonitorGroupList.querySelectorAll(".llm-monitor-group-card")].forEach(card => {
+        const groupInput = card.querySelector(".llm-monitor-group-checkbox");
+        if (!groupInput?.checked) return;
+        const groupKey = String(groupInput.value || card.dataset.groupKey || "").trim();
+        if (!groupKey) return;
+        const topic = card.dataset.topic || groupInput.dataset.topic || "";
+        const loaded = card.dataset.membersLoaded === "true";
+        const checkedIds = [...card.querySelectorAll(".llm-monitor-mention-checkbox:checked")].map(input => input.value).filter(Boolean);
+        const ids = checkedIds.length || loaded
+          ? checkedIds
+          : llmMonitorMentionIdsForGroup(cachedLLMMonitor, { id: groupKey, topic });
+        if (ids.length) notifyMentionsByGroup[groupKey] = [...new Set(ids)].slice(0, 20);
+      });
+    }
     return {
       enabled: !!llmMonitorEnabled?.checked,
       intervalMinutes: Number(llmMonitorInterval?.value || 60),
       notifyMode: llmMonitorMode?.value || "changes",
       selectedProfileIds,
       selectedGroups,
+      notifyMentionsByGroup,
     };
   }
 
@@ -5343,7 +5533,36 @@ function initTTSSettings() {
   });
 
   llmMonitorProfileList?.addEventListener("change", updateLLMMonitorCounts);
-  llmMonitorGroupList?.addEventListener("change", updateLLMMonitorCounts);
+  llmMonitorGroupList?.addEventListener("change", (event) => {
+    const mentionCb = event.target?.closest?.(".llm-monitor-mention-checkbox");
+    if (mentionCb) {
+      const card = mentionCb.closest(".llm-monitor-group-card");
+      if (card) {
+        const groupKey = card.dataset.groupKey || "";
+        const ids = [...card.querySelectorAll(".llm-monitor-mention-checkbox:checked")].map(input => input.value).filter(Boolean);
+        cachedLLMMonitor.notifyMentionsByGroup = { ...(cachedLLMMonitor.notifyMentionsByGroup || {}), [groupKey]: ids };
+        renderLLMMonitorMentionList(groupKey);
+      }
+      updateLLMMonitorCounts();
+      return;
+    }
+    if (event.target?.closest?.(".llm-monitor-group-checkbox")) updateLLMMonitorGroupCardStates();
+    updateLLMMonitorCounts();
+  });
+  llmMonitorGroupList?.addEventListener("click", (event) => {
+    const btn = event.target?.closest?.(".llm-monitor-mention-load");
+    if (!btn) return;
+    const card = btn.closest(".llm-monitor-group-card");
+    const groupKey = card?.dataset.groupKey || "";
+    if (groupKey) loadLLMMonitorGroupMembers(groupKey);
+  });
+  llmMonitorGroupList?.addEventListener("input", (event) => {
+    const input = event.target?.closest?.(".llm-monitor-mention-search");
+    if (!input) return;
+    const card = input.closest(".llm-monitor-group-card");
+    const groupKey = card?.dataset.groupKey || "";
+    if (groupKey) renderLLMMonitorMentionList(groupKey);
+  });
 
   saveLlmMonitorBtn?.addEventListener("click", async () => {
     saveLlmMonitorBtn.disabled = true;

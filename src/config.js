@@ -164,6 +164,7 @@ export const DEFAULT_LLM_CONNECTIVITY_MONITOR = {
   notifyMode: 'changes', // all | changes | failures
   selectedProfileIds: [],
   selectedGroups: [],
+  notifyMentionsByGroup: {},
 }
 
 function nowIso() {
@@ -291,6 +292,22 @@ function normalizeStringArray(value = {}, { max = 200 } = {}) {
   return out
 }
 
+function normalizeStringMapOfArrays(value = {}, { maxKeys = 100, maxItems = 80 } = {}) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {}
+  const out = {}
+  const seenKeys = new Set()
+  for (const [rawKey, rawItems] of Object.entries(value)) {
+    const key = String(rawKey || '').trim()
+    if (!key || seenKeys.has(key)) continue
+    const items = normalizeStringArray(rawItems, { max: maxItems })
+    if (!items.length) continue
+    seenKeys.add(key)
+    out[key] = items
+    if (seenKeys.size >= maxKeys) break
+  }
+  return out
+}
+
 function normalizeLLMConnectivityMonitorConfig(value = {}) {
   const interval = Number(value.intervalMinutes)
   const notifyMode = ['all', 'changes', 'failures'].includes(String(value.notifyMode || '').trim())
@@ -302,6 +319,9 @@ function normalizeLLMConnectivityMonitorConfig(value = {}) {
     notifyMode,
     selectedProfileIds: normalizeStringArray(value.selectedProfileIds || value.profileIds || value.channels || []),
     selectedGroups: normalizeStringArray(value.selectedGroups || value.groupNames || value.groups || []),
+    notifyMentionsByGroup: normalizeStringMapOfArrays(
+      value.notifyMentionsByGroup || value.mentionsByGroup || value.notifyMentionIdsByGroup || {},
+    ),
   }
 }
 

@@ -116,6 +116,65 @@ async function resolveWechatyMentionContact(room, mentionId = '') {
   } catch {}
   return null
 }
+
+function normalizeWechatyMentionIds(opts = {}) {
+  const rows = []
+  if (Array.isArray(opts.mentionIds)) rows.push(...opts.mentionIds)
+  if (Array.isArray(opts.mention_id_list)) rows.push(...opts.mention_id_list)
+  if (opts.mentionId) rows.push(opts.mentionId)
+  const seen = new Set()
+  const out = []
+  for (const item of rows) {
+    const id = String(item || '').trim()
+    if (!id || seen.has(id)) continue
+    seen.add(id)
+    out.push(id)
+    if (out.length >= 20) break
+  }
+  return out
+}
+
+async function resolveWechatyMentionContacts(room, mentionIds = []) {
+  const contacts = []
+  const seen = new Set()
+  for (const mentionId of mentionIds) {
+    const contact = await resolveWechatyMentionContact(room, mentionId)
+    const contactId = getWechatyContactId(contact)
+    if (!contact || !contactId || seen.has(contactId)) continue
+    seen.add(contactId)
+    contacts.push(contact)
+  }
+  return contacts
+}
+
+async function sayWechatyWithMentions(room, text, mentionContacts = []) {
+  const cleanText = String(text || '')
+  const contacts = Array.isArray(mentionContacts) ? mentionContacts.filter(Boolean) : []
+  if (!contacts.length) return room.say(cleanText)
+  if (contacts.length === 1) {
+    try {
+      return await room.say(cleanText, contacts[0])
+    } catch (err) {
+      console.warn(`[Wechaty] 单人 @ 发送失败，降级为不 @ 发送：${err?.message || err}`)
+      return room.say(cleanText)
+    }
+  }
+  try {
+    return await room.say(cleanText, contacts)
+  } catch (err) {
+    try {
+      return await room.say(cleanText, ...contacts)
+    } catch (err2) {
+      try {
+        console.warn(`[Wechaty] 多人 @ 发送失败，降级为只 @ 第一人：${err2?.message || err2 || err}`)
+        return await room.say(cleanText, contacts[0])
+      } catch (err3) {
+        console.warn(`[Wechaty] 多人 @ 降级后仍失败，最终改为不 @ 发送：${err3?.message || err3}`)
+        return room.say(cleanText)
+      }
+    }
+  }
+}
 restoreRuntimeSnapshot()
 
 function isLoginActive() {
@@ -365,21 +424,17 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     }
     if (!room && rid === targetRoomId) room = await resolveTargetRooms()
     if (!room) return { ok: false, reason: `room not found: ${rid}` }
-    const mentionId = String(opts.mentionId || '').trim()
+    const mentionIds = normalizeWechatyMentionIds(opts)
     const mentionName = String(opts.mentionName || '').trim()
     const body = String(content || '')
-    const mentionContact = mentionId ? await resolveWechatyMentionContact(room, mentionId) : null
-    if (mentionId) {
-      console.log(`[Wechaty] 准备发送群回复 room="${rid}" mention_id="${mentionId}" mention_name="${mentionName || ''}" resolved=${mentionContact ? 'yes' : 'no'}`)
+    const mentionContacts = await resolveWechatyMentionContacts(room, mentionIds)
+    if (mentionIds.length) {
+      console.log(`[Wechaty] 准备发送群回复 room="${rid}" mention_ids="${mentionIds.join(',')}" mention_name="${mentionName || ''}" resolved=${mentionContacts.length}/${mentionIds.length}`)
     }
     const adminBypass = opts.adminBypass === true || opts.social?.wechat_admin === true
     if (!adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
       const refusal = '为了保护机主隐私，微信群里不能发送或描述本机文件、桌面图片、截图、相册或 file:// 路径。可以发送公开网络图片链接。'
-      if (mentionContact) {
-        await room.say(refusal, mentionContact)
-      } else {
-        await room.say(refusal)
-      }
+      await sayWechatyWithMentions(room, refusal, mentionContacts)
       return { ok: false, blocked: true, reason: 'local_file_reference_in_wechat_outbound' }
     }
     if (adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
@@ -391,11 +446,7 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     // 表情包/斗图场景不要把图片 URL 当文字发到群里；微信里应只看到图片/GIF。
     // 若模型额外写了自然语言说明，则先 @ 提问人发一句短文字；纯图片回复则完全不发链接文本。
     if (textBody.trim()) {
-      if (mentionContact) {
-        await room.say(textBody, mentionContact)
-      } else {
-        await room.say(textBody)
-      }
+      await sayWechatyWithMentions(room, textBody, mentionContacts)
     }
     const imageResults = await Promise.allSettled(imageUrls.map(async url => {
       await room.say(FileBox.fromUrl(url))

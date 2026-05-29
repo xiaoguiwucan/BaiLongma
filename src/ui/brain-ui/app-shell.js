@@ -232,7 +232,7 @@ const createSettingsModal = () => `
           </div>
           <div class="settings-section">
             <div class="settings-section-label">渠道连通通知</div>
-            <p class="settings-hint">定时检测你选择的 LLM 渠道是否还能连通，并按策略把结果发到指定微信群。检测只发一个极短 ping，不会泄露 API Key。</p>
+            <p class="settings-hint">定时检测你选择的 LLM 渠道是否还能连通，并按策略把结果发到指定微信群；每个通知群都可以继续选择要 @ 的群成员。检测只发一个极短 ping，不会泄露 API Key。</p>
             <div class="llm-monitor-panel">
               <div class="llm-monitor-head">
                 <label class="llm-failover-toggle">
@@ -1289,6 +1289,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.50</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">LLM 渠道连通通知新增按群选择 @ 人员，异常通知能精准提醒指定成员。</p>
+                <ul class="release-note-points">
+                  <li>每个通知微信群都能加载成员、按微信昵称搜索并勾选要 @ 的人。</li>
+                  <li>底层保存真实 sender_id，避免改昵称或同名导致误 @。</li>
+                  <li>不选择 @ 人员时只发群通知，不会误 @ 全员。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.49</span>
