@@ -1326,7 +1326,7 @@ ${imageVisionText}`.trim() : rawText
       content: formatGroupLine(senderName, replyText),
       channel: WECHAT_GROUP_CHANNEL,
       external_party_id: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', reply_mention_name: senderName || '', user_text: replyText, raw_user_text: rawText || replyText, wechat_admin: adminVerified },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', reply_mention_name: senderName || '', user_text: replyText, raw_user_text: rawText || replyText, raw_payload_text: rawPayloadText || '', message_type: messageType || '', wechat_admin: adminVerified },
       timestamp: new Date().toISOString(),
     })
 
@@ -1342,6 +1342,8 @@ ${imageVisionText}`.trim() : rawText
       reply_mention_name: senderName || '',
       user_text: replyText,
       raw_user_text: rawText || replyText,
+      raw_payload_text: rawPayloadText || '',
+      message_type: messageType || '',
       wechat_admin: adminVerified,
     }
     const prompt = await buildWeChatGroupCommandPrompt({

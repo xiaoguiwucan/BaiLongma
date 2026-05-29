@@ -8,6 +8,7 @@ import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByM
 import { emitEvent, emitUICommand, emitACUIEvent, hasACUIClient, addActiveUICard, removeActiveUICard, getActiveUICards, setStickyEvent } from '../events.js'
 import { dispatchSocialMessage } from '../social/dispatch.js'
 import { execMemeSearch } from '../social/meme-search.js'
+import { extractWeChatQuoteContext } from '../social/wechat-quote-context.js'
 import { callCapability, listCapabilities } from '../providers/registry.js'
 import { isDailyLimitReached } from '../quota.js'
 import { setCustomInterval as setTickerInterval, getStatus as getTickerStatus } from '../ticker.js'
@@ -712,6 +713,50 @@ function isInvalidWechatMentionSkipReply(content = '', context = {}) {
   return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip|已(?:经)?回复|回复(?:已)?完成|回复完毕|发送(?:已)?完成|发送完毕|无(?:需|须)(?:额外|再次|继续|进一步)?(?:回复|操作|补充)|不用再回|本轮结束|对话已(?:完成|结束))/iu.test(compact)
 }
 
+function hasVisibleWechatCitation(content = '') {
+  const head = String(content || '').trim().slice(0, 180)
+  return /^(?:引用(?:聊天记录|图片|语音|视频|链接|小程序|表情|消息)?(?:\s*@[^：:\n]{1,60})?|据聊天记录|根据聊天记录)[：:]/u.test(head)
+}
+
+function compactWechatCitationText(value = '', max = 90) {
+  const text = String(value || '').replace(/\s+/g, ' ').trim()
+  if (!text) return '[引用消息]'
+  return text.length > max ? `${text.slice(0, max)}…` : text
+}
+
+function maybePrependWechatQuoteCitation(content = '', context = {}) {
+  const social = context.currentSocial || {}
+  if (social.platform !== 'wechaty-duty-group') return content
+  if (hasVisibleWechatCitation(content)) return content
+  const userText = String(social.user_text || '').trim()
+  const rawText = String(social.raw_payload_text || social.raw_user_text || userText || '').trim()
+  if (!userText && !rawText) return content
+  let quote = { ok: false }
+  try {
+    quote = extractWeChatQuoteContext({
+      text: userText || rawText,
+      rawText,
+      messageType: social.message_type || '',
+    })
+  } catch {
+    quote = { ok: false }
+  }
+  if (!quote?.ok) return content
+  const kindLabel = {
+    image: '图片',
+    voice: '语音',
+    video: '视频',
+    link: '链接',
+    mini_program: '小程序',
+    emoji: '表情',
+    text: '',
+  }[quote.kind || 'text'] ?? '消息'
+  const sender = quote.sender ? ` @${compactWechatCitationText(quote.sender, 40)}` : ''
+  const prefix = kindLabel ? `引用${kindLabel}${sender}` : `引用${sender}`
+  const line = `${prefix}：${compactWechatCitationText(quote.content || '[引用消息]')}`
+  return `${line}\n${String(content || '').trim()}`
+}
+
 // send_message：投递到指定渠道（本地 SSE 或外部平台），并写入 conversations 表
 async function execSendMessage({ target_id, content, channel = 'AUTO' }, context = {}) {
   if (!target_id) return '错误：未提供 target_id'
@@ -739,7 +784,7 @@ async function execSendMessage({ target_id, content, channel = 'AUTO' }, context
     : context.visibleTargetIds
   const resolvedId = resolveAllowedTargetId(effectiveTargetId, allowedTargetIds)
   assertVisibleTargetId(resolvedId, visibleTargetIds)
-  const cleanedContent = trimAssistantFluff(content)
+  const cleanedContent = maybePrependWechatQuoteCitation(trimAssistantFluff(content), context)
   if (!cleanedContent) return '错误：消息内容为空'
   if (isInvalidWechatMentionSkipReply(cleanedContent, context)) {
     return '错误：微信平台已经确认当前群消息 @ 了你，不能回复“没叫我/跳过/已回复/回复完毕/无需回应”等内部状态。请重新调用 send_message，直接回答用户去掉 @ 后的实际请求。'

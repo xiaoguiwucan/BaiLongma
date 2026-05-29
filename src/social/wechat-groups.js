@@ -194,6 +194,25 @@ export async function buildWeChatGroupCommandPrompt({
   const quoteContextBlock = buildWeChatQuoteContextBlock({ text: displayText || userRawText, rawText: quoteRawText, messageType })
   const commandSource = quoteContext?.ok && quoteContext.currentText ? quoteContext.currentText : displayText || userRawText
   const commandText = stripLeadingWechatMentions(commandSource) || commandSource
+  const quoteCitationInstruction = quoteContext?.ok
+    ? [
+        '<wechat-quote-citation-policy>',
+        '本轮消息包含微信引用上下文。只要用户的问题和引用内容有关，回复第一行必须给出一条可见的短引用依据，然后再回答。',
+        `固定格式：引用${quoteContext.sender ? ` @${quoteContext.sender}` : ''}：${String(quoteContext.content || '[引用消息]').replace(/\s+/g, ' ').slice(0, 80)}${String(quoteContext.content || '').length > 80 ? '…' : ''}`,
+        '如果引用是图片/语音/视频/链接/小程序，就写“引用图片/引用语音/引用链接”等，并用已知摘要；不要输出 XML、base64、完整原文。',
+        '如果用户的问题明显与引用无关，可以不引用；否则不要省略这行。',
+        '</wechat-quote-citation-policy>',
+      ].join('\n')
+    : ''
+  const archiveCitationInstruction = /(?:谁说|谁发|谁讲|谁提|谁是|哪个人|哪位|之前|刚才|刚刚|上面|前面|聊天记录|记录里|群里有没有|有没有提到|总结.*(?:聊天|群)|统计|排行榜|老登|大哥|叫他|称呼|记得|不记得)/u.test(commandText)
+    ? [
+        '<wechat-archive-citation-policy>',
+        '本轮问题可能依赖当前群聊天记录库。只要你使用 <wechat-group-archive-evidence> 回答，回复里必须出现一条可见依据。',
+        '固定格式：引用聊天记录：YYYY-MM-DD/时间 昵称：关键原文摘要。',
+        '只引用一条最关键证据，不要贴整段聊天记录；如果证据不足，要说“当前聊天记录库没查到”。',
+        '</wechat-archive-citation-policy>',
+      ].join('\n')
+    : ''
   const memeHints = buildWeChatMemeHints(commandText || displayText || userRawText)
   const verifiedMentionBlock = mentionedSelf
     ? [
@@ -245,9 +264,11 @@ export async function buildWeChatGroupCommandPrompt({
     `去掉开头 @ 后的实际请求：${commandText}`,
     '',
     quoteContextBlock,
+    quoteCitationInstruction,
     quoteContextBlock
-      ? '引用消息处理规则：如果用户说“这条/上面/引用/这个/图片里/链接里/语音里/视频里/小程序里”，优先使用 <wechat-quoted-message>；只在回答需要依据时短短引用一句，不要复述整段，不要把 XML/base64/完整历史发出来。'
+      ? '引用消息处理规则：如果用户说“这条/上面/引用/这个/图片里/链接里/语音里/视频里/小程序里”，优先使用 <wechat-quoted-message>；回答依赖引用时必须按 <wechat-quote-citation-policy> 给出可见短引用，不要复述整段，不要把 XML/base64/完整历史发出来。'
       : '',
+    archiveCitationInstruction,
     '',
     memeHints,
     '',

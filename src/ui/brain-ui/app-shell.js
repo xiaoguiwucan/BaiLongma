@@ -1307,6 +1307,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.59</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">微信群引用回复可见化：引用消息和聊天记录证据不再“看不出来”。</p>
+                <ul class="release-note-points">
+                  <li>引用文字/图片/语音/视频/链接/小程序后 @ 助手，依赖引用回答时会先显示一行“引用…”依据。</li>
+                  <li>send_message 增加底层兜底，模型忘写引用行时会自动补上，不会再像没引用一样直接回答。</li>
+                  <li>聊天记录检索类问题会要求显示一条关键历史证据，例如“引用聊天记录：时间 昵称：摘要”。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.58</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>

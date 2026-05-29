@@ -2,6 +2,25 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.59 - 2026-05-29
+
+### 修复
+- 修复微信群“已经支持引用上下文，但回复里从来不明显显示引用”的体验问题。旧版本会解析微信引用并注入 `<wechat-quoted-message>`，但只让模型“需要时短短引用一句”，模型经常直接回答，用户看不到引用依据。
+- 微信引用场景新增可见引用策略：当用户通过微信引用文字、图片、语音、视频、链接、小程序后 @ 助手，且回复依赖引用内容时，回复开头必须出现 `引用 @某某：……`、`引用图片 @某某：……`、`引用链接 @某某：……` 等短依据。
+- `send_message` 底层增加兜底保护：如果本轮 Wechaty 群消息包含可解析引用，而模型没有主动写出引用行，发送前会自动补一行可见引用，保证群里能看见“它到底引用了哪条消息”。
+- 聊天记录库检索类问题（例如“谁说过/之前/刚才/聊天记录/谁是大哥/老登是谁/称呼关系”等）新增证据引用提示：只要使用 `<wechat-group-archive-evidence>` 回答，就要显示一条 `引用聊天记录：时间 昵称：关键原文摘要`。
+- Wechaty 群消息上下文补充保存 `raw_payload_text` 和 `message_type`，让发送兜底可以识别 XML/媒体引用，不只依赖可见文本。
+
+### 边界说明
+- 本版本实现的是“回复文本里的可见引用依据”，不是微信原生引用气泡。原生引用气泡需要伪造/注入 Web 微信底层消息 XML，稳定性和封控风险都更高，暂不启用。
+- 引用内容仍按省 token 策略处理：只给摘要/元数据，不发送原始 XML、base64 或完整历史。
+
+### 验证
+- 通过 `node --check src/capabilities/executor.js src/social/wechaty-duty-group.js src/social/wechat-groups.js`。
+- 通过 `npm run test:wechat-quote-context`。
+- 通过新增 `npm run test:wechat-quote-citation`，验证引用消息会自动补可见引用且不会重复补引用。
+- 通过 `npm run test:wechat-archive-evidence`、`npm run test:wechat-guard`、`npm run test:social-targets`。
+
 ## v0.4.58 - 2026-05-29
 
 ### 修复

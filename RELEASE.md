@@ -1,4 +1,37 @@
 
+## v0.4.59 - 2026-05-29
+
+### 发布主题
+微信群引用回复可见化：引用消息/聊天记录证据不再“看不出来”。
+
+### 更新内容
+1. 微信引用消息解析能力原本已经存在，但旧提示词只说“需要时短短引用一句”，模型经常省略，导致群里看不到任何引用痕迹。
+2. 引用文字、图片、语音、视频、链接、小程序后 @ 助手时，回复依赖引用内容就必须先写一行短引用，例如 `引用 @风：公益啊` 或 `引用图片 @某某：[图片]`。
+3. `send_message` 增加底层兜底：如果模型忘了写引用行，但当前 Wechaty 群消息确实带引用上下文，发送前自动补上可见引用。
+4. 聊天记录库检索类回答新增 `引用聊天记录：时间 昵称：关键原文摘要` 要求，避免“查了库但看不出依据”。
+5. Wechaty 群消息上下文新增 `raw_payload_text/message_type` 传递，XML/媒体引用也能被兜底识别。
+
+### 注意事项
+- 这是“文本可见引用”，不是微信原生引用气泡。微信原生引用气泡需要更底层协议/MsgSource 操作，风险高，本版本不启用。
+- 省 token 策略不变：引用只显示摘要，不把 XML、base64、完整聊天历史发给模型或群里。
+
+### 验证
+- `node --check src/capabilities/executor.js src/social/wechaty-duty-group.js src/social/wechat-groups.js`
+- `npm run test:wechat-quote-context`
+- `npm run test:wechat-quote-citation`
+- `npm run test:wechat-archive-evidence`
+- `npm run test:wechat-guard`
+- `npm run test:social-targets`
+
+### 部署方法
+```bash
+git clone https://github.com/xiaoguiwucan/BaiLongma.git
+cd BaiLongma
+git checkout v0.4.59
+npm install
+./start-jarvis-background.sh
+```
+
 ## v0.4.58 - 2026-05-29
 
 ### 发布主题
