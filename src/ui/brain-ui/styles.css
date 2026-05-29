@@ -5452,6 +5452,81 @@ body.person-card-mode .person-card-panel,
   padding: 14px;
   background: linear-gradient(180deg, rgba(87,214,255,0.06), rgba(255,255,255,0.025));
 }
+.db-member-panel {
+  margin-top: 14px;
+  border: 1px solid rgba(122, 255, 198, 0.18);
+  border-radius: 16px;
+  padding: 14px;
+  background: linear-gradient(180deg, rgba(122,255,198,0.055), rgba(255,255,255,0.025));
+}
+.db-member-summary {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  margin: 10px 0 12px;
+}
+.db-member-summary div {
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(0,0,0,0.13);
+}
+.db-member-summary b {
+  display: block;
+  color: #b9ffd9;
+  font-size: 20px;
+  line-height: 1.1;
+  margin-bottom: 5px;
+}
+.db-member-summary span,
+.db-member-row span,
+.db-member-row em,
+.db-member-duplicates small {
+  color: var(--ink2);
+  font-size: 11px;
+  font-style: normal;
+}
+.db-member-groups {
+  display: grid;
+  gap: 7px;
+  max-height: 220px;
+  overflow: auto;
+  padding-right: 4px;
+}
+.db-member-row {
+  display: grid;
+  grid-template-columns: minmax(180px, 1fr) 110px 120px;
+  gap: 10px;
+  align-items: center;
+  padding: 9px 10px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,0.06);
+  background: rgba(255,255,255,0.025);
+}
+.db-member-row b {
+  color: var(--ink);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.db-member-row span,
+.db-member-row em { text-align: right; }
+.db-member-duplicates {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: 10px;
+}
+.db-member-duplicates span {
+  color: var(--ink2);
+  font-size: 11px;
+  padding: 4px 7px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.07);
+  background: rgba(255,255,255,0.035);
+}
 .db-search-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
@@ -5519,6 +5594,9 @@ body.person-card-mode .person-card-panel,
   .db-hero-card { align-items: flex-start; flex-direction: column; }
   .db-table-row { grid-template-columns: 1fr; }
   .db-table-row span, .db-table-row em { text-align: left; }
+  .db-member-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .db-member-row { grid-template-columns: 1fr; }
+  .db-member-row span, .db-member-row em { text-align: left; }
 }
 .db-hero-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .db-health-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; margin:12px 0; }

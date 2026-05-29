@@ -47,6 +47,57 @@ function getScalar(db, sql, fallback = 0) {
   try { return Number(Object.values(db.prepare(sql).get() || {})[0] || fallback) } catch { return fallback }
 }
 
+function getMemberIdentityStats(db) {
+  const empty = {
+    rawRows: 0,
+    effectiveNicknames: 0,
+    uniqueSenderIds: 0,
+    uniqueWxids: 0,
+    duplicatedNicknameRows: 0,
+    groups: [],
+    duplicateExamples: [],
+  }
+  try {
+    const rawRows = getScalar(db, 'SELECT COUNT(*) FROM wechat_group_member_names')
+    const effectiveNicknames = getScalar(db, `
+      SELECT COUNT(*) FROM (
+        SELECT group_name, display_name
+        FROM wechat_group_member_names
+        WHERE TRIM(display_name) <> ''
+        GROUP BY group_name, display_name
+      )
+    `)
+    const uniqueSenderIds = getScalar(db, "SELECT COUNT(DISTINCT sender_id) FROM wechat_group_member_names WHERE TRIM(sender_id) <> ''")
+    const uniqueWxids = getScalar(db, "SELECT COUNT(DISTINCT wxid) FROM wechat_group_member_names WHERE TRIM(wxid) <> ''")
+    const duplicatedNicknameRows = Math.max(rawRows - effectiveNicknames, 0)
+    const groups = db.prepare(`
+      SELECT
+        group_name,
+        COUNT(*) AS raw_rows,
+        COUNT(DISTINCT display_name) AS effective_nicknames,
+        COUNT(DISTINCT sender_id) AS unique_sender_ids,
+        COUNT(DISTINCT CASE WHEN TRIM(wxid) <> '' THEN wxid END) AS unique_wxids,
+        MAX(last_seen) AS last_seen
+      FROM wechat_group_member_names
+      GROUP BY group_name
+      ORDER BY raw_rows DESC, group_name COLLATE NOCASE ASC
+      LIMIT 30
+    `).all()
+    const duplicateExamples = db.prepare(`
+      SELECT group_name, display_name, COUNT(*) AS raw_rows, COUNT(DISTINCT sender_id) AS sender_ids, MAX(last_seen) AS last_seen
+      FROM wechat_group_member_names
+      WHERE TRIM(display_name) <> ''
+      GROUP BY group_name, display_name
+      HAVING raw_rows > 1
+      ORDER BY raw_rows DESC, last_seen DESC
+      LIMIT 12
+    `).all()
+    return { rawRows, effectiveNicknames, uniqueSenderIds, uniqueWxids, duplicatedNicknameRows, groups, duplicateExamples }
+  } catch {
+    return empty
+  }
+}
+
 function normalizeText(text = '') {
   return String(text || '').replace(/\s+/g, ' ').trim()
 }
@@ -283,11 +334,12 @@ export async function getDatabaseOverview() {
     wechatMediaBytes: dirSize(wechatMediaDir),
   }
   totals.totalBytes = Object.values(totals).reduce((sum, value) => sum + Number(value || 0), 0)
+  const memberIdentityStats = getMemberIdentityStats(db)
   const categories = [
     { key: 'chat_records', name: '微信群聊天记录', rows: getScalar(db, 'SELECT COUNT(*) FROM wechat_group_activity'), tables: ['wechat_group_activity'], bytes: tables.filter(t => t.name === 'wechat_group_activity').reduce((s, t) => s + t.bytes, 0) },
     { key: 'group_memory', name: '微信群知识库/记忆', rows: getScalar(db, 'SELECT COUNT(*) FROM wechat_group_memory_items') + getScalar(db, 'SELECT COUNT(*) FROM wechat_group_messages'), tables: ['wechat_group_memory_items', 'wechat_group_messages'], bytes: tables.filter(t => ['wechat_group_memory_items', 'wechat_group_messages'].includes(t.name)).reduce((s, t) => s + t.bytes, 0) },
     { key: 'core_memory', name: '核心长期记忆', rows: getScalar(db, 'SELECT COUNT(*) FROM memories WHERE visibility=1'), tables: ['memories', 'memories_fts'], bytes: tables.filter(t => t.name.startsWith('memories')).reduce((s, t) => s + t.bytes, 0) },
-    { key: 'members', name: '微信群成员/昵称', rows: getScalar(db, 'SELECT COUNT(*) FROM wechat_group_member_names'), tables: ['wechat_group_member_names'], bytes: tables.filter(t => t.name === 'wechat_group_member_names').reduce((s, t) => s + t.bytes, 0) },
+    { key: 'members', name: '微信群成员/昵称', rows: memberIdentityStats.effectiveNicknames, rawRows: memberIdentityStats.rawRows, subtitle: `${memberIdentityStats.effectiveNicknames} 个昵称 / ${memberIdentityStats.rawRows} 条历史身份记录`, tables: ['wechat_group_member_names'], bytes: tables.filter(t => t.name === 'wechat_group_member_names').reduce((s, t) => s + t.bytes, 0) },
     { key: 'media', name: '图片/媒体文件', rows: 0, tables: [], bytes: totals.generatedImagesBytes + totals.wechatMediaBytes },
   ]
   const embeddingConfig = getEmbeddingConfig()
@@ -320,6 +372,7 @@ export async function getDatabaseOverview() {
     paths: { userDir: paths.userDir, dbFile, archiveDb, generatedImagesDir, wechatMediaDir },
     totals,
     categories,
+    memberIdentityStats,
     vectorStats,
     honcho,
     tables: tables.sort((a, b) => (b.bytes || 0) - (a.bytes || 0)),

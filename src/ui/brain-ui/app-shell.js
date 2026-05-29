@@ -413,6 +413,7 @@ const createSettingsModal = () => `
             <div class="db-overview-grid" id="db-overview-grid">
               <div class="wechaty-empty">正在加载数据库统计…</div>
             </div>
+            <div class="db-member-panel" id="db-member-panel"></div>
             <div class="db-search-panel">
               <div class="wechaty-subsection-head">
                 <div>

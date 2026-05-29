@@ -2169,6 +2169,7 @@ function initTTSSettings() {
   const dbPathHint = document.getElementById("db-path-hint");
   const dbHealthGrid = document.getElementById("db-health-grid");
   const dbOverviewGrid = document.getElementById("db-overview-grid");
+  const dbMemberPanel = document.getElementById("db-member-panel");
   const dbTableList = document.getElementById("db-table-list");
   const dbRefreshBtn = document.getElementById("db-refresh-btn");
   const dbVectorBackfillBtn = document.getElementById("db-vector-backfill-btn");
@@ -3272,8 +3273,35 @@ function initTTSSettings() {
         <div class="db-stat-card">
           <small>${escapeHtml(item.name || item.key || "数据")}</small>
           <strong>${escapeHtml(String(item.rows || 0))}</strong>
-          <span>${formatBytes(item.bytes || 0)} · ${escapeHtml((item.tables || []).join(" / ") || "文件")}</span>
+          <span>${escapeHtml(item.subtitle || `${formatBytes(item.bytes || 0)} · ${(item.tables || []).join(" / ") || "文件"}`)}</span>
         </div>`).join("") : '<div class="wechaty-empty">暂无数据库统计。</div>';
+    }
+    const memberStats = data.memberIdentityStats || {};
+    if (dbMemberPanel) {
+      const groups = Array.isArray(memberStats.groups) ? memberStats.groups : [];
+      const examples = Array.isArray(memberStats.duplicateExamples) ? memberStats.duplicateExamples : [];
+      dbMemberPanel.innerHTML = `
+        <div class="wechaty-subsection-head">
+          <div>
+            <div class="wechaty-subsection-title">成员有效视图</div>
+            <p class="settings-hint compact">这里不删除原始记录，只按“群名 + 昵称”聚合展示，避免 Wechaty 重登后 sender_id 变化导致人数虚高。</p>
+          </div>
+        </div>
+        <div class="db-member-summary">
+          <div><b>${escapeHtml(String(memberStats.effectiveNicknames || 0))}</b><span>有效昵称</span></div>
+          <div><b>${escapeHtml(String(memberStats.rawRows || 0))}</b><span>历史身份记录</span></div>
+          <div><b>${escapeHtml(String(memberStats.duplicatedNicknameRows || 0))}</b><span>可合并历史记录</span></div>
+          <div><b>${escapeHtml(String(memberStats.uniqueWxids || 0))}</b><span>可用 wxid</span></div>
+        </div>
+        <div class="db-member-groups">
+          ${groups.length ? groups.map(row => `
+            <div class="db-member-row">
+              <b>${escapeHtml(row.group_name || "未知群")}</b>
+              <span>${escapeHtml(String(row.effective_nicknames || 0))} 个昵称</span>
+              <em>${escapeHtml(String(row.raw_rows || 0))} 条历史身份</em>
+            </div>`).join("") : '<div class="wechaty-empty">暂无成员昵称记录。</div>'}
+        </div>
+        ${examples.length ? `<div class="db-member-duplicates"><small>重复示例：</small>${examples.slice(0, 6).map(row => `<span>${escapeHtml(row.group_name || '')} / ${escapeHtml(row.display_name || '')} × ${escapeHtml(String(row.raw_rows || 0))}</span>`).join("")}</div>` : ''}`;
     }
     const tables = Array.isArray(data.tables) ? data.tables : [];
     if (dbTableList) {
