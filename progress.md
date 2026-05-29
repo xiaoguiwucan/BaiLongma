@@ -70,3 +70,4 @@
 - Implemented non-blocking background describe trigger (`/social/wechat-groups/images/describe-pending`) with worker_running status.
 - Added database tab image library UI: progress cards, filters, thumbnail grid, description/tags, auto-refresh and manual parse button.
 - Verified syntax and existing WeChat tests pass.
+- Browser verified database image panel loads: summary shows 22 images, 21 parsed, 1 pending, 22 cards rendered, no UI errors.

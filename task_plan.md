@@ -127,4 +127,4 @@
 2. [complete] 后端新增待解析图片后台任务入口，避免 UI 阻塞并支持重复点击时显示 running。
 3. [complete] 数据库设置页新增图片解析库面板：统计卡、筛选、缩略图、详情、解析进度、手动补解析。
 4. [complete] 前端自动轮询刷新解析数量，并在有待解析图片时触发后台补解析。
-5. [in_progress] 验证、版本文档、GitHub Release、重启程序。
+5. [complete] 验证、版本文档、GitHub Release、重启程序。
