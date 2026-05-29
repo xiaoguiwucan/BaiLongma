@@ -1291,6 +1291,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.53</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">修复微信群图片理解链路：连续 @、补充文字、再发图片时不再只看到 [图片] 占位。</p>
+                <ul class="release-note-points">
+                  <li>纯 @ 或看图请求会短暂等待同一成员后续文字/图片入库，再合并处理。</li>
+                  <li>命中“总结图片/看看图/解析截图”时直接从当前群图片库取最近图片调用识图模型。</li>
+                  <li>识图候选模型去重并限制单候选超时，坏模型会明确反馈错误，不再让文本模型猜图。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.52</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>

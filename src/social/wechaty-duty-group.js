@@ -8,7 +8,7 @@ import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChat
 import { isWeChatInternalIdLike, listWeChatGroupMembers, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
 import { searchMemes } from './meme-search.js'
 import { generateImageForWechat, isWechatImageGenerationRequest } from './image-generation-skill.js'
-import { describeWeChatImageMedia, findWeChatImageMediaForRequest, maybeDescribeWeChatImageMedia, resolveWeChatImageMediaFile, upsertWeChatImageMediaItem } from './wechat-image-vision.js'
+import { describeWeChatImageMedia, findWeChatImageMediaForRequest, getWeChatImageVisionStatus, maybeDescribeWeChatImageMedia, resolveWeChatImageMediaFile, upsertWeChatImageMediaItem } from './wechat-image-vision.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -27,6 +27,9 @@ const STARTING_RELOGIN_REQUIRED_MS = 90 * 1000
 const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
 const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
 const DIRECT_MEME_REQUEST_RE = /(?:斗图|表情包|梗图|gif|动图|发.{0,4}表情|来.{0,4}表情|整.{0,4}表情|发.{0,3}图|来.{0,3}图|开心|难过|愤怒|生气|鄙视|无语|笑死|吃瓜|破防).{0,8}(?:表情|表情包|梗图|图|gif)?|(?:表情|表情包|梗图|gif|动图)$/iu
+const IMAGE_UNDERSTANDING_REQUEST_RE = /(?:总结|概括|精简|识别|解析|分析|看看|看下|查看|读|理解|解释|说说|提取|压成).{0,24}(?:图|图片|照片|截图|海报|表格|内容|文字)|(?:图|图片|照片|截图|海报|表格).{0,24}(?:总结|概括|精简|识别|解析|分析|看看|看下|查看|读|理解|解释|内容|文字)/iu
+const WECHAT_FOLLOWUP_WINDOW_MS = 10 * 1000
+const WECHAT_MEDIA_WAIT_MS = 3200
 
 let bot = null
 let status = 'idle' // idle | starting | qr_ready | logged_in | connected | error
@@ -53,6 +56,11 @@ let offlineDetectTimer = null
 let connectionAttemptStartedAt = 0
 let lastOfflineAlertKey = ''
 const memberNameRefreshAt = new Map()
+const recentWechatUserMessages = new Map()
+
+function waitWechatMediaWindow(ms = WECHAT_MEDIA_WAIT_MS) {
+  return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms || 0))))
+}
 
 export function extractPublicImageUrlsFromWechatText(content = '') {
   const text = String(content || '')
@@ -81,6 +89,79 @@ export function stripImageMarkdown(content = '', imageUrls = []) {
     .replace(/[ \t]+/g, ' ')
     .replace(/\n{3,}/g, '\n\n')
     .trim()
+}
+
+function getRecentWechatKey(groupId = '', senderId = '', senderName = '') {
+  return `${String(groupId || '').trim()}::${String(senderId || senderName || '').trim()}`
+}
+
+function rememberRecentWechatUserMessage({ groupId = '', senderId = '', senderName = '', text = '', mediaId = '', messageType = '', mentionedSelf = false } = {}) {
+  const key = getRecentWechatKey(groupId, senderId, senderName)
+  if (!key || key.endsWith('::')) return
+  const now = Date.now()
+  const list = recentWechatUserMessages.get(key) || []
+  list.push({
+    at: now,
+    text: String(text || '').trim(),
+    mediaId: mediaId ? Number(mediaId) : 0,
+    messageType: String(messageType || ''),
+    mentionedSelf: !!mentionedSelf,
+  })
+  const fresh = list.filter(item => now - Number(item.at || 0) <= WECHAT_FOLLOWUP_WINDOW_MS * 3).slice(-20)
+  recentWechatUserMessages.set(key, fresh)
+}
+
+function getRecentWechatUserMessages({ groupId = '', senderId = '', senderName = '', windowMs = WECHAT_FOLLOWUP_WINDOW_MS } = {}) {
+  const key = getRecentWechatKey(groupId, senderId, senderName)
+  const now = Date.now()
+  return (recentWechatUserMessages.get(key) || [])
+    .filter(item => now - Number(item.at || 0) <= windowMs)
+    .sort((a, b) => Number(a.at || 0) - Number(b.at || 0))
+}
+
+function stripWechatAtTokens(text = '') {
+  return String(text || '')
+    .replace(/[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,。.!！?？：:、]{1,40}/gu, ' ')
+    .replace(/[\s\u2005\u2006\u2007\u2008\u2009\u200a，,。.!！?？：:、]+/gu, ' ')
+    .trim()
+}
+
+function isBareWechatMentionText(text = '') {
+  return !stripWechatAtTokens(text)
+}
+
+function hasWechatImageUnderstandingIntent(text = '') {
+  return IMAGE_UNDERSTANDING_REQUEST_RE.test(String(text || ''))
+}
+
+function buildRecentWechatCombinedText({ groupId = '', senderId = '', senderName = '', fallback = '' } = {}) {
+  const lines = getRecentWechatUserMessages({ groupId, senderId, senderName })
+    .map(item => item.text || (item.mediaId ? '[图片]' : ''))
+    .filter(Boolean)
+  if (!lines.length) return String(fallback || '').trim()
+  return [...new Set(lines)].join('\n').trim()
+}
+
+function buildWechatImageUnderstandingText({ groupId = '', senderId = '', senderName = '', fallback = '' } = {}) {
+  const combined = buildRecentWechatCombinedText({ groupId, senderId, senderName, fallback })
+  const value = combined || String(fallback || '').trim()
+  if (!value) return ''
+  // 用户常见操作是：先 @ 机器人，再连续发“总结一下图”和图片。
+  // @ 触发消息本身可能只有一个 @，这里把同一用户短时间内的后续文本/图片合并成一次真实请求。
+  if (hasWechatImageUnderstandingIntent(value)) return value
+  const recent = getRecentWechatUserMessages({ groupId, senderId, senderName })
+  const hasRecentImage = recent.some(item => Number(item.mediaId || 0) > 0 || /^\[图片\]$/u.test(String(item.text || '').trim()))
+  if (hasRecentImage && isBareWechatMentionText(fallback)) return `${value}\n总结一下这张图`
+  return value
+}
+
+function getLatestRecentWechatMediaId({ groupId = '', senderId = '', senderName = '' } = {}) {
+  const recent = getRecentWechatUserMessages({ groupId, senderId, senderName, windowMs: WECHAT_FOLLOWUP_WINDOW_MS * 3 })
+  for (const item of recent.slice().reverse()) {
+    const mediaId = Number(item.mediaId || 0)
+    if (mediaId > 0) return mediaId
+  }
+  return 0
 }
 
 function makeWechatyGroupReplyTargetId(roomId = '', senderId = '', senderName = '') {
@@ -1112,13 +1193,10 @@ async function handleMessage(message) {
         })
         if (mediaRecord?.ok && mediaRecord.item?.id) {
           mediaInfo.mediaId = mediaRecord.item.id
-          if (mentionedSelf) {
-            const vision = await describeWeChatImageMedia({ mediaId: mediaRecord.item.id })
-            if (vision?.description) imageVisionText = `[图片识别] ${vision.description}`
-            else if (vision?.error) imageVisionText = `[图片识别失败] ${vision.error}`
-          } else {
-            maybeDescribeWeChatImageMedia({ mediaItem: mediaRecord.item, wait: false }).catch(() => {})
-          }
+          // 图片入库后统一进入后台识图；不要在消息入口同步阻塞。
+          // 否则“先 @、再发文字、再发图片”的连续操作会在图片尚未入库时就把 LLM 触发掉，
+          // 最终只看到 [图片] 占位。真正需要即时识图时由后面的直接识图回复链路按最近图片主动拉取。
+          maybeDescribeWeChatImageMedia({ mediaItem: mediaRecord.item, wait: false }).catch(() => {})
         }
       }
     } catch (err) { console.warn(`[WechatyStats] 保存/识别群媒体失败：${err?.message || err}`) }
@@ -1148,6 +1226,15 @@ ${imageVisionText}`.trim() : rawText
       ? `${activity?.displayText || normalizeWeChatGroupDisplayText(rawText, messageType)}\n${imageVisionText}`.trim()
       : (activity?.displayText || normalizeWeChatGroupDisplayText(rawText, messageType))
     if (!text) return
+    rememberRecentWechatUserMessage({
+      groupId,
+      senderId: senderId || senderName,
+      senderName,
+      text,
+      mediaId: mediaInfo?.mediaId || 0,
+      messageType,
+      mentionedSelf,
+    })
 
     if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(rawText || text)
     console.log(`[Wechaty] 收到群消息 topic="${topic}" sender="${senderName}" self=${isSelf} mention=${mentionedSelf} text=${text.slice(0, 100)}`)
@@ -1162,16 +1249,31 @@ ${imageVisionText}`.trim() : rawText
     // 注意：这里不再做任何关键词/意图/内容二次过滤，也不做硬编码回复。
     if (!wechatyGroupReplyEnabled || !mentionedSelf) return
 
-    console.log(`[Wechaty] 值班群消息${isSelf ? '（self）' : ''}${mentionedSelf ? '（@我）' : ''} ${senderName}: ${text.slice(0, 100)}`)
+    let replyText = text
+    if (isBareWechatMentionText(replyText) || hasWechatImageUnderstandingIntent(replyText)) {
+      await waitWechatMediaWindow()
+      const combinedText = buildWechatImageUnderstandingText({
+        groupId,
+        senderId: senderId || senderName,
+        senderName,
+        fallback: replyText,
+      })
+      if (combinedText && combinedText !== replyText) {
+        console.log(`[Wechaty] 合并连续微信消息 topic="${topic}" sender="${senderName}" before="${replyText.slice(0, 80)}" after="${combinedText.slice(0, 160)}"`)
+        replyText = combinedText
+      }
+    }
+
+    console.log(`[Wechaty] 值班群消息${isSelf ? '（self）' : ''}${mentionedSelf ? '（@我）' : ''} ${senderName}: ${replyText.slice(0, 100)}`)
 
     const adminVerified = await isWechatyGroupAdminSender({ senderId, senderName, groupId, groupName: topic })
-    const adminProtectionReply = adminVerified ? '' : buildAdminProtectionReply({ groupId, groupName: topic, senderId, text })
+    const adminProtectionReply = adminVerified ? '' : buildAdminProtectionReply({ groupId, groupName: topic, senderId, text: replyText })
     if (adminProtectionReply) {
       await sendWechatyDutyGroupMessage(room.id, adminProtectionReply, { mentionId: senderId, mentionName: senderName })
       recordWeChatGroupAssistantReply({ groupId, groupName: topic, reply: adminProtectionReply, targetMemberName: senderName, source: 'wechaty' }).catch(() => {})
       return
     }
-    const safety = adminVerified ? { allowed: true, adminBypass: true } : checkWeChatGroupCommandSafety(text)
+    const safety = adminVerified ? { allowed: true, adminBypass: true } : checkWeChatGroupCommandSafety(replyText)
     if (!safety.allowed) {
       const refusal = safety.reason
       await sendWechatyDutyGroupMessage(room.id, refusal, { mentionId: senderId, mentionName: senderName })
@@ -1180,33 +1282,37 @@ ${imageVisionText}`.trim() : rawText
     }
     if (adminVerified) {
       console.warn(`[WechatyAdmin] 管理员指令已通过精确 sender_id 验证，跳过微信群黑名单 topic="${topic}" sender="${senderName}" sender_id="${senderId}"`)
-      emitEventRef?.('wechat_admin_command', { group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', text: text.slice(0, 300), timestamp: new Date().toISOString() })
+      emitEventRef?.('wechat_admin_command', { group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', text: replyText.slice(0, 300), timestamp: new Date().toISOString() })
     }
 
-    recordWeChatGroupExplicitMemories({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text, source: 'wechaty' })
+    recordWeChatGroupExplicitMemories({ groupId, groupName: topic, senderId: senderId || senderName, senderName, text: replyText, source: 'wechaty' })
       .then(result => {
         if (result?.count) console.log(`[Honcho] 已沉淀群显式记忆 topic="${topic}" sender="${senderName}" count=${result.count}`)
       })
       .catch(err => console.warn(`[Honcho] 显式群记忆写入失败：${err?.message || err}`))
 
-    if (await tryDirectStoredImageReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+    if (await tryDirectImageUnderstandingReply(room, replyText, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
       return
     }
 
-    if (await tryDirectImageGenerationReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+    if (await tryDirectStoredImageReply(room, replyText, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
       return
     }
 
-    if (!adminVerified && await tryDirectMemeReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+    if (await tryDirectImageGenerationReply(room, replyText, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+      return
+    }
+
+    if (!adminVerified && await tryDirectMemeReply(room, replyText, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
       return
     }
 
     emitEventRef?.('message_in', {
       from_id: groupExternalId,
-      content: formatGroupLine(senderName, text),
+      content: formatGroupLine(senderName, replyText),
       channel: WECHAT_GROUP_CHANNEL,
       external_party_id: groupExternalId,
-      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', reply_mention_name: senderName || '', user_text: text, raw_user_text: rawText || text, wechat_admin: adminVerified },
+      social: { platform: 'wechaty-duty-group', group_name: topic, room_id: room.id, sender_name: senderName, sender_id: senderId || '', mentioned_self: mentionedSelf, reply_mention_id: senderId || '', reply_mention_name: senderName || '', user_text: replyText, raw_user_text: rawText || replyText, wechat_admin: adminVerified },
       timestamp: new Date().toISOString(),
     })
 
@@ -1220,8 +1326,8 @@ ${imageVisionText}`.trim() : rawText
       mentioned_self: mentionedSelf,
       reply_mention_id: senderId || '',
       reply_mention_name: senderName || '',
-      user_text: text,
-      raw_user_text: rawText || text,
+      user_text: replyText,
+      raw_user_text: rawText || replyText,
       wechat_admin: adminVerified,
     }
     const prompt = await buildWeChatGroupCommandPrompt({
@@ -1229,8 +1335,8 @@ ${imageVisionText}`.trim() : rawText
       groupName: topic,
       senderId: senderId || senderName,
       senderName,
-      text,
-      rawText: rawText || text,
+      text: replyText,
+      rawText: rawText || replyText,
       rawPayloadText,
       messageType,
       mentionedSelf: true,
@@ -1273,6 +1379,52 @@ async function tryDirectMemeReply(room, text = '', { senderId = '', senderName =
 }
 
 const STORED_IMAGE_SEND_RE = /(?:发|发送|转发|传|给我|发我|拿给我).{0,28}(?:那张|这张|刚才|刚刚|上面|前面|原图|图片|图|照片|山水画|截图)|(?:那张|这张|刚才|刚刚|上面|前面).{0,28}(?:发|发送|转发|传|给我|发我|拿给我)/u
+
+function summarizeVisionDescription(description = '') {
+  const text = String(description || '').replace(/\s+/g, ' ').trim()
+  if (!text) return ''
+  return text.length > 520 ? `${text.slice(0, 520)}…` : text
+}
+
+function pickRecentImageCandidate(items = []) {
+  const now = Date.now()
+  const rows = (Array.isArray(items) ? items : []).filter(Boolean)
+  return rows.find(row => {
+    const ts = Date.parse(row.created_at || row.updated_at || '')
+    return Number.isFinite(ts) && now - ts <= 15 * 60 * 1000 && String(row.message_type || '') !== '5'
+  }) || rows.find(row => String(row.message_type || '') !== '5') || rows[0] || null
+}
+
+async function tryDirectImageUnderstandingReply(room, text = '', { senderId = '', senderName = '', groupId = '', groupName = '' } = {}) {
+  const value = String(text || '')
+  if (!hasWechatImageUnderstandingIntent(value)) return false
+  const found = findWeChatImageMediaForRequest({ groupId, groupName, query: `${value} 刚才 最近`, limit: 8 })
+  const recentMediaId = getLatestRecentWechatMediaId({ groupId, senderId, senderName })
+  const item = (found.items || []).find(row => Number(row.id || 0) === recentMediaId) || pickRecentImageCandidate(found.items || [])
+  if (!item?.id) {
+    await sendWechatyDutyGroupMessage(room.id, '我没在当前群最近图片库里找到可识别的图片。你先把原图发出来，再 @ 我说“总结这张图”。', { mentionId: senderId, mentionName: senderName })
+    return true
+  }
+
+  console.log(`[WechatImageVision] 直接识图回复 topic="${groupName}" sender="${senderName}" media_id=${item.id} status=${item.vision_status || ''} query="${value.slice(0, 120)}"`)
+  const vision = item.description
+    ? { ok: true, description: item.description, item }
+    : await describeWeChatImageMedia({ mediaId: item.id })
+
+  if (vision?.description) {
+    const summary = summarizeVisionDescription(vision.description)
+    await sendWechatyDutyGroupMessage(room.id, `这张图大意：${summary}`, { mentionId: senderId, mentionName: senderName })
+    recordWeChatGroupAssistantReply({ groupId, groupName, reply: `[识图总结] ${summary}`, targetMemberName: senderName, source: 'wechaty-image-vision-direct' }).catch(() => {})
+    return true
+  }
+
+  const status = (() => { try { return getWeChatImageVisionStatus() } catch { return null } })()
+  const runtime = status?.runtime ? `${status.runtime.model || 'unknown'} @ ${status.runtime.baseURL || status.runtime.provider || ''}` : '未配置可用识图模型'
+  const error = String(vision?.error || item.vision_error || '识图模型没有返回内容').replace(/\s+/g, ' ').slice(0, 360)
+  await sendWechatyDutyGroupMessage(room.id, `图片已经收到并入库，但识图模型解析失败：${error}。当前识图：${runtime}。你需要换一个可用的多模态模型/中转后再点“解析待处理”。`, { mentionId: senderId, mentionName: senderName })
+  recordWeChatGroupAssistantReply({ groupId, groupName, reply: `[识图失败] ${error}`, targetMemberName: senderName, source: 'wechaty-image-vision-direct' }).catch(() => {})
+  return true
+}
 
 async function tryDirectStoredImageReply(room, text = '', { senderId = '', senderName = '', groupId = '', groupName = '' } = {}) {
   const value = String(text || '')

@@ -259,18 +259,46 @@ export function isVisionCapableModel(model = '') {
   return /gpt-4o|gpt-4\.1|gpt-5|o3|o4|vision|vl|qwen.*vl|gemini|claude-3|pixtral|llava/u.test(value)
 }
 
-function resolveVisionRuntime(cfg = getSkillImageVisionCredentials()) {
+function normalizeRuntimeBaseURL(value = '') {
+  return String(value || '').trim().replace(/\/$/, '')
+}
+
+function runtimeKey(runtime = {}) {
+  // source 只表示“来自当前模型/LLM 列表/识图备用”，不能参与去重。
+  // 否则同一个中转 + 同一个模型会被当前模型和 LLM Profile 重复调用，图片解析失败时会白等一轮超时。
+  return [runtime.provider || '', runtime.model || '', normalizeRuntimeBaseURL(runtime.baseURL || ''), String(runtime.apiKey || '').slice(-10)].join('|')
+}
+
+function getVisionRuntimeCandidates(cfg = getSkillImageVisionCredentials()) {
+  const candidates = []
+  const push = runtime => {
+    if (!runtime?.apiKey || !runtime?.baseURL || !runtime?.model) return
+    const normalized = { ...runtime, baseURL: normalizeRuntimeBaseURL(runtime.baseURL) }
+    const key = runtimeKey(normalized)
+    if (!candidates.some(item => runtimeKey(item) === key)) candidates.push(normalized)
+  }
+
+  // 当前 LLM 可能名字看起来支持视觉，但中转站实际只返回空内容。
+  // 因此它只能作为候选之一，失败/空内容时必须继续尝试备用识图模型。
   if (cfg.preferCurrentMultimodal && isVisionCapableModel(config.model) && config.apiKey && config.baseURL) {
-    return { provider: config.provider || 'current', model: config.model, apiKey: config.apiKey, baseURL: config.baseURL, source: 'current' }
+    push({ provider: config.provider || 'current', model: config.model, apiKey: config.apiKey, baseURL: config.baseURL, source: 'current' })
   }
-  const profile = (config.llmProfiles || []).find(item => item?.enabled !== false && item?.apiKey && item?.baseURL && isVisionCapableModel(item.model))
-  if (profile) {
-    return { provider: profile.provider || 'profile', model: profile.model, apiKey: profile.apiKey, baseURL: profile.baseURL, source: 'llm_profile' }
-  }
+
+  // 显式“识图模型”是用户在图片理解菜单里专门配置的模型，优先级应高于普通 LLM 列表。
   if (cfg.apiKey && cfg.baseUrl && cfg.model) {
-    return { provider: 'vision', model: cfg.model, apiKey: cfg.apiKey, baseURL: cfg.baseUrl, source: 'fallback_gpt' }
+    push({ provider: 'vision', model: cfg.model, apiKey: cfg.apiKey, baseURL: cfg.baseUrl, source: 'fallback_gpt' })
   }
-  return null
+
+  for (const profile of config.llmProfiles || []) {
+    if (profile?.enabled === false || !profile?.apiKey || !profile?.baseURL || !isVisionCapableModel(profile.model)) continue
+    push({ provider: profile.provider || 'profile', model: profile.model, apiKey: profile.apiKey, baseURL: profile.baseURL, source: `llm_profile:${profile.name || profile.id || profile.model}` })
+  }
+
+  return candidates
+}
+
+function resolveVisionRuntime(cfg = getSkillImageVisionCredentials()) {
+  return getVisionRuntimeCandidates(cfg)[0] || null
 }
 
 function extractLabels(description = '') {
@@ -353,7 +381,8 @@ async function callVisionModel(row, runtime, cfg) {
     return fs.existsSync(filePath) ? fs.readFileSync(filePath).toString('base64') : ''
   })()
   if (!base64) throw new Error('图片超过保存上限或文件不存在，无法转 base64 给识图模型')
-  const client = new OpenAI({ apiKey: runtime.apiKey, baseURL: runtime.baseURL, timeout: Number(cfg.apiTimeoutSeconds || 45) * 1000 })
+  const timeoutSeconds = Math.min(Math.max(Number(cfg.apiTimeoutSeconds || 45), 5), 25)
+  const client = new OpenAI({ apiKey: runtime.apiKey, baseURL: runtime.baseURL, timeout: timeoutSeconds * 1000 })
   const res = await client.chat.completions.create({
     model: runtime.model,
     temperature: 0.1,
@@ -386,27 +415,35 @@ export async function describeWeChatImageMedia({ mediaId, force = false } = {}) 
     db.prepare(`UPDATE wechat_group_media_items SET vision_status='disabled', updated_at=? WHERE id=?`).run(nowTimestamp(), mediaId)
     return { ok: false, skipped: true, error: '识图功能未启用' }
   }
-  const runtime = resolveVisionRuntime(cfg)
-  if (!runtime) {
+  const runtimes = getVisionRuntimeCandidates(cfg)
+  if (!runtimes.length) {
     db.prepare(`UPDATE wechat_group_media_items SET vision_status='no_model', vision_error=?, updated_at=? WHERE id=?`).run('未配置可用的多模态/GPT识图模型', nowTimestamp(), mediaId)
     return { ok: false, error: '未配置可用的多模态/GPT识图模型' }
   }
-  try {
-    db.prepare(`UPDATE wechat_group_media_items SET vision_status='running', vision_provider=?, vision_model=?, updated_at=? WHERE id=?`).run(runtime.provider, runtime.model, nowTimestamp(), mediaId)
-    const description = await callVisionModel(row, runtime, cfg)
-    if (!description) throw new Error('识图模型返回空内容')
-    const labels = extractLabels(description)
-    db.prepare(`
-      UPDATE wechat_group_media_items
-      SET description=?, labels_json=?, vision_status='done', vision_provider=?, vision_model=?, vision_error='', described_at=?, updated_at=?
-      WHERE id=?
-    `).run(description, JSON.stringify(labels), runtime.provider, runtime.model, nowTimestamp(), nowTimestamp(), mediaId)
-    return { ok: true, id: mediaId, description, labels, provider: runtime.provider, model: runtime.model }
-  } catch (err) {
-    const message = err?.message || String(err)
-    db.prepare(`UPDATE wechat_group_media_items SET vision_status='error', vision_error=?, updated_at=? WHERE id=?`).run(message.slice(0, 1000), nowTimestamp(), mediaId)
-    return { ok: false, error: message }
+
+  const errors = []
+  for (const runtime of runtimes) {
+    try {
+      db.prepare(`UPDATE wechat_group_media_items SET vision_status='running', vision_provider=?, vision_model=?, updated_at=? WHERE id=?`).run(runtime.provider, runtime.model, nowTimestamp(), mediaId)
+      const description = await callVisionModel(row, runtime, cfg)
+      if (!description) throw new Error('识图模型返回空内容')
+      const labels = extractLabels(description)
+      db.prepare(`
+        UPDATE wechat_group_media_items
+        SET description=?, labels_json=?, vision_status='done', vision_provider=?, vision_model=?, vision_error='', described_at=?, updated_at=?
+        WHERE id=?
+      `).run(description, JSON.stringify(labels), runtime.provider, runtime.model, nowTimestamp(), nowTimestamp(), mediaId)
+      return { ok: true, id: mediaId, description, labels, provider: runtime.provider, model: runtime.model, source: runtime.source }
+    } catch (err) {
+      const message = err?.message || String(err)
+      errors.push(`${runtime.source || runtime.provider}/${runtime.model}: ${message}`)
+      console.warn(`[WechatImageVision] 识图候选失败 media=${mediaId} runtime=${runtime.source || runtime.provider}/${runtime.model}: ${message}`)
+    }
   }
+
+  const finalMessage = errors.join('；').slice(0, 1000) || '识图模型不可用'
+  db.prepare(`UPDATE wechat_group_media_items SET vision_status='error', vision_error=?, updated_at=? WHERE id=?`).run(finalMessage, nowTimestamp(), mediaId)
+  return { ok: false, error: finalMessage, tried: errors }
 }
 
 export async function maybeDescribeWeChatImageMedia({ mediaItem, wait = false } = {}) {
