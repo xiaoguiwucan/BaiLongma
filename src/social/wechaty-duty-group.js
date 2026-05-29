@@ -8,7 +8,7 @@ import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChat
 import { isWeChatInternalIdLike, listWeChatGroupMembers, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
 import { searchMemes } from './meme-search.js'
 import { generateImageForWechat, isWechatImageGenerationRequest } from './image-generation-skill.js'
-import { describeWeChatImageMedia, maybeDescribeWeChatImageMedia, upsertWeChatImageMediaItem } from './wechat-image-vision.js'
+import { describeWeChatImageMedia, findWeChatImageMediaForRequest, maybeDescribeWeChatImageMedia, resolveWeChatImageMediaFile, upsertWeChatImageMediaItem } from './wechat-image-vision.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -869,6 +869,10 @@ ${imageVisionText}`.trim() : rawText
       })
       .catch(err => console.warn(`[Honcho] 显式群记忆写入失败：${err?.message || err}`))
 
+    if (await tryDirectStoredImageReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+      return
+    }
+
     if (await tryDirectImageGenerationReply(room, text, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
       return
     }
@@ -933,6 +937,30 @@ async function tryDirectMemeReply(room, text = '', { senderId = '', senderName =
   if (!result?.ok || !item?.url) return false
   console.log(`[WechatyMeme] 直接表情包回复 topic="${groupName}" sender="${senderName}" query="${query}" url="${item.url}"`)
   await sendWechatyDutyGroupMessage(room.id, item.url, { mentionId: senderId, mentionName: senderName })
+  return true
+}
+
+const STORED_IMAGE_SEND_RE = /(?:发|发送|转发|传|给我|发我|拿给我).{0,28}(?:那张|这张|刚才|刚刚|上面|前面|原图|图片|图|照片|山水画|截图)|(?:那张|这张|刚才|刚刚|上面|前面).{0,28}(?:发|发送|转发|传|给我|发我|拿给我)/u
+
+async function tryDirectStoredImageReply(room, text = '', { senderId = '', senderName = '', groupId = '', groupName = '' } = {}) {
+  const value = String(text || '')
+  if (!STORED_IMAGE_SEND_RE.test(value)) return false
+  if (isWechatImageGenerationRequest(value)) return false
+  const found = findWeChatImageMediaForRequest({ groupId, groupName, query: value, limit: 5 })
+  const item = found.items?.[0]
+  if (!item) {
+    await sendWechatyDutyGroupMessage(room.id, '我没在当前群的图片库里找到匹配的图。你把原图直接再发一次，我识别入库后就能转发。', { mentionId: senderId, mentionName: senderName })
+    return true
+  }
+  const resolved = resolveWeChatImageMediaFile(item)
+  if (!resolved.ok) {
+    await sendWechatyDutyGroupMessage(room.id, `找到了图片记录，但本地文件不可用：${resolved.error || 'unknown'}`, { mentionId: senderId, mentionName: senderName })
+    return true
+  }
+  console.log(`[WechatStoredImage] 转发已入库群图片 topic="${groupName}" sender="${senderName}" media_id=${item.id} score=${item._score || 0}`)
+  await room.say(FileBox.fromFile(resolved.filePath))
+  await sendWechatyDutyGroupMessage(room.id, '这张，已从当前群图片库发给你。', { mentionId: senderId, mentionName: senderName })
+  recordWeChatGroupAssistantReply({ groupId, groupName, reply: `[转发已入库图片] ${item.description || item.relative_path || item.id}`, targetMemberName: senderName, source: 'wechaty-stored-image' }).catch(() => {})
   return true
 }
 

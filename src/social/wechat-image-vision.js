@@ -311,6 +311,74 @@ export function getWeChatImageMemoryContext({ groupId = '', limit = 12, query = 
   return `<wechat-image-memory source="local-image-vision">\n${lines.join('\n')}\n</wechat-image-memory>`
 }
 
+function extractImageSearchTerms(text = '') {
+  const cleaned = normalizeText(text)
+    .replace(/^[@＠][^\s\u2005\u2006\u2007\u2008\u2009\u200a，,：:、]{1,40}/u, ' ')
+    .replace(/(?:发|发送|转发|传|给我|发我|拿给我|那张|这张|刚才|刚刚|上面|前面|原图|图片|图|照片|引用|一下|吧|啊|呀|哈|的)/gu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  const tokens = []
+  for (const match of cleaned.matchAll(/[\u4e00-\u9fa5A-Za-z0-9]{2,18}/gu)) {
+    const token = match[0]
+    if (/^(给我|发送|那张|这张|图片|照片|引用|前夜)$/u.test(token)) continue
+    tokens.push(token)
+  }
+  return [...new Set(tokens)].slice(0, 8)
+}
+
+export function findWeChatImageMediaForRequest({ groupId = '', groupName = '', query = '', limit = 8 } = {}) {
+  ensureSchema()
+  const db = getDB()
+  const gid = String(groupId || '').trim()
+  const name = String(groupName || '').trim()
+  const filters = [`description <> ''`]
+  const params = []
+  if (gid || name) {
+    const sub = []
+    if (gid) { sub.push('group_id = ?'); params.push(gid) }
+    if (name) { sub.push('group_name = ?'); params.push(name) }
+    filters.push(`(${sub.join(' OR ')})`)
+  }
+  const rows = db.prepare(`
+    SELECT * FROM wechat_group_media_items
+    WHERE ${filters.join(' AND ')}
+    ORDER BY described_at DESC, id DESC
+    LIMIT 120
+  `).all(...params)
+  const terms = extractImageSearchTerms(query)
+  const scored = rows.map(row => {
+    const hay = `${row.description || ''} ${row.source_text || ''} ${row.file_name || ''}`.toLowerCase()
+    let score = 0
+    for (const term of terms) {
+      const t = term.toLowerCase()
+      if (hay.includes(t)) score += Math.max(2, Math.min(8, t.length))
+    }
+    if (/山水|水墨|国画|山水画/u.test(query) && /山水|水墨|国画|群山|云雾|瀑布/u.test(row.description || '')) score += 10
+    if (/截图|报错|错误|502|hermes|Hermes/u.test(query) && /截图|报错|错误|502|Hermes|hermes|provider|重试/u.test(row.description || '')) score += 10
+    return { row, score }
+  }).filter(item => item.score > 0 || terms.length === 0)
+    .sort((a, b) => b.score - a.score || Number(b.row.id || 0) - Number(a.row.id || 0))
+    .slice(0, Math.min(Math.max(Number(limit || 8), 1), 30))
+  return { ok: true, terms, items: scored.map(item => ({ ...item.row, _score: item.score })) }
+}
+
+export function resolveWeChatImageMediaFile(row = {}) {
+  const rel = safeRelativePath(row.relative_path || '')
+  if (!rel) return { ok: false, error: 'invalid media path' }
+  const root = path.resolve(paths.userDir)
+  const filePath = path.resolve(root, rel)
+  const diff = path.relative(root, filePath)
+  if (!diff || diff.startsWith('..') || path.isAbsolute(diff)) return { ok: false, error: 'invalid media path' }
+  try {
+    const stat = fs.statSync(filePath)
+    if (!stat.isFile()) return { ok: false, error: 'media file not found' }
+    if (!isImageMime(inferMimeType(filePath, row.mime_type))) return { ok: false, error: 'not image' }
+    return { ok: true, filePath, bytes: stat.size, mimeType: inferMimeType(filePath, row.mime_type), relativePath: rel }
+  } catch {
+    return { ok: false, error: 'media file not found' }
+  }
+}
+
 export function getWeChatImageVisionStatus() {
   ensureSchema()
   const db = getDB()
