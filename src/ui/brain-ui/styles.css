@@ -5633,6 +5633,13 @@ body.person-card-mode .person-card-panel,
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.settings-subsection-title {
+  margin: 16px 0 8px;
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: .02em;
+}
 @media (max-width: 900px) {
   .wechaty-meme-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }

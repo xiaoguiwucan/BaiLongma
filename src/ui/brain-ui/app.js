@@ -5331,6 +5331,18 @@ function initTTSSettings() {
       setStatus("websearch-status-jina",    !!webSearch?.jinaConfigured,   !!webSearch?.jinaFromEnv);
       const searxngConfigured = !!webSearch?.searxngUrl || !!webSearch?.searxngFromEnv;
       setStatus("websearch-status-searxng", searxngConfigured, !!webSearch?.searxngFromEnv, webSearch?.effectiveSearxngUrl || "");
+      const bravePool = document.getElementById("websearch-status-brave-pool");
+      if (bravePool) {
+        const count = Number(webSearch?.braveConfiguredCount || 0);
+        bravePool.textContent = count ? `已配置 ${count}/${webSearch?.bravePoolSize || 10} 个 Key（本地 ${webSearch?.braveStoredCount || 0}，环境变量 ${webSearch?.braveEnvCount || 0}）` : "未配置（Brave 搜索跳过）";
+        bravePool.style.color = count ? "var(--ok, #4caf50)" : "var(--ink2)";
+      }
+      (webSearch?.braveSlots || []).forEach(slot => {
+        const el = document.getElementById(`websearch-status-brave-${slot.index}`);
+        if (!el) return;
+        el.textContent = slot.configured ? "已配置" : slot.fromEnv ? "环境变量" : "空";
+        el.style.color = (slot.configured || slot.fromEnv) ? "var(--ok, #4caf50)" : "var(--ink2)";
+      });
     } catch {}
   }
 
@@ -5342,11 +5354,21 @@ function initTTSSettings() {
       const serperEl  = document.getElementById("websearch-serper-key");
       const jinaEl    = document.getElementById("websearch-jina-key");
       const searxngEl = document.getElementById("websearch-searxng-url");
+      const braveInputs = Array.from(document.querySelectorAll(".websearch-brave-key"));
+      const braveClears = Array.from(document.querySelectorAll(".websearch-brave-clear"));
       const serperVal  = serperEl?.value?.trim();
       const jinaVal    = jinaEl?.value?.trim();
       const searxngVal = searxngEl?.value?.trim();
       if (serperVal)  updates.serperKey  = serperVal;
       if (jinaVal)    updates.jinaKey    = jinaVal;
+      updates.braveKeys = Array.from({ length: 10 }, (_, i) => {
+        const input = braveInputs.find(el => Number(el.dataset.index) === i);
+        return input?.value?.trim() || "";
+      });
+      updates.clearBraveKeyIndexes = braveClears
+        .filter(el => el.checked)
+        .map(el => Number(el.dataset.index))
+        .filter(n => Number.isInteger(n));
       // SearXNG URL：空字符串也要传，让用户能清掉
       if (searxngEl)  updates.searxngUrl = searxngVal || "";
       saveWebSearchBtn.disabled = true;
@@ -5361,6 +5383,8 @@ function initTTSSettings() {
           showFeedback(webSearchFeedback, "已保存");
           if (serperEl) serperEl.value = "";
           if (jinaEl)   jinaEl.value = "";
+          braveInputs.forEach(el => { el.value = ""; });
+          braveClears.forEach(el => { el.checked = false; });
           loadWebSearchSettings();
         } else {
           showFeedback(webSearchFeedback, data.error || "保存失败", true);

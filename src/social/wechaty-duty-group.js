@@ -10,6 +10,7 @@ import { searchMemes } from './meme-search.js'
 import { generateImageForWechat, isWechatImageGenerationRequest } from './image-generation-skill.js'
 import { describeWeChatImageMedia, findWeChatImageMediaForRequest, getWeChatImageVisionStatus, maybeDescribeWeChatImageMedia, resolveWeChatImageMediaFile, upsertWeChatImageMediaItem } from './wechat-image-vision.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
+import { searchPublicImages } from './public-image-search.js'
 import { paths } from '../paths.js'
 import path from 'path'
 import fs from 'fs'
@@ -27,6 +28,7 @@ const STARTING_RELOGIN_REQUIRED_MS = 90 * 1000
 const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
 const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
 const DIRECT_MEME_REQUEST_RE = /(?:斗图|表情包|梗图|gif|动图|发.{0,4}表情|来.{0,4}表情|整.{0,4}表情|发.{0,3}图|来.{0,3}图|开心|难过|愤怒|生气|鄙视|无语|笑死|吃瓜|破防).{0,8}(?:表情|表情包|梗图|图|gif)?|(?:表情|表情包|梗图|gif|动图)$/iu
+const DIRECT_PUBLIC_IMAGE_REQUEST_RE = /(?:找|搜|发|发送|来|给我|整).{0,12}(?:网络|网上|公开)?(?:图片|照片|壁纸|头像|配图|示意图|产品图|实拍图|图)(?!.*(?:表情包|表情|斗图|梗图|gif|动图))|(?:图片|照片|壁纸|头像|示意图).{0,8}(?:找|搜|发|来|给我)/iu
 const IMAGE_UNDERSTANDING_REQUEST_RE = /(?:总结|概括|精简|识别|解析|分析|看看|看下|查看|读|理解|解释|说说|提取|压成).{0,24}(?:图|图片|照片|截图|海报|表格|内容|文字)|(?:图|图片|照片|截图|海报|表格).{0,24}(?:总结|概括|精简|识别|解析|分析|看看|看下|查看|读|理解|解释|内容|文字)/iu
 const WECHAT_FOLLOWUP_WINDOW_MS = 10 * 1000
 const WECHAT_MEDIA_WAIT_MS = 3200
@@ -1317,6 +1319,10 @@ ${imageVisionText}`.trim() : rawText
       return
     }
 
+    if (!adminVerified && await tryDirectPublicImageReply(room, replyText, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
+      return
+    }
+
     if (!adminVerified && await tryDirectMemeReply(room, replyText, { senderId: senderId || '', senderName, groupId, groupName: topic })) {
       return
     }
@@ -1381,6 +1387,34 @@ function extractMemeQueryFromWechatText(text = '') {
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, 24) || '表情包'
+}
+
+function extractPublicImageQueryFromWechatText(text = '') {
+  return String(text || '')
+    .replace(/^[@＠][^\s      ，,：:、]{1,40}/u, '')
+    .replace(/https?:\/\/\S+/giu, ' ')
+    .replace(/(?:发|发送|来|整|给我|找|搜|搜索|要|一个|一张|张|个|一下|吧|啊|呀|哈|公开|网络|网上)/giu, ' ')
+    .replace(/(?:图片|照片|壁纸|头像|配图|示意图|产品图|实拍图|图)/giu, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .slice(0, 40) || '有趣图片'
+}
+
+async function tryDirectPublicImageReply(room, text = '', { senderId = '', senderName = '', groupId = '', groupName = '' } = {}) {
+  if (!DIRECT_PUBLIC_IMAGE_REQUEST_RE.test(String(text || ''))) return false
+  const query = extractPublicImageQueryFromWechatText(text)
+  const result = await searchPublicImages({ query, count: 8, provider: 'auto' })
+  const items = Array.isArray(result?.items) ? result.items : []
+  const item = items[Math.floor(Math.random() * Math.max(1, items.length))]
+  if (!result?.ok || !item?.url) {
+    console.warn(`[WechatyImageSearch] 网络图片搜索失败 topic="${groupName}" sender="${senderName}" query="${query}" error="${result?.error || 'unknown'}"`)
+    await sendWechatyDutyGroupMessage(room.id, `我这边没搜到可直接发送的公开图片：${result?.error || '图片搜索失败'}`, { mentionId: senderId, mentionName: senderName })
+    return true
+  }
+  console.log(`[WechatyImageSearch] 直接网络图片回复 topic="${groupName}" sender="${senderName}" query="${query}" provider="${result.provider}" url="${item.url}"`)
+  await sendWechatyDutyGroupMessage(room.id, item.url, { mentionId: senderId, mentionName: senderName })
+  recordWeChatGroupAssistantReply({ groupId, groupName, reply: `[网络图片] ${query} ${item.url}`, targetMemberName: senderName, source: 'wechaty-public-image-search' }).catch(() => {})
+  return true
 }
 
 async function tryDirectMemeReply(room, text = '', { senderId = '', senderName = '', groupId = '', groupName = '' } = {}) {

@@ -88,6 +88,33 @@ export const TOOL_SCHEMAS = {
     }
   },
 
+  public_image_search: {
+    type: 'function',
+    function: {
+      name: 'public_image_search',
+      description: 'Search public web images/photos/GIFs for WeChat group replies or normal chat. Use for requests like 找张图、发个网络图片、搜一张猫图、找产品图. Returns public HTTPS image/GIF URLs only; never use local/private files. After selecting one image URL, send it with send_message; Wechaty will deliver it as an image instead of exposing the link.',
+      parameters: {
+        type: 'object',
+        properties: {
+          query: {
+            type: 'string',
+            description: 'Image search keywords, e.g. 猫咪, NAS 机柜, ESP32 开发板. Keep it concise.'
+          },
+          provider: {
+            type: 'string',
+            enum: ['auto', 'brave', 'bing'],
+            description: 'Image provider. auto tries Brave key pool first, then Bing image fallback.'
+          },
+          count: {
+            type: 'number',
+            description: 'Number of candidate images, default 8, max 12.'
+          }
+        },
+        required: ['query']
+      }
+    }
+  },
+
   read_file: {
     type: 'function',
     function: {

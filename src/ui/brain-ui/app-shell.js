@@ -161,7 +161,7 @@ const createSettingsModal = () => `
         <button class="settings-nav-item" data-tab="database" type="button">数据库</button>
         <button class="settings-nav-item" data-tab="skills" type="button">Skill 技能</button>
         <button class="settings-nav-item" data-tab="voice" type="button">语音识别</button>
-        <button class="settings-nav-item" data-tab="web-search" type="button">上网搜索</button>
+        <button class="settings-nav-item" data-tab="web-search" type="button">网络能力</button>
         <button class="settings-nav-item" data-tab="security" type="button">安全沙箱</button>
         <button class="settings-nav-item" data-tab="update" type="button">更新</button>
       </nav>
@@ -1198,8 +1198,21 @@ const createSettingsModal = () => `
         <!-- ── 上网搜索 tab ── -->
         <div class="settings-tab" data-tab="web-search">
           <div class="settings-section">
-            <div class="settings-section-label">搜索引擎</div>
-            <p class="settings-hint">Agent 调用 web_search 时会按 Serper → SearXNG → Bing → Jina → DuckDuckGo 顺序兜底。Bing 和 DuckDuckGo 不需要配置即可使用；如果你有 Serper / Jina 的 key，质量会显著提升。</p>
+            <div class="settings-section-label">网络搜索 / 图片搜索</div>
+            <p class="settings-hint">Agent 调用 web_search 时会优先使用 Brave Key 池；某个 Key 无额度、限流或认证失败会自动切到下一个。Brave 全部不可用时再按 Serper → SearXNG → Bing → Jina → DuckDuckGo 兜底。微信群“找图/发网络图片”会优先使用 Brave Images，再用 Bing Images 兜底。</p>
+
+            <div class="settings-subsection-title">Brave Search Key 池（最多 10 个）</div>
+            <p class="settings-hint">Brave 同时用于网页搜索和公开网络图片搜索。输入新 Key 会覆盖对应槽位；留空表示保留原值；勾选“清空”会删除该槽位。</p>
+            <div class="wechaty-meme-grid" id="websearch-brave-key-grid">
+              ${Array.from({ length: 10 }, (_, i) => `
+                <label>
+                  <span>Brave Key ${i + 1}</span>
+                  <input class="settings-input websearch-brave-key" type="password" data-index="${i}" placeholder="留空保留">
+                  <label class="settings-label" style="margin-top:6px;font-size:12px;color:var(--ink2);"><input type="checkbox" class="websearch-brave-clear" data-index="${i}"> 清空此 Key</label>
+                  <small class="settings-config-info" id="websearch-status-brave-${i}">—</small>
+                </label>
+              `).join('')}
+            </div>
 
             <div class="settings-row">
               <label class="settings-label" for="websearch-serper-key">Serper API Key</label>
@@ -1222,6 +1235,10 @@ const createSettingsModal = () => `
 
           <div class="settings-section">
             <div class="settings-section-label">当前状态</div>
+            <div class="settings-config-row">
+              <span class="settings-config-type">Brave Key 池</span>
+              <span class="settings-config-info" id="websearch-status-brave-pool">—</span>
+            </div>
             <div class="settings-config-row">
               <span class="settings-config-type">Serper</span>
               <span class="settings-config-info" id="websearch-status-serper">—</span>
@@ -1305,6 +1322,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.60</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">网络能力大版本：Brave Key 池、网络图片直接发图、链接真实查看防假执行。</p>
+                <ul class="release-note-points">
+                  <li>网络能力菜单新增 10 个 Brave Search Key 槽位，无额度/限流会自动轮换。</li>
+                  <li>web_search 优先 Brave，全部不可用时回落 Serper、SearXNG、Bing、Jina、DuckDuckGo。</li>
+                  <li>微信群找图/发网络图片会直接发图片/GIF；链接查看必须真实 fetch_url/browser_read，禁止只说“正在查看”。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.59</span>

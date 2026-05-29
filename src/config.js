@@ -1787,6 +1787,28 @@ const WEB_SEARCH_KEY_MAP = {
   jinaKey:    'jina_api_key',
 }
 
+const BRAVE_KEY_POOL_SIZE = 10
+
+function normalizeBraveKeyList(value = []) {
+  const input = Array.isArray(value) ? value : String(value || '').split(/[,\n;]/)
+  const out = []
+  for (const item of input) {
+    const key = String(item || '').trim()
+    if (!key) continue
+    if (out.includes(key)) continue
+    out.push(key)
+    if (out.length >= BRAVE_KEY_POOL_SIZE) break
+  }
+  return out
+}
+
+function readEnvBraveKeys() {
+  return normalizeBraveKeyList([
+    process.env.BRAVE_SEARCH_API_KEY || '',
+    ...String(process.env.BRAVE_SEARCH_API_KEYS || '').split(/[,\n;]/),
+  ])
+}
+
 function readWebSearchBlock() {
   try {
     const raw = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))
@@ -1794,9 +1816,10 @@ function readWebSearchBlock() {
       serperKey:  typeof raw.serper_api_key === 'string' ? raw.serper_api_key : '',
       searxngUrl: typeof raw.searxng_url    === 'string' ? raw.searxng_url    : '',
       jinaKey:    typeof raw.jina_api_key   === 'string' ? raw.jina_api_key   : '',
+      braveKeys:  normalizeBraveKeyList(raw.brave_search_keys || raw.braveSearchKeys || []),
     }
   } catch {
-    return { serperKey: '', searxngUrl: '', jinaKey: '' }
+    return { serperKey: '', searxngUrl: '', jinaKey: '', braveKeys: [] }
   }
 }
 
@@ -1808,9 +1831,22 @@ export function getWebSearchConfig() {
   const envSerper  = process.env.SERPER_API_KEY || ''
   const envJina    = process.env.JINA_API_KEY   || ''
   const envSearxng = process.env.SEARXNG_URL    || ''
+  const envBraveKeys = readEnvBraveKeys()
+  const storedBraveKeys = normalizeBraveKeyList(stored.braveKeys)
+  const braveSlots = Array.from({ length: BRAVE_KEY_POOL_SIZE }, (_, i) => ({
+    index: i,
+    configured: !!storedBraveKeys[i],
+    fromEnv: !storedBraveKeys[i] && !!envBraveKeys[i],
+  }))
   return {
     serperConfigured: !!(stored.serperKey  || envSerper),
     jinaConfigured:   !!(stored.jinaKey    || envJina),
+    braveConfigured:  !!(storedBraveKeys.length || envBraveKeys.length),
+    braveConfiguredCount: storedBraveKeys.length + Math.max(0, envBraveKeys.length - storedBraveKeys.length),
+    braveStoredCount: storedBraveKeys.length,
+    braveEnvCount:    envBraveKeys.length,
+    bravePoolSize:    BRAVE_KEY_POOL_SIZE,
+    braveSlots,
     // 输入框只回显 stored 值，避免用户以为能编辑 env 值
     searxngUrl:       stored.searxngUrl,
     // effective URL（含 env 兜底），UI 可显示在状态行
@@ -1824,10 +1860,15 @@ export function getWebSearchConfig() {
 // Backend-only：读明文 key。供 src/capabilities/executor.js 内部用，不要给前端
 export function getWebSearchCredentials() {
   const stored = readWebSearchBlock()
+  const braveKeys = normalizeBraveKeyList([
+    ...(stored.braveKeys || []),
+    ...readEnvBraveKeys(),
+  ])
   return {
     serperKey:  stored.serperKey  || process.env.SERPER_API_KEY || '',
     searxngUrl: stored.searxngUrl || process.env.SEARXNG_URL    || '',
     jinaKey:    stored.jinaKey    || process.env.JINA_API_KEY   || '',
+    braveKeys,
   }
 }
 
@@ -1844,6 +1885,21 @@ export function setWebSearchConfig(updates) {
     }
     if (trimmed) next[cfgField] = trimmed
     else delete next[cfgField]
+  }
+  if (Array.isArray(updates?.braveKeys) || Array.isArray(updates?.clearBraveKeyIndexes)) {
+    const current = normalizeBraveKeyList(existing.brave_search_keys || [])
+    const slots = Array.from({ length: BRAVE_KEY_POOL_SIZE }, (_, i) => current[i] || '')
+    const clear = new Set((updates.clearBraveKeyIndexes || []).map(n => Number(n)).filter(n => Number.isInteger(n) && n >= 0 && n < BRAVE_KEY_POOL_SIZE))
+    if (Array.isArray(updates.braveKeys)) {
+      for (let i = 0; i < Math.min(BRAVE_KEY_POOL_SIZE, updates.braveKeys.length); i++) {
+        const value = String(updates.braveKeys[i] || '').trim()
+        if (value) slots[i] = value
+      }
+    }
+    for (const i of clear) slots[i] = ''
+    const normalized = normalizeBraveKeyList(slots)
+    if (normalized.length) next.brave_search_keys = normalized
+    else delete next.brave_search_keys
   }
   writeStoredConfig(next)
 }

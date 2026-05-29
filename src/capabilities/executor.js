@@ -8,6 +8,7 @@ import { searchMemories, searchMemoriesByKeywords, insertMemory, upsertMemoryByM
 import { emitEvent, emitUICommand, emitACUIEvent, hasACUIClient, addActiveUICard, removeActiveUICard, getActiveUICards, setStickyEvent } from '../events.js'
 import { dispatchSocialMessage } from '../social/dispatch.js'
 import { execMemeSearch } from '../social/meme-search.js'
+import { searchPublicImages } from '../social/public-image-search.js'
 import { extractWeChatQuoteContext } from '../social/wechat-quote-context.js'
 import { callCapability, listCapabilities } from '../providers/registry.js'
 import { isDailyLimitReached } from '../quota.js'
@@ -241,6 +242,7 @@ const TOOL_RISK = {
   exec_command: 'high',
   kill_process: 'high',
   web_search: 'high',
+  public_image_search: 'high',
   fetch_url: 'high',
   browser_read: 'high',
   speak: 'high',
@@ -298,6 +300,8 @@ function summarizeToolExecution(name, args = {}) {
       return `web_search(${String(args.query || args.q || args.keyword || '?').slice(0, 120)})`
     case 'meme_search':
       return `meme_search(${String(args.query || args.q || args.keyword || '?').slice(0, 80)})`
+    case 'public_image_search':
+      return `public_image_search(${String(args.query || args.q || args.keyword || '?').slice(0, 80)})`
     case 'send_message':
     case 'express':
       return `${name} -> ${args.target_id || '(unknown)'}`
@@ -422,6 +426,13 @@ async function executeToolUnchecked(name, args, context = {}) {
         return await execWebSearch(args, context)
       case 'meme_search':
         return await execMemeSearch(args)
+      case 'public_image_search':
+        return JSON.stringify(await searchPublicImages({
+          query: args.query || args.q || args.keyword || '',
+          count: args.count || args.limit || 8,
+          provider: args.provider || 'auto',
+          signal: context.signal,
+        }))
       case 'fetch_url':
         return await execFetchUrl(args, context)
       case 'browser_read':
@@ -757,6 +768,17 @@ function maybePrependWechatQuoteCitation(content = '', context = {}) {
   return `${line}\n${String(content || '').trim()}`
 }
 
+function isInvalidWechatLinkInspectionPlaceholderReply(content = '', context = {}) {
+  const social = context.currentSocial || {}
+  if (social.platform !== 'wechaty-duty-group') return false
+  const userText = String(social.user_text || social.raw_user_text || '').trim()
+  if (!/https?:\/\//i.test(userText)) return false
+  if (!/(?:看|看看|看下|查看|打开|读|总结|分析|判断|这个链接|网站|网页|url|链接)/iu.test(userText)) return false
+  const raw = String(content || '').trim()
+  if (!raw || raw.length > 120) return false
+  return /(?:我(?:先)?看(?:看|下)|我去看|正在(?:查看|打开|读取|分析)|稍等|等我(?:看|查)|我(?:来)?查(?:一下|下)|马上(?:看|查)|这就(?:看|查)|I'll\s+(?:check|take a look)|checking)/iu.test(raw)
+}
+
 // send_message：投递到指定渠道（本地 SSE 或外部平台），并写入 conversations 表
 async function execSendMessage({ target_id, content, channel = 'AUTO' }, context = {}) {
   if (!target_id) return '错误：未提供 target_id'
@@ -788,6 +810,9 @@ async function execSendMessage({ target_id, content, channel = 'AUTO' }, context
   if (!cleanedContent) return '错误：消息内容为空'
   if (isInvalidWechatMentionSkipReply(cleanedContent, context)) {
     return '错误：微信平台已经确认当前群消息 @ 了你，不能回复“没叫我/跳过/已回复/回复完毕/无需回应”等内部状态。请重新调用 send_message，直接回答用户去掉 @ 后的实际请求。'
+  }
+  if (isInvalidWechatLinkInspectionPlaceholderReply(cleanedContent, context)) {
+    return '错误：用户要求查看链接/网站，不能只回复“正在查看/我看看/稍等”。请先真实调用 fetch_url；如果抓取为空或需要渲染，再调用 browser_read。拿到工具结果后再调用 send_message 汇报真实内容或失败原因。'
   }
 
   const delivery = resolveDeliveryTarget(resolvedId, channel, context)
@@ -1688,6 +1713,66 @@ function normalizeResults(raw, limit) {
   return out
 }
 
+function parseBraveWebResults(data = {}, limit = 5) {
+  const rows = Array.isArray(data.web?.results) ? data.web.results : Array.isArray(data.results) ? data.results : []
+  const raw = rows.map(r => ({
+    title: r.title || r.name || '',
+    url: r.url || r.link || '',
+    snippet: r.description || r.snippet || r.extra_snippets?.join(' ') || '',
+  }))
+  return normalizeResults(raw, limit)
+}
+
+// web_search 引擎0：Brave Search API（支持 Key 池轮换；配额/认证失败自动尝试下一个 key）
+async function searchViaBrave(query, limit, signal) {
+  const { braveKeys = [] } = readWebConfig()
+  if (!Array.isArray(braveKeys) || !braveKeys.length) return null
+  const failures = []
+  for (let i = 0; i < braveKeys.length; i++) {
+    const key = String(braveKeys[i] || '').trim()
+    if (!key) continue
+    const url = new URL('https://api.search.brave.com/res/v1/web/search')
+    url.searchParams.set('q', query)
+    url.searchParams.set('count', String(Math.min(Math.max(limit, 1), 20)))
+    url.searchParams.set('safesearch', 'moderate')
+    url.searchParams.set('search_lang', hasCJK(query) ? 'zh-hans' : 'en')
+    const merged = createMergedAbortSignal(signal, 12000)
+    try {
+      const res = await fetch(url, {
+        headers: {
+          Accept: 'application/json',
+          'X-Subscription-Token': key,
+          'User-Agent': WEB_HEADERS['User-Agent'],
+        },
+        signal: merged?.signal,
+      })
+      const text = await res.text()
+      merged?.cleanup()
+      let data = null
+      try { data = JSON.parse(text) } catch {}
+      if (!res.ok) {
+        const quotaLike = [401, 402, 403, 429].includes(res.status)
+        const reason = `key#${i + 1} http ${res.status}${quotaLike ? ' (key/quota, try next)' : ''}: ${text.slice(0, 160)}`
+        failures.push(reason)
+        console.log(`[web_search] brave ${reason}`)
+        if (quotaLike) continue
+        continue
+      }
+      const results = parseBraveWebResults(data || {}, limit)
+      if (results.length === 0) {
+        failures.push(`key#${i + 1} empty results`)
+        continue
+      }
+      return { ok: true, results, source: `brave#${i + 1}` }
+    } catch (err) {
+      merged?.cleanup()
+      if (err.name === 'AbortError') throw err
+      failures.push(`key#${i + 1} network: ${err.message || err}`)
+    }
+  }
+  return { ok: false, reason: failures.join('; ') || 'all brave keys failed' }
+}
+
 // web_search 引擎1：Serper.dev（Google SERP JSON API，最稳定）
 async function searchViaSerper(query, limit, signal) {
   const { serperKey } = readWebConfig()
@@ -1885,8 +1970,9 @@ async function execWebSearch(args, context = {}) {
 
   console.log(`[web_search] ${truncateForLog(query)}`)
 
-  // 依次尝试：Serper → SearXNG → Bing（国内可访问）→ Jina Search → DuckDuckGo（兜底）
+  // 依次尝试：Brave Key 池 → Serper → SearXNG → Bing（国内可访问）→ Jina Search → DuckDuckGo（兜底）
   const engines = [
+    ['brave',    searchViaBrave],
     ['serper',   searchViaSerper],
     ['searxng',  searchViaSearXNG],
     ['bing',     searchViaBing],
@@ -1974,6 +2060,16 @@ async function fetchViaDirect(url, signal) {
     merged?.cleanup()
     if (!res.ok) return { ok: false, status: res.status }
     const contentType = res.headers.get('content-type') || ''
+    if (/^image\//i.test(contentType)) {
+      return {
+        ok: true,
+        status: res.status,
+        title: '图片链接',
+        body: `这是一个公开网络图片链接。\nURL: ${url}\nContent-Type: ${contentType}\n如果用户要求“发出来”，可把该 HTTPS 图片 URL 放进 send_message；微信群会按图片发送。若用户要求识别图片内容，需要走图片理解模型。`,
+        content_type: contentType,
+        media_type: 'image',
+      }
+    }
     if (contentType && !/text|html|xml|json/i.test(contentType)) {
       return { ok: false, status: res.status, content_type: contentType }
     }
@@ -2010,6 +2106,8 @@ async function execFetchUrl(args, context = {}) {
   let text = ''
   let fetchSource = 'jina'
   let httpStatus = null
+  let contentType = ''
+  let mediaType = ''
 
   const jinaResult = await fetchViaJina(url, context.signal)
   if (jinaResult) {
@@ -2021,6 +2119,8 @@ async function execFetchUrl(args, context = {}) {
     fetchSource = 'direct'
     const directResult = await fetchViaDirect(url, context.signal)
     httpStatus = directResult.status
+    contentType = directResult.content_type || ''
+    mediaType = directResult.media_type || ''
 
     if (!directResult.ok) {
       const hint = directResult.low_value
@@ -2059,6 +2159,8 @@ async function execFetchUrl(args, context = {}) {
     tool: 'fetch_url',
     url,
     status: httpStatus,
+    content_type: contentType,
+    media_type: mediaType,
     fetch_source: fetchSource,
     title,
     content,

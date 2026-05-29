@@ -385,6 +385,7 @@ const PARAM_ALIASES = {
   delete_file: { file: 'path', filename: 'path' },
   exec_command: { cmd: 'command', shell: 'command', bg: 'background' },
   web_search: { q: 'query', keyword: 'query', keywords: 'query', search: 'query' },
+  public_image_search: { q: 'query', keyword: 'query', keywords: 'query', search: 'query' },
   fetch_url: { link: 'url', href: 'url', uri: 'url' },
   browser_read: { link: 'url', href: 'url', uri: 'url' },
   search_memory: { q: 'keyword', query: 'keyword', term: 'keyword' },
@@ -441,6 +442,8 @@ function summarizeToolCall(name, args = {}) {
       return `list_dir(${args.path || args.dir || args.directory || '.'})`
     case 'web_search':
       return `web_search(${String(args.query || args.q || args.keyword || '?').slice(0, 80)})`
+    case 'public_image_search':
+      return `public_image_search(${String(args.query || args.q || args.keyword || '?').slice(0, 80)})`
     case 'fetch_url':
       return `fetch_url(${String(args.url || args.link || args.href || '?').slice(0, 80)})`
     case 'browser_read':
@@ -506,6 +509,27 @@ function isInvalidWechatMentionSkipContent(content = '', toolContext = {}) {
   return /(?:没(?:有)?叫我|没@我|不是@我|不(?:需要|用)回应|无需回应|跳过|skip|已(?:经)?回复|回复(?:已)?完成|回复完毕|发送(?:已)?完成|发送完毕|无(?:需|须)(?:额外|再次|继续|进一步)?(?:回复|操作|补充)|不用再回|本轮结束|对话已(?:完成|结束))/iu.test(compact)
 }
 
+function requiresWechatLinkInspection(toolContext = {}) {
+  const social = toolContext.currentSocial || {}
+  if (social.platform !== 'wechaty-duty-group') return false
+  const text = String(social.user_text || social.raw_user_text || '').trim()
+  if (!/https?:\/\//i.test(text)) return false
+  return /(?:看|看看|看下|查看|打开|读|总结|分析|判断|这个链接|网站|网页|url|链接|怎么打不开|打不开|能打开吗|是啥|干啥)/iu.test(text)
+}
+
+function hasSuccessfulWebInspection(toolResults = []) {
+  return toolResults.some(item => {
+    if (!['fetch_url', 'browser_read'].includes(item?.name)) return false
+    const raw = String(item.result || '')
+    try {
+      const parsed = JSON.parse(raw)
+      return parsed?.ok === true
+    } catch {
+      return !/\"ok\"\s*:\s*false|^(错误|请求失败|执行失败)/i.test(raw)
+    }
+  })
+}
+
 const TOOL_LOOP_LIMITS = {
   maxRounds: 100,
   maxTotalCalls: 30,
@@ -520,6 +544,7 @@ const HIGH_RISK_TOOLS = new Set([
   'exec_command',
   'kill_process',
   'web_search',
+  'public_image_search',
   'fetch_url',
   'browser_read',
   'speak',
@@ -549,6 +574,7 @@ const PARALLEL_SAFE_TOOLS = new Set([
   'read_file',
   'list_dir',
   'web_search',
+  'public_image_search',
   'fetch_url',
   'browser_read',
   'search_memory',
@@ -869,8 +895,13 @@ export async function callLLM({
         toolLoopState.consecutiveFailures = 0
       } else {
         // 真正开始执行前通知 UI —— 让用户知道当前停留在哪一步的工具上
-        onToolExecute?.(tc.name, normalizedArgs)
-        result = await executeTool(tc.name, normalizedArgs, { ...toolContext, signal })
+        if (tc.name === 'send_message' && requiresWechatLinkInspection(toolContext) && !hasSuccessfulWebInspection(toolResults)) {
+          result = '错误：当前微信群请求包含 URL 且用户要求查看/总结/分析链接。禁止先发结论或“正在查看”。请先调用 fetch_url 真实读取链接；如果 fetch_url 失败、内容为空或需要 JS，再调用 browser_read。拿到工具结果后再 send_message。'
+          if (!suppressToolLogs) console.log('[WechatyLinkGuard] 拦截未真实读取链接前的 send_message')
+        } else {
+          onToolExecute?.(tc.name, normalizedArgs)
+          result = await executeTool(tc.name, normalizedArgs, { ...toolContext, signal })
+        }
         recordToolLoopOutcome(toolLoopState, tc.name, fingerprint, result)
       }
       throwIfAborted(signal)

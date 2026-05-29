@@ -10,6 +10,7 @@ const TOOL_ZH = {
   kill_process: "终止进程",
   list_processes: "列出进程",
   web_search: "搜索网页",
+  public_image_search: "搜索网络图片",
   fetch_url: "抓取网页",
   browser_read: "浏览器读取网页",
   search_memory: "检索记忆",
@@ -66,6 +67,7 @@ const TOOL_ICON = {
   kill_process: "🛑",
   list_processes: "📋",
   web_search: "🔎",
+  public_image_search: "🖼️",
   fetch_url: "🌐",
   browser_read: "🧭",
   search_memory: "🔍",
@@ -364,6 +366,7 @@ export class ThoughtStream {
       case "kill_process":
         return a.pid ? `pid ${a.pid}` : "";
       case "web_search":
+      case "public_image_search":
         return this.compactText(a.query || parsed?.query || "", 60);
       case "fetch_url":
       case "browser_read":
@@ -708,4 +711,3 @@ export class ThoughtStream {
     this.lastToolEl = null;
   }
 }
-

@@ -2,6 +2,29 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.60 - 2026-05-29
+
+### 新增
+- 新增“网络能力”设置页：原“上网搜索”升级为网络能力菜单，集中管理网页搜索、公开网络图片搜索和 Brave Key 池。
+- 新增 Brave Search Key 池，最多 10 个 Key。`web_search` 会优先调用 Brave Search API；当某个 Key 认证失败、无额度、被限流或返回 401/402/403/429 时，自动切换到下一个 Key。
+- Brave 全部不可用时，`web_search` 自动回落到原始兜底链：Serper → SearXNG → Bing → Jina → DuckDuckGo。
+- 新增 `public_image_search` 工具：用于搜索公开网络图片/照片/GIF。默认优先 Brave Images，Brave 不可用时使用 Bing Images 兜底。
+- 微信群里“找图/发网络图片/发照片/发壁纸/发示意图”等请求会走公开网络图片搜索，并通过 Wechaty `FileBox.fromUrl` 直接发图片/GIF，不再裸发链接。
+
+### 修复
+- 修复微信群链接查看“只回复正在查看但没有真实调用工具”的可信度问题。现在如果用户给 URL 并要求查看/总结/分析，提示词会强制先 `fetch_url`，失败或需要 JS 时再 `browser_read`。
+- `send_message` 增加微信群链接查看兜底拦截：对于带 URL 的查看请求，禁止只发送“我看看/正在查看/稍等/我查一下”等占位回复，必须先拿到真实工具结果再回复。
+- `fetch_url` 对公开图片 URL 返回可读的图片元数据提示，不再把图片 content-type 简单当作网页抓取失败。
+
+### UI
+- 设置页新增 Brave Key 1~10 槽位，每个槽位支持输入覆盖、留空保留、勾选清空，并显示本地/环境变量配置状态。
+- 工具流新增 `public_image_search` 的中文名称和图标展示。
+
+### 验证
+- 通过 `node --check src/config.js src/social/public-image-search.js src/capabilities/executor.js src/social/wechaty-duty-group.js src/social/wechat-groups.js src/capabilities/schemas.js src/llm.js src/ui/brain-ui/app.js`。
+- 通过新增 `npm run test:public-image-search`，验证 Brave Key 池在第 1 个 Key 429 后会自动切到第 2 个 Key，并支持清空 Key。
+- 通过 `npm run test:tool-router`、`npm run test:wechat-guard`、`npm run test:social-targets`、`npm run test:wechat-quote-citation`。
+
 ## v0.4.59 - 2026-05-29
 
 ### 修复

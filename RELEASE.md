@@ -1,4 +1,35 @@
 
+## v0.4.60 - 2026-05-29
+
+### 发布主题
+网络能力大版本：Brave Key 池、网页搜索优先 Brave、网络图片直接发图、链接真实查看防假执行。
+
+### 更新内容
+1. 新增 Brave Search Key 池，最多 10 个 Key。
+2. `web_search` 优先走 Brave Search API；某个 Key 无额度、认证失败或限流时自动切换下一个 Key。
+3. Brave 全部不可用时，继续使用原始兜底链：Serper → SearXNG → Bing → Jina → DuckDuckGo。
+4. 新增 `public_image_search` 工具，公开网络图片/照片/GIF 默认优先 Brave Images，失败后使用 Bing Images 兜底。
+5. 微信群“找图/发网络图片/发照片/发壁纸/发示意图”等请求会直接把图片/GIF 发到群里，不再裸发链接。
+6. 微信群链接查看增加硬规则：带 URL 的“查看/总结/分析”请求必须先调用 `fetch_url`，必要时升级 `browser_read`。
+7. `send_message` 增加拦截：禁止在链接查看请求里只回复“我看看/正在查看/稍等”，防止假执行。
+8. 设置页“上网搜索”升级为“网络能力”，新增 Brave Key 1~10 管理槽位，支持覆盖、保留、清空和状态显示。
+
+### 部署方法
+```bash
+git clone https://github.com/xiaoguiwucan/BaiLongma.git
+cd BaiLongma
+git checkout v0.4.60
+npm install
+./start-jarvis-background.sh
+```
+
+### 验证
+- `npm run test:public-image-search`
+- `npm run test:tool-router`
+- `npm run test:wechat-guard`
+- `npm run test:social-targets`
+- `npm run test:wechat-quote-citation`
+
 ## v0.4.59 - 2026-05-29
 
 ### 发布主题

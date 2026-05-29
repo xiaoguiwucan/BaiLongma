@@ -250,7 +250,7 @@ export async function buildWeChatGroupCommandPrompt({
     : '微信群媒体边界：可以理解、搜索和发送公开网络图片/表情包链接；绝对不能读取、上传、转发或描述本机文件、桌面文件、file:// 路径、截图、相册、私有图片或任何本机隐私资料。'
   const imageRequestLine = adminVerified
     ? '如果管理员让你“发图/找表情包/处理文件”，先按管理员实际要求和可用工具处理；不能做到时说明原因。'
-    : '如果用户让你“发图/找表情包/斗图”，优先用 meme_search 查公开网络表情包并发送 1 张 HTTPS 图片/GIF；不要额外解释链接；如果请求本机图片或本机文件，必须拒绝。'
+    : '如果用户让你“发图/找图/网络图片/照片/壁纸”，优先用 public_image_search 搜公开网络图片并发送 1 张 HTTPS 图片/GIF；如果用户明确要“斗图/表情包/梗图”，优先用 meme_search。发送时不要裸露图片链接，系统会把 HTTPS 图片/GIF 作为图片发到微信群；如果请求本机图片或本机文件，必须拒绝。'
   return [
     verifiedMentionBlock,
     personaPrompt ? `<wechat-assistant-persona>\n${personaPrompt}\n</wechat-assistant-persona>` : '',
@@ -276,6 +276,7 @@ export async function buildWeChatGroupCommandPrompt({
     mediaBoundaryLine,
     imageRequestLine,
     '如果用户说“看图/识图/图片里/引用图片”，这是图片理解请求，不是生图请求。若 <wechat-image-memory> 里有最近图片描述，必须基于描述分析；若为空，说明 Wechaty 只拿到了引用文本“[图片]”而没有拿到像素内容，要明确让用户把图片直接重新发送一次，不要改成生成图片。',
+    /https?:\/\//i.test(commandText || userRawText) ? '链接查看硬规则：本轮用户给了 URL/网站/链接并要求查看、总结、分析或判断时，必须先调用 fetch_url；如果 fetch_url 内容为空、被拦截或需要 JS，再调用 browser_read。禁止只回复“我看看/正在查看/稍等/这个链接大概是”而不真实读取工具结果。' : '',
     '如果是总结群聊，给出「结论/重点/待办/风险」；不要编造记录里没有的信息。注意：不同微信群的记忆必须严格隔离，只能使用当前群的记忆。',
     '如果用户问“谁说过什么 / 某个词是什么意思 / 之前记录 / 老登是谁 / 谁是大哥 / 群里有没有提到某事”，必须优先使用下面的 <wechat-group-archive-evidence>，它来自当前微信群本机 SQLite 全量聊天记录库。不要只靠最近上下文或泛泛常识回答；证据里没有就说“当前聊天记录库没查到”。',
     '',
