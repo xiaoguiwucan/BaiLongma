@@ -2,10 +2,27 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.52 - 2026-05-29
+
+### 实验 / 结论
+- 新增本机调试接口 `POST /social/wechaty-duty-group/test-native-mention`，用于向 Web 微信 `webwxsendmsg` 注入 `MsgSource/atuserlist` 做系统级 @ 兼容性测试。
+- 已在“值班群”对成员“风”实测 4 种载荷：`msgsource`、`msgsource-both`、`msgsource-lower`、`top-level-msgsource`；微信接口均返回 `Ret=0`，消息也能发出。
+- 但 Mac 微信会话列表只显示普通未读数和文本预览，没有出现系统级「有人@我」提示，说明当前 `wechaty-puppet-wechat4u` / Web 微信发送接口会忽略或剥离这些 @ 元数据。
+
+### 行为说明
+- 生产默认发送逻辑没有改成 MsgSource 方案，仍保持 v0.4.51 的“可见文本 @真实群昵称”兜底，避免把失败实验影响到正常回复。
+- 结论更新为：Web 微信路线目前只能稳定做到可见 `@昵称`，不能稳定做到微信系统级 `[有人@我]`。若必须实现第二张图那种系统通知，需要转向 Mac 微信原生 UI 自动化或支持真实 mention 的协议/puppet。
+
+### 验证
+- 已重启当前贾维斯 Electron 程序，新接口生效，微信群连接恢复为 `connected / online`。
+- 已向“值班群”发送 4 条实验消息，并通过本机 Mac 微信会话列表观察结果。
+- 通过 `node --check src/social/wechaty-duty-group.js`、`node --check src/api.js`。
+- 通过 `npm run test:social-targets`、`npm run test:wechat-guard`。
+
 ## v0.4.51 - 2026-05-29
 
 ### 修复
-- 修复 Web 微信 / `wechaty-puppet-wechat4u` 发送 @ 时只显示一个空 `@`、手机端收不到 @ 提醒的问题。
+- 修复 Web 微信 / `wechaty-puppet-wechat4u` 发送 @ 时只显示一个空 `@`、@ 后直接接正文、或 @ 错昵称的问题；本版本解决的是“可见文本 @真实群昵称”，不是系统级 `[有人@我]`。
 - 普通微信群回复、管理员保护/拒绝、安全拦截、斗图、生图、转发图片等所有 `sendWechatyDutyGroupMessage` 路径统一使用真实群昵称拼接 `@昵称`。
 - LLM 渠道连通告警的 @ 人员会根据保存的真实 sender_id 解析当前群昵称，不再只显示空 @。
 

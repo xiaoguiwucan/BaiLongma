@@ -1291,12 +1291,24 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.52</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">完成 Web 微信系统级 @ 实验：MsgSource 注入可发出消息，但不能触发「有人@我」。</p>
+                <ul class="release-note-points">
+                  <li>新增本机调试接口，可对指定群和成员测试 MsgSource/atuserlist。</li>
+                  <li>值班群实测 4 种载荷均只显示普通文本 @，没有系统级提醒。</li>
+                  <li>生产回复保持可见 @ 昵称兜底；真正系统 @ 需改走 Mac 微信 UI 自动化或真实 mention puppet。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.51</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>
-                <p class="release-note-summary">修复微信群 @ 昵称显示：回复和渠道告警不再出现空 @ 或 @ 后直接接正文。</p>
+                <p class="release-note-summary">修复微信群可见 @ 昵称显示：回复和渠道告警不再出现空 @ 或 @ 后直接接正文。</p>
                 <ul class="release-note-points">
-                  <li>Web 微信链路会手动拼出真实群昵称，确保手机端能看到明确 @ 对象。</li>
+                  <li>Web 微信链路会手动拼出真实群昵称，确保群里能看到明确 @ 对象。</li>
                   <li>普通群回复仍锁定真实提问人 sender_id，模型选错 target 也会被底层纠正。</li>
                   <li>模型自己写的开头 @ 会被清理并重建为正确群昵称。</li>
                 </ul>

@@ -20,7 +20,7 @@ import { persistAppState } from './capabilities/executor.js'
 import { MinimaxProvider } from './providers/minimax.js'
 import { handleSocialWebhook, isSocialWebhookPath } from './social/webhooks.js'
 import { getClawbotQR, logoutClawbot } from './social/wechat-clawbot.js'
-import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, refreshWechatyDutyGroupMemberNames, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms } from './social/wechaty-duty-group.js'
+import { configureWechatyDutyGroup, forceReloginWechatyDutyGroupConnector, getWechatyDutyGroupStatus, listWechatyDutyGroupRooms, refreshWechatyDutyGroupMemberNames, restartWechatyDutyGroupConnector, startWechatyDutyGroupConnector, stopWechatyDutyGroupConnector, syncWechatyDutyGroupRooms, testWechatyNativeMention } from './social/wechaty-duty-group.js'
 import { buildWeChatGroupSummary, getRecentWeChatGroupMessages, listRecentWeChatGroups, makeWeChatGroupExternalId, WECHAT_GROUP_CHANNEL } from './social/wechat-groups.js'
 import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupMemoryStatus, listWeChatGroupMemory, listWeChatGroupMemoryOverview, syncLocalWeChatMessagesToHoncho, backfillWeChatExplicitMemoriesFromMessages } from './social/wechat-group-memory.js'
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
@@ -287,6 +287,28 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
       if (!requireLocalOrToken(req, res, url)) return
       const result = await refreshWechatyDutyGroupMemberNames({ force: true })
       return jsonResponse(res, result.ok ? 200 : 409, result)
+    }
+
+    // POST /social/wechaty-duty-group/test-native-mention — 实验性 Web 微信 MsgSource/atuserlist 系统级 @ 测试。
+    // 注意：这是协议兼容性验证接口，只能本机调用；成功发送不等于手机端一定出现「有人@我」。
+    if (req.method === 'POST' && url.pathname === '/social/wechaty-duty-group/test-native-mention') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(async body => {
+        try {
+          const result = await testWechatyNativeMention({
+            groupName: body.group_name || body.groupName || body.topic || '值班群',
+            roomId: body.room_id || body.roomId || '',
+            memberName: body.member_name || body.memberName || body.name || '风',
+            memberId: body.member_id || body.memberId || body.id || '',
+            text: body.text || '',
+            variants: body.variants || body.variant || ['msgsource'],
+          })
+          return jsonResponse(res, result.ok ? 200 : 409, result)
+        } catch (err) {
+          return jsonResponse(res, 500, { ok: false, error: err?.message || String(err) })
+        }
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
     }
 
     // POST /social/wechaty-duty-group/start — 启动 Wechaty 扫码，可接入多个群；默认“值班群”和“PT站看片狂魔小群”

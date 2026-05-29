@@ -1,8 +1,38 @@
 
+## v0.4.52 - 2026-05-29
+
+### 发布主题
+Web 微信系统级 @ 可行性实验：MsgSource/atuserlist 注入测试。
+
+### 更新内容
+1. 新增本机调试接口：`POST /social/wechaty-duty-group/test-native-mention`。
+2. 调试接口会按群名/群 ID 解析群，按成员昵称/成员 sender_id 解析目标成员。
+3. 直接调用当前 `wechat4u` runtime 的 `webwxsendmsg`，向 `Msg` 注入 `MsgSource` / `msgsource` / 顶层 `MsgSource` 实验载荷。
+4. 所有测试接口都要求本机或授权 token 调用，不开放给局域网匿名请求。
+5. 正常微信群回复没有启用该实验方案，避免不确定行为影响生产可用性。
+
+### 实测结果
+- 测试群：值班群。
+- 测试对象：风。
+- 测试载荷：`msgsource`、`msgsource-both`、`msgsource-lower`、`top-level-msgsource`。
+- 接口结果：4 条消息均 `Ret=0` 并成功出现在群里。
+- 客户端观察：Mac 微信会话列表只显示普通 `[3条]` 未读和消息预览，没有出现系统级「有人@我」。
+
+### 结论
+当前 Web 微信 / `wechaty-puppet-wechat4u` 路线不能稳定实现微信系统级 @ 提醒，只能做到可见文本 `@昵称`。如果必须达到手动 @ 的 `[有人@我]` 效果，下一步建议改做“Mac 微信原生 UI 自动化发送模式”或更换支持真实 mention 元数据的 puppet/协议服务。
+
+### 验证
+```bash
+node --check src/social/wechaty-duty-group.js
+node --check src/api.js
+npm run test:social-targets
+npm run test:wechat-guard
+```
+
 ## v0.4.51 - 2026-05-29
 
 ### 修复
-- 修复微信群回复和 LLM 渠道告警里 @ 昵称显示不正确的问题：不再出现只有空 `@`、`@` 后直接接正文、或 @ 到别名/外号导致手机端没有提醒。
+- 修复微信群回复和 LLM 渠道告警里可见 @ 昵称显示不正确的问题：不再出现只有空 `@`、`@` 后直接接正文、或 @ 到别名/外号的问题；该版本不代表已实现系统级「有人@我」。
 - Web 微信 / `wechaty-puppet-wechat4u` 会忽略 Wechaty 的 mentionIdList，所以本版本改为用真实群昵称手动拼出 `@昵称` + 微信特殊空格 + 正文。
 
 ### 行为说明

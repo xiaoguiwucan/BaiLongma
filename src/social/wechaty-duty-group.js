@@ -221,6 +221,186 @@ function buildManualWechatMentionText(text = '', targets = []) {
   return `${prefix}\u2005${stripLeadingWechatMentionText(text)}`
 }
 
+function escapeWechatMsgSourceXml(value = '') {
+  return String(value || '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;')
+}
+
+function makeWechatClientMsgId() {
+  return Math.ceil(Date.now() * 1000)
+}
+
+function buildWechat4uAtUserList(targets = []) {
+  const ids = []
+  const seen = new Set()
+  for (const target of Array.isArray(targets) ? targets : []) {
+    const id = String(target?.id || target?.contact?.id || '').trim()
+    if (!id || !id.startsWith('@') || id.startsWith('@@') || seen.has(id)) continue
+    seen.add(id)
+    ids.push(id)
+    if (ids.length >= 20) break
+  }
+  return ids
+}
+
+function buildWechat4uMsgSourceXml(targetIds = []) {
+  const ids = (Array.isArray(targetIds) ? targetIds : [])
+    .map(id => String(id || '').trim())
+    .filter(Boolean)
+  if (!ids.length) return ''
+  // Web 微信收到真正 @ 消息时，元数据通常在 MsgSource/msgsource 的 atuserlist 中。
+  // 这里保持 XML 最小化，避免引入其它来源不明字段导致接口拒绝。
+  return `<msgsource><atuserlist>${ids.map(escapeWechatMsgSourceXml).join(',')}</atuserlist></msgsource>`
+}
+
+function getWechat4uRuntime() {
+  return bot?.puppet?.wechat4u || bot?.puppet?.wechat4uBridge?.wechat4u || null
+}
+
+async function sendWechat4uRawTextWithMsgSource(room, text, resolvedMentionTargets = [], { variant = 'msgsource' } = {}) {
+  const wechat4u = getWechat4uRuntime()
+  const roomId = String(room?.id || '').trim()
+  if (!wechat4u || !roomId) throw new Error('wechat4u runtime or room id missing')
+  if (!wechat4u.request || !wechat4u.CONF || !wechat4u.PROP || !wechat4u.user || !wechat4u.getBaseRequest) {
+    throw new Error('wechat4u internals unavailable')
+  }
+  const targetIds = buildWechat4uAtUserList(resolvedMentionTargets)
+  if (!targetIds.length) throw new Error('mention target id missing')
+  const msgSource = buildWechat4uMsgSourceXml(targetIds)
+  const content = buildManualWechatMentionText(text, resolvedMentionTargets)
+  const clientMsgId = makeWechatClientMsgId()
+  const msg = {
+    Type: wechat4u.CONF.MSGTYPE_TEXT,
+    Content: content,
+    FromUserName: wechat4u.user.UserName || wechat4u.user.userName || wechat4u.user['UserName'],
+    ToUserName: roomId,
+    LocalID: clientMsgId,
+    ClientMsgId: clientMsgId,
+  }
+  if (variant === 'msgsource-lower') msg.msgsource = msgSource
+  else if (variant === 'msgsource-both') {
+    msg.MsgSource = msgSource
+    msg.msgsource = msgSource
+  } else if (variant === 'top-level-msgsource') {
+    msg.MsgSource = msgSource
+  } else {
+    msg.MsgSource = msgSource
+  }
+  const payload = {
+    BaseRequest: wechat4u.getBaseRequest(),
+    Scene: 0,
+    Msg: msg,
+  }
+  if (variant === 'top-level-msgsource') payload.MsgSource = msgSource
+  console.log(`[WechatyNativeAtTest] 发送实验性 MsgSource @ room="${roomId}" targets="${targetIds.join(',')}" names="${resolvedMentionTargets.map(item => item.name || '').join(',')}" variant=${variant} content="${content.slice(0, 80)}"`)
+  const res = await wechat4u.request({
+    method: 'POST',
+    url: wechat4u.CONF.API_webwxsendmsg,
+    params: {
+      pass_ticket: wechat4u.PROP.passTicket,
+      lang: 'zh_CN',
+    },
+    data: payload,
+  })
+  const data = res?.data || {}
+  const ret = Number(data?.BaseResponse?.Ret)
+  if (ret !== 0) {
+    const errMsg = data?.BaseResponse?.ErrMsg || JSON.stringify(data?.BaseResponse || data)
+    throw new Error(`webwxsendmsg ret=${data?.BaseResponse?.Ret} ${errMsg}`)
+  }
+  return { ok: true, variant, roomId, targetIds, msgSource, content, response: data }
+}
+
+async function resolveWechatyRoomByNameOrId({ roomId = '', groupName = '' } = {}) {
+  const rid = String(roomId || '').trim()
+  const wantedName = String(groupName || '').trim()
+  if (rid) {
+    for (const cached of targetRooms.values()) {
+      if (cached?.id === rid) return cached
+    }
+    try {
+      const loaded = bot?.Room?.load?.(rid)
+      if (loaded) return loaded
+    } catch {}
+  }
+  if (wantedName) {
+    for (const [topic, cached] of targetRooms.entries()) {
+      if (topic === wantedName || topic.includes(wantedName) || wantedName.includes(topic)) return cached
+    }
+    try {
+      const found = await bot?.Room?.find?.({ topic: wantedName })
+      if (found) return found
+    } catch {}
+  }
+  try {
+    await resolveTargetRooms()
+    if (rid) {
+      for (const cached of targetRooms.values()) {
+        if (cached?.id === rid) return cached
+      }
+    }
+    if (wantedName) {
+      for (const [topic, cached] of targetRooms.entries()) {
+        if (topic === wantedName || topic.includes(wantedName) || wantedName.includes(topic)) return cached
+      }
+    }
+  } catch {}
+  return null
+}
+
+async function resolveWechatyMemberTargetForNativeMention(room, { memberId = '', memberName = '' } = {}) {
+  const wantedId = String(memberId || '').trim()
+  const wantedName = normalizeWechatyMentionName(memberName || '')
+  const members = await room.memberAll()
+  if (wantedId) {
+    const contact = (members || []).find(item => getWechatyContactId(item) === wantedId) || await resolveWechatyMentionContact(room, wantedId)
+    const name = await resolveWechatyMentionDisplayName(room, contact, wantedId, wantedName)
+    return { id: getWechatyContactId(contact) || wantedId, contact, name: name || wantedName }
+  }
+  if (wantedName) {
+    for (const contact of members || []) {
+      const id = getWechatyContactId(contact)
+      const name = await resolveWechatyMentionDisplayName(room, contact, id, '')
+      if (normalizeWechatyMentionName(name) === wantedName) return { id, contact, name }
+    }
+    for (const contact of members || []) {
+      const id = getWechatyContactId(contact)
+      const name = await resolveWechatyMentionDisplayName(room, contact, id, '')
+      const normalizedName = normalizeWechatyMentionName(name)
+      if (normalizedName && (normalizedName.includes(wantedName) || wantedName.includes(normalizedName))) return { id, contact, name }
+    }
+  }
+  return null
+}
+
+export async function testWechatyNativeMention({ groupName = '值班群', roomId = '', memberName = '风', memberId = '', text = '', variants = ['msgsource'] } = {}) {
+  if (!bot || status !== 'connected') return { ok: false, reason: 'wechaty-duty-group not connected', status }
+  const room = await resolveWechatyRoomByNameOrId({ roomId, groupName })
+  if (!room) return { ok: false, reason: `room not found: ${roomId || groupName}` }
+  const topic = await safeTopic(room)
+  const target = await resolveWechatyMemberTargetForNativeMention(room, { memberId, memberName })
+  if (!target?.id) return { ok: false, reason: `member not found: ${memberId || memberName}`, room_id: room.id, topic }
+  const list = Array.isArray(variants) && variants.length ? variants : [variants || 'msgsource']
+  const out = []
+  for (const rawVariant of list.slice(0, 5)) {
+    const variant = String(rawVariant || 'msgsource').trim() || 'msgsource'
+    const body = text || `系统级 @ 实验 ${new Date().toLocaleTimeString('zh-CN', { hour12: false })}（variant=${variant}）`
+    try {
+      const result = await sendWechat4uRawTextWithMsgSource(room, body, [target], { variant })
+      out.push({ ok: true, variant, msg_id: result.response?.MsgID || '', local_id: result.response?.LocalID || '', content: result.content, msg_source: result.msgSource, target: { id: target.id, name: target.name } })
+    } catch (err) {
+      console.error(`[WechatyNativeAtTest] variant=${variant} failed: ${err?.message || err}`)
+      out.push({ ok: false, variant, error: err?.message || String(err), target: { id: target.id, name: target.name } })
+    }
+    if (list.length > 1) await new Promise(resolve => setTimeout(resolve, 1200))
+  }
+  return { ok: out.some(item => item.ok), room_id: room.id, topic, target: { id: target.id, name: target.name }, results: out }
+}
+
 function isWechat4uPuppetActive() {
   return /wechat4u/iu.test(activePuppetName || '') || !!bot?.puppet?.wechat4u
 }
