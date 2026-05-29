@@ -1223,6 +1223,10 @@ function handle({ type, data = {} }) {
       window.dispatchEvent(new CustomEvent("bailongma:llm-profiles-updated", { detail: data }));
       break;
     }
+    case "llm_connectivity_checked": {
+      window.dispatchEvent(new CustomEvent("bailongma:llm-connectivity-checked", { detail: data }));
+      break;
+    }
     case "message_requeued": {
       currentStream().startThinkingSession();
       const retryCount = Number(data.retryCount || 1);
@@ -2051,6 +2055,19 @@ function initTTSSettings() {
   const llmFailoverAttempts = document.getElementById("settings-llm-failover-attempts");
   const saveLlmFailoverBtn = document.getElementById("settings-save-llm-failover");
   const llmFailoverFeedback = document.getElementById("settings-llm-failover-feedback");
+  const llmMonitorEnabled = document.getElementById("settings-llm-monitor-enabled");
+  const llmMonitorInterval = document.getElementById("settings-llm-monitor-interval");
+  const llmMonitorMode = document.getElementById("settings-llm-monitor-mode");
+  const llmMonitorStatus = document.getElementById("settings-llm-monitor-status");
+  const llmMonitorProfileList = document.getElementById("settings-llm-monitor-profile-list");
+  const llmMonitorProfileCount = document.getElementById("settings-llm-monitor-profile-count");
+  const llmMonitorGroupList = document.getElementById("settings-llm-monitor-group-list");
+  const llmMonitorGroupCount = document.getElementById("settings-llm-monitor-group-count");
+  const llmMonitorResult = document.getElementById("settings-llm-monitor-result");
+  const saveLlmMonitorBtn = document.getElementById("settings-save-llm-monitor");
+  const testLlmMonitorBtn = document.getElementById("settings-test-llm-monitor");
+  const notifyLlmMonitorBtn = document.getElementById("settings-notify-llm-monitor");
+  const llmMonitorFeedback = document.getElementById("settings-llm-monitor-feedback");
   const tempSlider      = document.getElementById("settings-temperature");
   const tempVal         = document.getElementById("settings-temperature-val");
   const saveTempBtn     = document.getElementById("settings-save-temperature");
@@ -2213,6 +2230,9 @@ function initTTSSettings() {
   let cachedLLMProfiles = [];
   let cachedActiveLLM = null;
   let cachedLLMFailover = { enabled: true, cooldownSeconds: 180, maxAttempts: 4 };
+  let cachedLLMMonitor = { enabled: false, intervalMinutes: 60, notifyMode: "changes", selectedProfileIds: [], selectedGroups: [] };
+  let cachedLLMMonitorStatus = {};
+  let cachedLLMMonitorRooms = [];
   let dbImageOffset = 0;
   let dbImageHasMore = false;
   let dbImageAutoRefreshTimer = null;
@@ -2363,6 +2383,171 @@ function initTTSSettings() {
     if (llmFailoverAttempts) llmFailoverAttempts.value = String(cachedLLMFailover.maxAttempts);
   }
 
+  function llmMonitorProfileState(profile = {}) {
+    const lastSuccessMs = profile.lastSuccessAt ? Date.parse(profile.lastSuccessAt) : 0;
+    const lastFailedMs = profile.lastFailedAt ? Date.parse(profile.lastFailedAt) : 0;
+    if (profile.enabled === false) return { state: "off", label: "已关闭" };
+    if (profile.status === "cooldown") return { state: "warn", label: "冷却中" };
+    if (lastFailedMs && lastFailedMs >= lastSuccessMs) return { state: "down", label: "不通" };
+    if (lastSuccessMs) return { state: "up", label: "连通" };
+    return { state: "unknown", label: "未知" };
+  }
+
+  function formatLLMMonitorStatus(status = {}, cfg = cachedLLMMonitor) {
+    const rows = [];
+    rows.push(cfg.enabled ? "● 已启用" : "○ 已关闭");
+    if (status.running) rows.push("检测中…");
+    if (status.last_check_at) rows.push(`上次 ${formatLLMTime(status.last_check_at)}`);
+    if (status.last_notify_at) rows.push(`通知 ${formatLLMTime(status.last_notify_at)}`);
+    if (cfg.enabled && status.next_check_at) rows.push(`下次约 ${formatLLMTime(status.next_check_at)}`);
+    return rows.join(" · ");
+  }
+
+  function normalizeLLMMonitorGroupValue(value = "") {
+    return String(value || "").trim().replace(/^wechaty:/u, "");
+  }
+
+  function llmMonitorGroupSelected(room = {}, selected = []) {
+    const rid = String(room.id || "").trim();
+    const topic = String(room.topic || "").trim();
+    const keys = new Set([rid, topic, `wechaty:${rid}`, normalizeLLMMonitorGroupValue(rid), normalizeLLMMonitorGroupValue(topic)].filter(Boolean));
+    return selected.some(item => keys.has(String(item || "").trim()) || keys.has(normalizeLLMMonitorGroupValue(item)));
+  }
+
+  function renderLLMMonitorResults(status = {}) {
+    if (!llmMonitorResult) return;
+    const results = Array.isArray(status.results) ? status.results : [];
+    if (!results.length) {
+      llmMonitorResult.textContent = status.last_error ? `上次检测失败：${status.last_error}` : "检测结果会显示在这里。";
+      return;
+    }
+    const ok = results.filter(item => item.ok).length;
+    const failed = results.filter(item => item.ok === false).length;
+    const lines = [`最近检测：${ok} 通 / ${failed} 不通 · ${formatLLMTime(status.last_check_at)}`];
+    for (const item of results.slice(0, 8)) {
+      const icon = item.ok ? "✅" : "❌";
+      const latency = item.latencyMs ? ` ${Math.round(item.latencyMs)}ms` : "";
+      const err = item.error ? ` · ${String(item.error).slice(0, 90)}` : "";
+      lines.push(`${icon} ${item.name || item.model || item.profileId}${latency}${err}`);
+    }
+    if (results.length > 8) lines.push(`……还有 ${results.length - 8} 个渠道未展开`);
+    llmMonitorResult.textContent = lines.join("\n");
+  }
+
+  function renderLLMMonitorProfiles(profiles = cachedLLMProfiles, cfg = cachedLLMMonitor) {
+    if (!llmMonitorProfileList) return;
+    const selected = Array.isArray(cfg.selectedProfileIds) ? cfg.selectedProfileIds.map(String) : [];
+    if (!profiles.length) {
+      llmMonitorProfileList.innerHTML = `<div class="llm-profile-empty">还没有模型配置，先到“新增 / 编辑模型”保存渠道。</div>`;
+      if (llmMonitorProfileCount) llmMonitorProfileCount.textContent = "0 个";
+      return;
+    }
+    const selectedAllByDefault = !selected.length;
+    llmMonitorProfileList.innerHTML = profiles.map(profile => {
+      const state = llmMonitorProfileState(profile);
+      const checked = selectedAllByDefault || selected.includes(String(profile.id)) ? " checked" : "";
+      const label = `${profile.providerLabel || profile.provider || "LLM"} · ${profile.model || "—"}`;
+      return `<label class="llm-monitor-item" title="${escapeHtml(profile.id || "")}">
+        <input class="llm-monitor-profile-checkbox" type="checkbox" value="${escapeHtml(profile.id || "")}"${checked}>
+        <span>
+          <b>${escapeHtml(profile.name || "未命名模型")}</b>
+          <em><span class="llm-signal llm-signal-${state.state}"><i></i><b>${escapeHtml(state.label)}</b></span> · ${escapeHtml(label)} · ${escapeHtml(profile.apiKeyHint || (profile.configured ? "已配置" : "未配置"))}</em>
+        </span>
+      </label>`;
+    }).join("");
+    updateLLMMonitorCounts();
+  }
+
+  function renderLLMMonitorGroups(status = {}, cfg = cachedLLMMonitor) {
+    if (!llmMonitorGroupList) return;
+    const rooms = Array.isArray(status.rooms) ? status.rooms : [];
+    cachedLLMMonitorRooms = rooms;
+    const selected = Array.isArray(cfg.selectedGroups) ? cfg.selectedGroups.map(String).filter(Boolean) : [];
+    const seen = new Set();
+    const candidates = [];
+    for (const room of rooms) {
+      const rid = String(room.id || "").trim();
+      const topic = String(room.topic || "").trim();
+      if (!rid || seen.has(rid)) continue;
+      seen.add(rid);
+      candidates.push({ id: rid, topic, stale: room.stale || room.selected === false });
+    }
+    for (const saved of selected) {
+      const normalized = normalizeLLMMonitorGroupValue(saved);
+      if (!normalized || candidates.some(room => room.id === saved || room.topic === saved || normalizeLLMMonitorGroupValue(room.id) === normalized)) continue;
+      candidates.push({ id: saved, topic: saved, stale: true, savedOnly: true });
+    }
+    if (!candidates.length) {
+      llmMonitorGroupList.innerHTML = `<div class="llm-profile-empty">当前没有可通知的微信群。请先在“微信群助手”登录/恢复微信。</div>`;
+      if (llmMonitorGroupCount) llmMonitorGroupCount.textContent = "0 个";
+      return;
+    }
+    llmMonitorGroupList.innerHTML = candidates.map(room => {
+      const checked = llmMonitorGroupSelected(room, selected) ? " checked" : "";
+      const subtitle = room.savedOnly ? "已保存但当前未在线" : (room.stale ? "缓存/未选中 @ 回复" : "当前可通知");
+      return `<label class="llm-monitor-item" title="${escapeHtml(room.id || "")}">
+        <input class="llm-monitor-group-checkbox" type="checkbox" value="${escapeHtml(room.id || room.topic || "")}" data-topic="${escapeHtml(room.topic || "")}"${checked}>
+        <span>
+          <b>${escapeHtml(room.topic || room.id || "微信群")}</b>
+          <em>${escapeHtml(subtitle)} · ${escapeHtml(String(room.id || "").slice(0, 18))}</em>
+        </span>
+      </label>`;
+    }).join("");
+    updateLLMMonitorCounts();
+  }
+
+  function updateLLMMonitorCounts() {
+    const profileChecked = llmMonitorProfileList ? llmMonitorProfileList.querySelectorAll(".llm-monitor-profile-checkbox:checked").length : 0;
+    const profileTotal = llmMonitorProfileList ? llmMonitorProfileList.querySelectorAll(".llm-monitor-profile-checkbox").length : 0;
+    const groupChecked = llmMonitorGroupList ? llmMonitorGroupList.querySelectorAll(".llm-monitor-group-checkbox:checked").length : 0;
+    const groupTotal = llmMonitorGroupList ? llmMonitorGroupList.querySelectorAll(".llm-monitor-group-checkbox").length : 0;
+    if (llmMonitorProfileCount) llmMonitorProfileCount.textContent = profileTotal ? `${profileChecked}/${profileTotal} 个` : "0 个";
+    if (llmMonitorGroupCount) llmMonitorGroupCount.textContent = groupTotal ? `${groupChecked}/${groupTotal} 个` : "0 个";
+  }
+
+  function renderLLMMonitor(config = {}, status = {}, profiles = cachedLLMProfiles, wechatyStatus = {}) {
+    cachedLLMMonitor = {
+      enabled: config.enabled === true,
+      intervalMinutes: config.intervalMinutes || 60,
+      notifyMode: config.notifyMode || "changes",
+      selectedProfileIds: Array.isArray(config.selectedProfileIds) ? config.selectedProfileIds : [],
+      selectedGroups: Array.isArray(config.selectedGroups) ? config.selectedGroups : [],
+    };
+    cachedLLMMonitorStatus = status || {};
+    if (llmMonitorEnabled) llmMonitorEnabled.checked = cachedLLMMonitor.enabled;
+    if (llmMonitorInterval) llmMonitorInterval.value = String(cachedLLMMonitor.intervalMinutes);
+    if (llmMonitorMode) llmMonitorMode.value = cachedLLMMonitor.notifyMode;
+    if (llmMonitorStatus) llmMonitorStatus.textContent = formatLLMMonitorStatus(cachedLLMMonitorStatus, cachedLLMMonitor);
+    renderLLMMonitorProfiles(profiles, cachedLLMMonitor);
+    renderLLMMonitorGroups(wechatyStatus, cachedLLMMonitor);
+    renderLLMMonitorResults(cachedLLMMonitorStatus);
+  }
+
+  function collectLLMMonitorPayload() {
+    const selectedProfileIds = llmMonitorProfileList
+      ? [...llmMonitorProfileList.querySelectorAll(".llm-monitor-profile-checkbox:checked")].map(input => input.value).filter(Boolean)
+      : [];
+    const selectedGroups = llmMonitorGroupList
+      ? [...llmMonitorGroupList.querySelectorAll(".llm-monitor-group-checkbox:checked")].map(input => input.value).filter(Boolean)
+      : [];
+    return {
+      enabled: !!llmMonitorEnabled?.checked,
+      intervalMinutes: Number(llmMonitorInterval?.value || 60),
+      notifyMode: llmMonitorMode?.value || "changes",
+      selectedProfileIds,
+      selectedGroups,
+    };
+  }
+
+  async function loadLLMMonitorSettings() {
+    try {
+      const data = await fetch(`${API}/settings/llm-connectivity-monitor`).then(r => r.json());
+      if (!data.ok) return;
+      if (Array.isArray(data.profiles)) cachedLLMProfiles = data.profiles;
+      renderLLMMonitor(data.config || {}, data.status || {}, data.profiles || cachedLLMProfiles, data.wechatyDutyGroupStatus || {});
+    } catch {}
+  }
+
   function renderLLMProfiles(profiles = [], llm = {}) {
     cachedLLMProfiles = Array.isArray(profiles) ? profiles : [];
     const active = cachedLLMProfiles.find(p => p.current) || cachedLLMProfiles.find(p => p.id === llm.activeProfileId);
@@ -2433,6 +2618,7 @@ function initTTSSettings() {
           </div>`;
       })
       .join("");
+    renderLLMMonitorProfiles(cachedLLMProfiles, cachedLLMMonitor);
   }
 
   function resetLLMProfileEditor() {
@@ -2494,6 +2680,8 @@ function initTTSSettings() {
       if (llm.provider !== "custom") populateModelSelect(llm.models, llm.model);
       renderLLMFailover(llm.failover || {});
       renderLLMProfiles(llm.profiles || [], llm);
+      renderLLMMonitor(llm.connectivityMonitor || cachedLLMMonitor, llm.connectivityMonitorStatus || cachedLLMMonitorStatus, llm.profiles || cachedLLMProfiles, {});
+      setTimeout(() => loadLLMMonitorSettings(), 0);
       if (typeof llm.temperature === "number" && tempSlider) {
         tempSlider.value = String(llm.temperature);
         if (tempVal) tempVal.textContent = llm.temperature.toFixed(2);
@@ -2506,6 +2694,11 @@ function initTTSSettings() {
     const data = event.detail || {};
     renderLLMFailover(data.failover || cachedLLMFailover);
     renderLLMProfiles(Array.isArray(data.profiles) ? data.profiles : cachedLLMProfiles, { activeProfileId: data.activeProfileId });
+  });
+
+  window.addEventListener("bailongma:llm-connectivity-checked", () => {
+    if (overlay?.hidden !== false) return;
+    loadLLMMonitorSettings();
   });
 
   const SOCIAL_FIELD_MAP = {
@@ -5148,6 +5341,78 @@ function initTTSSettings() {
     } catch { showFeedback(llmFailoverFeedback, "请求失败", true); }
     finally { saveLlmFailoverBtn.disabled = false; }
   });
+
+  llmMonitorProfileList?.addEventListener("change", updateLLMMonitorCounts);
+  llmMonitorGroupList?.addEventListener("change", updateLLMMonitorCounts);
+
+  saveLlmMonitorBtn?.addEventListener("click", async () => {
+    saveLlmMonitorBtn.disabled = true;
+    try {
+      const payload = collectLLMMonitorPayload();
+      const res = await fetch(`${API}/settings/llm-connectivity-monitor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showFeedback(llmMonitorFeedback, "连通通知设置已保存");
+        renderLLMMonitor(data.config || payload, data.status || cachedLLMMonitorStatus, cachedLLMProfiles, { rooms: cachedLLMMonitorRooms });
+        loadLLMMonitorSettings();
+      } else {
+        showFeedback(llmMonitorFeedback, data.error || "保存失败", true);
+      }
+    } catch { showFeedback(llmMonitorFeedback, "请求失败", true); }
+    finally { saveLlmMonitorBtn.disabled = false; }
+  });
+
+  async function runLLMMonitorNow({ notify = false } = {}) {
+    const btn = notify ? notifyLlmMonitorBtn : testLlmMonitorBtn;
+    if (btn) {
+      btn.disabled = true;
+      btn.textContent = notify ? "检测并通知中…" : "检测中…";
+    }
+    if (llmMonitorResult) llmMonitorResult.textContent = notify ? "正在检测渠道并发送微信群通知…" : "正在检测渠道连通性…";
+    try {
+      // 先保存当前勾选，避免用户改了群/渠道但忘记保存后手动通知发错地方。
+      const payload = collectLLMMonitorPayload();
+      cachedLLMMonitor = { ...cachedLLMMonitor, ...payload };
+      await fetch(`${API}/settings/llm-connectivity-monitor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+      const res = await fetch(`${API}/settings/llm-connectivity-monitor/check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ notify, forceNotify: notify }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        if (Array.isArray(data.profiles)) {
+          renderLLMProfiles(data.profiles, { activeProfileId: cachedActiveLLM?.activeProfileId });
+        }
+        renderLLMMonitor(cachedLLMMonitor, data.status || {}, data.profiles || cachedLLMProfiles, { rooms: cachedLLMMonitorRooms });
+        const notifyFailed = notify && data.notify && data.notify.ok === false;
+        showFeedback(llmMonitorFeedback, notifyFailed ? `检测完成，但通知未发送：${data.notify.reason || "没有可通知群"}` : (notify ? "检测完成，已按配置通知微信群" : "检测完成"), notifyFailed);
+        loadLLMMonitorSettings();
+      } else {
+        showFeedback(llmMonitorFeedback, data.error || "检测失败", true);
+        if (llmMonitorResult) llmMonitorResult.textContent = data.error || "检测失败";
+      }
+    } catch {
+      showFeedback(llmMonitorFeedback, "请求失败", true);
+      if (llmMonitorResult) llmMonitorResult.textContent = "检测请求失败";
+    } finally {
+      if (btn) {
+        btn.disabled = false;
+        btn.textContent = notify ? "立即检测并通知" : "立即检测";
+      }
+    }
+  }
+
+  testLlmMonitorBtn?.addEventListener("click", () => runLLMMonitorNow({ notify: false }));
+  notifyLlmMonitorBtn?.addEventListener("click", () => runLLMMonitorNow({ notify: true }));
 
   llmPoolList?.addEventListener("click", async (event) => {
     const btn = event.target.closest("button[data-action]");

@@ -85,3 +85,10 @@
 - Integrated compact `<wechat-quoted-message>` prompt block into WeChat group replies; parser input may use raw payload, but prompt only exposes sender/type/summary/current request/URL metadata.
 - Wechaty now passes compact raw payload metadata for quote extraction, while ClawBot passes raw text and message type.
 - Added `scripts/test-wechat-quote-context.mjs` and `npm run test:wechat-quote-context`; initial syntax checks and quote parser tests pass.
+
+### 2026-05-29 v0.4.49 LLM connectivity notification
+- Started LLM channel connectivity notification feature: configurable interval, notification mode, selected profiles and selected WeChat groups.
+- Added backend monitor module skeleton using real saved LLM profile ping and Wechaty group notification delivery.
+- Added LLM settings UI section with large interval/strategy selects, profile checkbox list, group checkbox list, status and manual check buttons.
+- Added API endpoints `/settings/llm-connectivity-monitor` and `/settings/llm-connectivity-monitor/check`.
+- Syntax checks and WeChat quote/guard/record-all tests pass for v0.4.49.

@@ -11,7 +11,7 @@ import { getQuotaStatus } from './quota.js'
 import { isRunning, stopLoop, startLoop } from './control.js'
 import { buildHeartbeatSystemPromptPreview } from './system-prompt-preview.js'
 import { paths } from './paths.js'
-import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, getWeChatGroupDigestConfig, setWeChatGroupDigestConfig, WECHATY_PERSONA_PRESETS, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig, upsertLLMProfile, deleteLLMProfile, selectLLMProfile, testLLMProfileConnection, setLLMFailoverConfig, getWechatMemeConfig, setWechatMemeConfig, getSkillsConfig, setSkillImageConfig, setSkillImageVisionConfig } from './config.js'
+import { config, activate as activateLLM, getActivationStatus, switchModel, setTemperature, getMinimaxKey, setMinimaxKey, getSocialConfig, setSocialConfig, getHonchoConfig, setHonchoConfig, getWechatyDutyGroupConfig, setWechatyDutyGroupConfig, getWeChatGroupDigestConfig, setWeChatGroupDigestConfig, WECHATY_PERSONA_PRESETS, getVoiceConfig, setVoiceConfig, getTTSConfig, setTTSConfig, getTTSCredentials, getProviderSummaries, getSecurity, setSecurity, getEmbeddingConfig, setEmbeddingConfig, EMBEDDING_PROVIDER_PRESETS, getWebSearchConfig, setWebSearchConfig, upsertLLMProfile, deleteLLMProfile, selectLLMProfile, testLLMProfileConnection, setLLMFailoverConfig, getLLMConnectivityMonitorConfig, setLLMConnectivityMonitorConfig, getWechatMemeConfig, setWechatMemeConfig, getSkillsConfig, setSkillImageConfig, setSkillImageVisionConfig } from './config.js'
 import { streamTTS, TTS_PROVIDERS, TTS_VOICES } from './voice/tts-providers.js'
 import { getVoiceStatus, startVoiceServer, stopVoiceServer, restartVoiceServer } from './voice/manager.js'
 import { restartConnector } from './social/index.js'
@@ -28,6 +28,7 @@ import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupA
 import { searchMemes } from './social/meme-search.js'
 import { deleteWeChatImageMediaItem, getWeChatImageVisionStatus, listWeChatImageMediaItems, startWeChatImageBackgroundDescribe, updateWeChatImageMediaItem } from './social/wechat-image-vision.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
+import { getLLMConnectivityMonitorStatus, runLLMConnectivityMonitorCheck, startLLMConnectivityMonitorScheduler } from './llm-connectivity-monitor.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
 import { getPersonCard, setPersonCardPanelState, getPersonCardPanelState } from './person-cards.js'
@@ -1178,6 +1179,8 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           activeProfileId: status.activeProfileId,
           profiles: status.profiles,
           failover: status.failover,
+          connectivityMonitor: getLLMConnectivityMonitorConfig(),
+          connectivityMonitorStatus: getLLMConnectivityMonitorStatus(),
         },
         providers: getProviderSummaries(),
         minimax: {
@@ -1293,6 +1296,47 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         }
       })
       return
+    }
+
+    // GET /settings/llm-connectivity-monitor — read LLM channel connectivity notification config/status
+    if (req.method === 'GET' && url.pathname === '/settings/llm-connectivity-monitor') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const status = getActivationStatus()
+      return jsonResponse(res, 200, {
+        ok: true,
+        config: getLLMConnectivityMonitorConfig(),
+        status: getLLMConnectivityMonitorStatus(),
+        profiles: status.profiles,
+        wechatyDutyGroupStatus: getWechatyDutyGroupStatus(),
+      })
+    }
+
+    // POST /settings/llm-connectivity-monitor — save LLM channel connectivity notification config
+    if (req.method === 'POST' && url.pathname === '/settings/llm-connectivity-monitor') {
+      if (!requireLocalOrToken(req, res, url)) return
+      try {
+        const body = await readJsonBody(req)
+        const cfg = setLLMConnectivityMonitorConfig(body || {})
+        startLLMConnectivityMonitorScheduler()
+        return jsonResponse(res, 200, { ok: true, config: cfg, status: getLLMConnectivityMonitorStatus() })
+      } catch (err) {
+        return jsonResponse(res, 400, { ok: false, error: err.message })
+      }
+    }
+
+    // POST /settings/llm-connectivity-monitor/check — run an immediate check, optionally notifying configured groups
+    if (req.method === 'POST' && url.pathname === '/settings/llm-connectivity-monitor/check') {
+      if (!requireLocalOrToken(req, res, url)) return
+      try {
+        const body = await readJsonBody(req).catch(() => ({}))
+        const result = await runLLMConnectivityMonitorCheck({ notify: body.notify === true, forceNotify: body.forceNotify === true || body.notify === true })
+        const status = getActivationStatus()
+        emitEvent('llm_connectivity_checked', { profiles: status.profiles, result })
+        emitEvent('llm_profiles_updated', { activeProfileId: status.activeProfileId, profiles: status.profiles, failover: status.failover })
+        return jsonResponse(res, 200, { ...result, profiles: status.profiles })
+      } catch (err) {
+        return jsonResponse(res, 400, { ok: false, error: err.message })
+      }
     }
 
     // POST /settings/temperature — set LLM temperature

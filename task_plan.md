@@ -140,3 +140,10 @@
 2. [complete] 将引用上下文接入微信群 @ 回复 prompt，只注入短摘要/元数据，不注入 XML/base64/大段历史。
 3. [complete] 自动判定回复是否需要引用依据：需要时用短句“引用 @某某：…”；不需要不引用。
 4. [in_progress] 增加解析测试，版本文档、Release、重启。
+
+## v0.4.49 LLM Channel Connectivity Notification Plan
+1. [complete] 增加 LLM 渠道连通检测配置：启用开关、通知间隔、通知策略、检测渠道、通知微信群。
+2. [complete] 后端新增定时检测调度器和手动检测 API，复用模型池真实 ping，不泄露 API Key。
+3. [complete] 将检测摘要发送到用户勾选的 Wechaty 群，并支持异常/恢复变化通知、仅异常、每次通知。
+4. [complete] 设置页 LLM 菜单新增可视化配置区，优化大尺寸下拉与多选列表可用性。
+5. [in_progress] 测试、版本文档、GitHub Release、重启验证。

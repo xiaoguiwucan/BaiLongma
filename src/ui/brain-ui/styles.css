@@ -1407,6 +1407,7 @@ body.hotspot-mode .hotspot-btn { color: #ffe7a0; border-color: rgba(255, 210, 90
   line-height: 1.35;
 }
 .llm-failover-panel,
+.llm-monitor-panel,
 .llm-profile-list {
   border: 1px solid var(--line);
   border-radius: 14px;
@@ -1440,6 +1441,153 @@ body.hotspot-mode .hotspot-btn { color: #ffe7a0; border-color: rgba(255, 210, 90
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+.llm-monitor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(114,255,195,0.10), transparent 34%),
+    radial-gradient(circle at 90% 0%, rgba(87,214,255,0.10), transparent 30%),
+    rgba(255,255,255,0.025);
+}
+.llm-monitor-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  border-bottom: 1px solid rgba(255,255,255,0.07);
+  padding-bottom: 10px;
+}
+.llm-monitor-head .llm-failover-toggle { margin-bottom: 0; }
+.llm-monitor-status {
+  flex: 0 0 auto;
+  min-width: 190px;
+  border: 1px solid rgba(87,214,255,0.22);
+  border-radius: 14px;
+  padding: 9px 11px;
+  color: var(--ink2);
+  background: rgba(0,0,0,0.18);
+  font-size: 11px;
+  line-height: 1.55;
+  text-align: right;
+}
+.llm-monitor-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(220px, 1fr));
+  gap: 12px;
+}
+.llm-monitor-controls label,
+.llm-monitor-picker {
+  min-width: 0;
+}
+.llm-monitor-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+  color: var(--ink2);
+  font-size: 11px;
+  font-weight: 700;
+}
+.llm-monitor-select {
+  min-height: 46px;
+  width: 100%;
+  font-size: 13px;
+  padding: 0 13px;
+}
+.llm-monitor-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+.llm-monitor-picker {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  background: rgba(0,0,0,0.14);
+  padding: 10px;
+}
+.llm-monitor-picker-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 9px;
+}
+.llm-monitor-picker-head b {
+  color: var(--ink);
+  font-size: 12px;
+}
+.llm-monitor-picker-head span {
+  color: var(--dim);
+  font-size: 11px;
+}
+.llm-monitor-list {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+  padding-right: 2px;
+}
+.llm-monitor-item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 9px;
+  align-items: flex-start;
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  padding: 10px;
+  background: rgba(255,255,255,0.035);
+  cursor: pointer;
+}
+.llm-monitor-item:hover {
+  border-color: rgba(87,214,255,0.26);
+  background: rgba(87,214,255,0.055);
+}
+.llm-monitor-item input {
+  width: 17px;
+  height: 17px;
+  margin-top: 1px;
+  accent-color: #57d6ff;
+}
+.llm-monitor-item b {
+  display: block;
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.35;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-monitor-item em {
+  display: block;
+  color: var(--dim);
+  font-style: normal;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.llm-monitor-item .llm-signal {
+  display: inline-flex !important;
+  vertical-align: -2px;
+}
+.llm-monitor-item .llm-signal b {
+  display: inline;
+  color: inherit;
+  margin: 0;
+  font-size: 11px;
+}
+.llm-monitor-result {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px;
+  background: rgba(0,0,0,0.18);
+  color: var(--ink2);
+  font: 11px/1.55 "JetBrains Mono", ui-monospace, monospace;
+  white-space: pre-wrap;
+  padding: 10px 12px;
+  min-height: 42px;
 }
 .llm-profile-empty {
   color: var(--dim);
@@ -1563,6 +1711,17 @@ body.hotspot-mode .hotspot-btn { color: #ffe7a0; border-color: rgba(255, 210, 90
 @media (max-width: 900px) {
   .llm-profile-meta {
     grid-template-columns: 1fr;
+  }
+  .llm-monitor-head,
+  .llm-monitor-controls,
+  .llm-monitor-picker-grid {
+    grid-template-columns: 1fr;
+    display: grid;
+  }
+  .llm-monitor-status {
+    min-width: 0;
+    width: 100%;
+    text-align: left;
   }
 }
 

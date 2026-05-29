@@ -158,6 +158,14 @@ export const DEFAULT_LLM_FAILOVER = {
   maxAttempts: 4,
 }
 
+export const DEFAULT_LLM_CONNECTIVITY_MONITOR = {
+  enabled: false,
+  intervalMinutes: 60,
+  notifyMode: 'changes', // all | changes | failures
+  selectedProfileIds: [],
+  selectedGroups: [],
+}
+
 function nowIso() {
   return new Date().toISOString()
 }
@@ -266,6 +274,34 @@ function normalizeLLMFailoverConfig(value = {}) {
     enabled: value.enabled !== false,
     cooldownSeconds: Number.isFinite(cooldown) ? Math.min(3600, Math.max(15, Math.round(cooldown))) : DEFAULT_LLM_FAILOVER.cooldownSeconds,
     maxAttempts: Number.isFinite(maxAttempts) ? Math.min(10, Math.max(1, Math.round(maxAttempts))) : DEFAULT_LLM_FAILOVER.maxAttempts,
+  }
+}
+
+function normalizeStringArray(value = {}, { max = 200 } = {}) {
+  const rows = Array.isArray(value) ? value : (typeof value === 'string' ? value.split(/[\n,，]+/u) : [])
+  const seen = new Set()
+  const out = []
+  for (const item of rows) {
+    const text = String(item || '').trim()
+    if (!text || seen.has(text)) continue
+    seen.add(text)
+    out.push(text)
+    if (out.length >= max) break
+  }
+  return out
+}
+
+function normalizeLLMConnectivityMonitorConfig(value = {}) {
+  const interval = Number(value.intervalMinutes)
+  const notifyMode = ['all', 'changes', 'failures'].includes(String(value.notifyMode || '').trim())
+    ? String(value.notifyMode || '').trim()
+    : DEFAULT_LLM_CONNECTIVITY_MONITOR.notifyMode
+  return {
+    enabled: value.enabled === true,
+    intervalMinutes: Number.isFinite(interval) ? Math.min(1440, Math.max(5, Math.round(interval))) : DEFAULT_LLM_CONNECTIVITY_MONITOR.intervalMinutes,
+    notifyMode,
+    selectedProfileIds: normalizeStringArray(value.selectedProfileIds || value.profileIds || value.channels || []),
+    selectedGroups: normalizeStringArray(value.selectedGroups || value.groupNames || value.groups || []),
   }
 }
 
@@ -388,17 +424,18 @@ function readStoredConfig(parsed = readConfigObject()) {
         activeLLMProfileId: activeProfile.id,
         llmProfiles: profiles,
         llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover),
+        llmConnectivityMonitor: normalizeLLMConnectivityMonitorConfig(parsed.llmConnectivityMonitor),
       }
     }
     if (!parsed.provider) return null
     if (parsed.provider === 'custom') {
       if (!parsed.baseURL || typeof parsed.baseURL !== 'string') return null
       if (!parsed.model || typeof parsed.model !== 'string') return null
-      return { ...parsed, llmProfiles: [], llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover) }
+      return { ...parsed, llmProfiles: [], llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover), llmConnectivityMonitor: normalizeLLMConnectivityMonitorConfig(parsed.llmConnectivityMonitor) }
     }
     if (!PROVIDER_CONFIG[parsed.provider]) return null
     if (!parsed.apiKey || typeof parsed.apiKey !== 'string') return null
-    return { ...parsed, llmProfiles: [], llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover) }
+    return { ...parsed, llmProfiles: [], llmFailover: normalizeLLMFailoverConfig(parsed.llmFailover), llmConnectivityMonitor: normalizeLLMConnectivityMonitorConfig(parsed.llmConnectivityMonitor) }
   } catch {
     return null
   }
@@ -471,6 +508,7 @@ export const config = {
   activeLLMProfileId: null,
   llmProfiles: [],
   llmFailover: { ...DEFAULT_LLM_FAILOVER },
+  llmConnectivityMonitor: { ...DEFAULT_LLM_CONNECTIVITY_MONITOR },
   needsActivation: true,
   temperature: 0.5,
   security: {
@@ -486,6 +524,7 @@ if (stored) {
   config.llmProfiles = Array.isArray(stored.llmProfiles) ? stored.llmProfiles : []
   config.activeLLMProfileId = stored.activeLLMProfileId || config.llmProfiles[0]?.id || null
   config.llmFailover = normalizeLLMFailoverConfig(stored.llmFailover)
+  config.llmConnectivityMonitor = normalizeLLMConnectivityMonitorConfig(stored.llmConnectivityMonitor)
   applyConfig(stored.provider, stored.apiKey, stored.model, stored.baseURL)
 } else if (shouldAllowEnvFallback()) {
   const fromEnv = loadFromEnv()
@@ -577,6 +616,7 @@ function persistLLMState(extra = {}) {
     activeLLMProfileId: config.activeLLMProfileId,
     llmProfiles: config.llmProfiles,
     llmFailover: normalizeLLMFailoverConfig(config.llmFailover),
+    llmConnectivityMonitor: normalizeLLMConnectivityMonitorConfig(config.llmConnectivityMonitor),
   }
   writeStoredConfig(next)
 }
@@ -734,6 +774,16 @@ export function setLLMFailoverConfig(updates = {}) {
   config.llmFailover = normalizeLLMFailoverConfig({ ...config.llmFailover, ...updates })
   persistLLMState()
   return getLLMFailoverConfig()
+}
+
+export function getLLMConnectivityMonitorConfig() {
+  return normalizeLLMConnectivityMonitorConfig(config.llmConnectivityMonitor)
+}
+
+export function setLLMConnectivityMonitorConfig(updates = {}) {
+  config.llmConnectivityMonitor = normalizeLLMConnectivityMonitorConfig({ ...config.llmConnectivityMonitor, ...updates })
+  persistLLMState()
+  return getLLMConnectivityMonitorConfig()
 }
 
 export function getLLMProfiles() {

@@ -231,6 +231,64 @@ const createSettingsModal = () => `
             </div>
           </div>
           <div class="settings-section">
+            <div class="settings-section-label">渠道连通通知</div>
+            <p class="settings-hint">定时检测你选择的 LLM 渠道是否还能连通，并按策略把结果发到指定微信群。检测只发一个极短 ping，不会泄露 API Key。</p>
+            <div class="llm-monitor-panel">
+              <div class="llm-monitor-head">
+                <label class="llm-failover-toggle">
+                  <input id="settings-llm-monitor-enabled" type="checkbox">
+                  <span>
+                    <b>启用 LLM 渠道连通通知</b>
+                    <em>建议选择“异常/恢复变化通知”，避免群里被正常巡检刷屏。</em>
+                  </span>
+                </label>
+                <div class="llm-monitor-status" id="settings-llm-monitor-status">尚未检测</div>
+              </div>
+              <div class="llm-monitor-controls">
+                <label>通知间隔
+                  <select class="settings-select llm-monitor-select" id="settings-llm-monitor-interval">
+                    <option value="5">每 5 分钟</option>
+                    <option value="15">每 15 分钟</option>
+                    <option value="30">每 30 分钟</option>
+                    <option value="60">每 1 小时（推荐）</option>
+                    <option value="180">每 3 小时</option>
+                    <option value="360">每 6 小时</option>
+                    <option value="720">每 12 小时</option>
+                    <option value="1440">每天一次</option>
+                  </select>
+                </label>
+                <label>通知策略
+                  <select class="settings-select llm-monitor-select" id="settings-llm-monitor-mode">
+                    <option value="changes">异常/恢复变化通知（推荐）</option>
+                    <option value="failures">只通知不通渠道</option>
+                    <option value="all">每次检测都通知</option>
+                  </select>
+                </label>
+              </div>
+              <div class="llm-monitor-picker-grid">
+                <div class="llm-monitor-picker">
+                  <div class="llm-monitor-picker-head"><b>选择检测渠道</b><span id="settings-llm-monitor-profile-count">—</span></div>
+                  <div class="llm-monitor-list" id="settings-llm-monitor-profile-list">
+                    <div class="llm-profile-empty">正在读取模型池…</div>
+                  </div>
+                </div>
+                <div class="llm-monitor-picker">
+                  <div class="llm-monitor-picker-head"><b>选择通知微信群</b><span id="settings-llm-monitor-group-count">—</span></div>
+                  <div class="llm-monitor-list" id="settings-llm-monitor-group-list">
+                    <div class="llm-profile-empty">先登录/恢复微信群助手后选择通知群。</div>
+                  </div>
+                </div>
+              </div>
+              <div class="llm-monitor-result" id="settings-llm-monitor-result">检测结果会显示在这里。</div>
+              <div class="settings-row-action">
+                <button class="settings-save-btn" id="settings-save-llm-monitor" type="button">保存通知设置</button>
+                <button class="settings-save-btn" id="settings-test-llm-monitor" type="button">立即检测</button>
+                <button class="settings-save-btn primary" id="settings-notify-llm-monitor" type="button">立即检测并通知</button>
+                <span class="settings-feedback" id="settings-llm-monitor-feedback"></span>
+              </div>
+            </div>
+          </div>
+          <div class="settings-section">
             <div class="settings-section-label">新增 / 编辑模型</div>
             <input id="settings-llm-editing-id" type="hidden" value="">
             <div class="settings-row">
@@ -1231,6 +1289,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.49</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">新增 LLM 渠道连通通知，可定时检测模型池渠道并通知到指定微信群。</p>
+                <ul class="release-note-points">
+                  <li>可配置通知间隔、通知策略、检测渠道和通知群组。</li>
+                  <li>设置页新增大尺寸下拉和卡片多选列表，避免控件太小不好用。</li>
+                  <li>支持立即检测/立即检测并通知；通知不展示 API Key。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.48</span>

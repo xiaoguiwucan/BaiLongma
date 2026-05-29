@@ -3,6 +3,7 @@ import { startClawbotConnector } from './wechat-clawbot.js'
 import { startWechatyDutyGroupConnector } from './wechaty-duty-group.js'
 import { startWeChatGroupDigestScheduler } from './wechat-group-digest.js'
 import { getWechatyDutyGroupConfig } from '../config.js'
+import { startLLMConnectivityMonitorScheduler } from '../llm-connectivity-monitor.js'
 
 const running = new Map() // platform → connector
 
@@ -31,6 +32,12 @@ export async function startSocialConnectors({ pushMessage, emitEvent } = {}) {
     startWeChatGroupDigestScheduler()
   } catch (error) {
     console.warn('[social] wechat group digest scheduler failed:', error?.message || error)
+  }
+
+  try {
+    startLLMConnectivityMonitorScheduler()
+  } catch (error) {
+    console.warn('[social] llm connectivity monitor scheduler failed:', error?.message || error)
   }
 
   return [...running.values()]
