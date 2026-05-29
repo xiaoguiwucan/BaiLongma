@@ -48,6 +48,21 @@ function normalizeText(value = '') {
   return String(value || '').replace(/\s+/g, ' ').trim()
 }
 
+function normalizeSearchText(value = '') {
+  try {
+    return normalizeText(value)
+      .normalize('NFKD')
+      .replace(/\p{Mark}/gu, '')
+      .toLowerCase()
+  } catch {
+    return normalizeText(value).toLowerCase()
+  }
+}
+
+function compactSearchText(value = '') {
+  return normalizeSearchText(value).replace(/[\s\p{P}\p{S}_-]+/gu, '')
+}
+
 function inferMimeType(filePath = '', fallback = '') {
   const value = String(fallback || '').toLowerCase()
   if (value.startsWith('image/')) return value
@@ -326,12 +341,56 @@ function extractImageSearchTerms(text = '') {
   return [...new Set(tokens)].slice(0, 8)
 }
 
+function expandImageSearchTerms(terms = [], query = '') {
+  const all = new Set((terms || []).map(v => String(v || '').trim()).filter(Boolean))
+  const raw = `${query || ''} ${(terms || []).join(' ')}`
+  const norm = normalizeSearchText(raw)
+  const compact = compactSearchText(raw)
+
+  // 识图模型经常把 NewAPI 识别成 “New API”；用户一般会连续写成 newapi。
+  // 搜索时两个写法必须视为同一个词，否则“给我那张 newapi 图”会找不到。
+  if (compact.includes('newapi') || /new\s*api/u.test(norm)) {
+    all.add('newapi')
+    all.add('new api')
+    all.add('new-api')
+  }
+
+  // 微信群里常用外号，不一定等于 Wechaty 采到的花体昵称。
+  // 先内置当前已出现的“力佬/大力/Dali”别名，后续可再接到成员别名管理。
+  if (/力佬|大力/u.test(raw) || compact.includes('dali') || compact.includes('dafi')) {
+    all.add('力佬')
+    all.add('大力')
+    all.add('dali')
+    all.add('dafi')
+  }
+
+  return [...all].slice(0, 14)
+}
+
+function scoreImageSearchTerm({ hay = '', hayCompact = '', term = '', row = {} } = {}) {
+  const rawTerm = String(term || '').trim()
+  if (!rawTerm) return 0
+  const t = normalizeSearchText(rawTerm)
+  const tc = compactSearchText(rawTerm)
+  if (!t && !tc) return 0
+  let score = 0
+  const weight = Math.max(2, Math.min(8, (tc || t).length))
+  if (hay.includes(t)) score += weight
+  if (tc && tc !== t && hay.includes(tc)) score += weight
+  if (tc && hayCompact.includes(tc)) score += weight + (tc.length >= 4 ? 2 : 0)
+
+  const senderHay = normalizeSearchText(`${row.sender_name || ''} ${row.sender_id || ''}`)
+  const senderCompact = compactSearchText(`${row.sender_name || ''} ${row.sender_id || ''}`)
+  if (senderHay.includes(t) || (tc && senderCompact.includes(tc))) score += 6
+  return score
+}
+
 export function findWeChatImageMediaForRequest({ groupId = '', groupName = '', query = '', limit = 8 } = {}) {
   ensureSchema()
   const db = getDB()
   const gid = String(groupId || '').trim()
   const name = String(groupName || '').trim()
-  const filters = [`description <> ''`]
+  const filters = [`relative_path <> ''`]
   const params = []
   if (gid || name) {
     const sub = []
@@ -345,16 +404,28 @@ export function findWeChatImageMediaForRequest({ groupId = '', groupName = '', q
     ORDER BY described_at DESC, id DESC
     LIMIT 120
   `).all(...params)
-  const terms = extractImageSearchTerms(query)
+  const terms = expandImageSearchTerms(extractImageSearchTerms(query), query)
+  const queryNorm = normalizeSearchText(query)
+  const queryCompact = compactSearchText(query)
   const scored = rows.map(row => {
-    const hay = `${row.description || ''} ${row.source_text || ''} ${row.file_name || ''}`.toLowerCase()
+    const hayText = [
+      row.description || '',
+      row.source_text || '',
+      row.sender_name || '',
+      row.sender_id || '',
+      row.file_name || '',
+    ].join(' ')
+    const hay = normalizeSearchText(hayText)
+    const hayCompact = compactSearchText(hayText)
     let score = 0
     for (const term of terms) {
-      const t = term.toLowerCase()
-      if (hay.includes(t)) score += Math.max(2, Math.min(8, t.length))
+      score += scoreImageSearchTerm({ hay, hayCompact, term, row })
     }
     if (/山水|水墨|国画|山水画/u.test(query) && /山水|水墨|国画|群山|云雾|瀑布/u.test(row.description || '')) score += 10
     if (/截图|报错|错误|502|hermes|Hermes/u.test(query) && /截图|报错|错误|502|Hermes|hermes|provider|重试/u.test(row.description || '')) score += 10
+    if ((queryCompact.includes('newapi') || /new\s*api/u.test(queryNorm)) && /new\s*api|newapi/u.test(hay)) score += 10
+    if (/力佬|大力/u.test(query) && (/大力/u.test(row.description || '') || compactSearchText(row.sender_name || '').includes('dali'))) score += 8
+    if (!row.description && /(?:刚才|刚刚|上面|前面|最近|他发|她发|发的)/u.test(query)) score += 1
     return { row, score }
   }).filter(item => item.score > 0 || terms.length === 0)
     .sort((a, b) => b.score - a.score || Number(b.row.id || 0) - Number(a.row.id || 0))

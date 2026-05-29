@@ -1180,6 +1180,30 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.44</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">修复微信群图片转发检索，能把“力佬发的 newapi 图”正确匹配到已入库图片。</p>
+                <ul class="release-note-points">
+                  <li>newapi / New API / New-API 统一归一化匹配。</li>
+                  <li>图片库搜索加入发送者昵称、花体昵称标准化和“力佬/大力/Dali”别名兼容。</li>
+                  <li>已入库但还没完成识图描述的图片也可作为兜底候选，避免刚收到图就说找不到。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.43</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">新增已入库群图片转发能力，并避免把“山水画”误判成生图。</p>
+                <ul class="release-note-points">
+                  <li>“把那张图发给我/转发刚才那张图”会优先从当前群图片库发送原图。</li>
+                  <li>只允许发送当前群已入库微信图片，不允许任意本机文件外发。</li>
+                  <li>生图触发词进一步收紧，避免名词里的“画”误触发。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.19</span>
                   <span class="release-note-date">2026-05-28</span>
                 </div>
