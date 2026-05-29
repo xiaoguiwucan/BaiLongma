@@ -92,3 +92,9 @@
 - Added LLM settings UI section with large interval/strategy selects, profile checkbox list, group checkbox list, status and manual check buttons.
 - Added API endpoints `/settings/llm-connectivity-monitor` and `/settings/llm-connectivity-monitor/check`.
 - Syntax checks and WeChat quote/guard/record-all tests pass for v0.4.49.
+
+## 2026-05-29 v0.4.62 offline QR notify progress
+- 接手上轮改动：目标是在 Wechaty 群助手离线/需要重新扫码时，通过 ClawBot 个人微信通道把登录二维码发送给 ClawBot 自己。
+- 已确认工作区存在 v0.4.62 代码和文档改动，下一步执行完整验证后提交发布。
+- v0.4.62 验证通过：node --check、test:wechaty-offline-qr-notify、test:wechat-guard、test:social-targets、smoke:brain-ui、git diff --check 均通过。
+- Browser 实测当前 Brain UI 设置页可打开“微信群助手”，新增“掉线二维码自动通知”区域可见，文案明确“发送到 ClawBot 自己、不需要选择联系人”，重复通知间隔控件可见。

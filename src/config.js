@@ -1268,6 +1268,23 @@ function normalizeWechatyAdminIds(value = []) {
     .slice(0, 100))]
 }
 
+const DEFAULT_WECHATY_OFFLINE_QR_NOTIFY = {
+  enabled: true,
+  cooldownMinutes: 15,
+  autoRelogin: true,
+}
+
+function normalizeWechatyOfflineQrNotify(value = {}) {
+  const raw = value && typeof value === 'object' ? value : {}
+  const cooldown = Number(raw.cooldownMinutes ?? raw.cooldown_minutes)
+  const allowedCooldowns = new Set([5, 10, 15, 30, 60])
+  return {
+    enabled: raw.enabled !== false,
+    cooldownMinutes: allowedCooldowns.has(cooldown) ? cooldown : DEFAULT_WECHATY_OFFLINE_QR_NOTIFY.cooldownMinutes,
+    autoRelogin: raw.autoRelogin !== false && raw.auto_relogin !== false,
+  }
+}
+
 export function getWechatyDutyGroupConfig() {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.social?.wechatyDutyGroup || {} } catch {}
@@ -1284,6 +1301,7 @@ export function getWechatyDutyGroupConfig() {
     adminModeEnabled: stored.adminModeEnabled === true || stored.admin_mode_enabled === true,
     adminWechatIds,
     adminIds: adminWechatIds,
+    offlineQrNotify: normalizeWechatyOfflineQrNotify(stored.offlineQrNotify ?? stored.offline_qr_notify ?? DEFAULT_WECHATY_OFFLINE_QR_NOTIFY),
     runtime: stored.runtime && typeof stored.runtime === 'object' ? stored.runtime : {},
   }
 }
@@ -1320,6 +1338,21 @@ export function setWechatyDutyGroupConfig(updates = {}) {
     || Object.prototype.hasOwnProperty.call(updates, 'admin_ids')
   ) {
     next.adminWechatIds = normalizeWechatyAdminIds(updates.adminWechatIds ?? updates.admin_wechat_ids ?? updates.adminIds ?? updates.admin_ids)
+  }
+  if (
+    Object.prototype.hasOwnProperty.call(updates, 'offlineQrNotify')
+    || Object.prototype.hasOwnProperty.call(updates, 'offline_qr_notify')
+    || Object.prototype.hasOwnProperty.call(updates, 'offlineQrNotifyEnabled')
+    || Object.prototype.hasOwnProperty.call(updates, 'offline_qr_notify_enabled')
+  ) {
+    const raw = updates.offlineQrNotify ?? updates.offline_qr_notify ?? {}
+    const currentNotify = normalizeWechatyOfflineQrNotify(next.offlineQrNotify ?? next.offline_qr_notify ?? DEFAULT_WECHATY_OFFLINE_QR_NOTIFY)
+    next.offlineQrNotify = normalizeWechatyOfflineQrNotify({
+      ...currentNotify,
+      ...(raw && typeof raw === 'object' ? raw : {}),
+      ...(Object.prototype.hasOwnProperty.call(updates, 'offlineQrNotifyEnabled') ? { enabled: updates.offlineQrNotifyEnabled === true } : {}),
+      ...(Object.prototype.hasOwnProperty.call(updates, 'offline_qr_notify_enabled') ? { enabled: updates.offline_qr_notify_enabled === true } : {}),
+    })
   }
   next.personaPresetId = resolveWechatyPersonaPresetId(next.personaPrompt || DEFAULT_WECHATY_PERSONA_PROMPT, next.personaPresetId)
   const social = { ...(existing.social || {}), wechatyDutyGroup: next }

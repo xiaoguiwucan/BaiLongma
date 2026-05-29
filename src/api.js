@@ -1557,6 +1557,16 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
             personaPresetId: body.persona_preset_id ?? body.personaPresetId,
           }
           if (
+            Object.prototype.hasOwnProperty.call(body, 'offline_qr_notify')
+            || Object.prototype.hasOwnProperty.call(body, 'offlineQrNotify')
+            || Object.prototype.hasOwnProperty.call(body, 'offline_qr_notify_enabled')
+            || Object.prototype.hasOwnProperty.call(body, 'offlineQrNotifyEnabled')
+          ) {
+            updates.offlineQrNotify = body.offline_qr_notify ?? body.offlineQrNotify ?? {
+              enabled: body.offline_qr_notify_enabled ?? body.offlineQrNotifyEnabled,
+            }
+          }
+          if (
             Object.prototype.hasOwnProperty.call(body, 'admin_mode_enabled')
             || Object.prototype.hasOwnProperty.call(body, 'adminModeEnabled')
           ) updates.adminModeEnabled = body.admin_mode_enabled ?? body.adminModeEnabled

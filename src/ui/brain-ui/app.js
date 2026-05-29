@@ -2152,6 +2152,10 @@ function initTTSSettings() {
   const wechatyRecordsMoreBtn = document.getElementById("wechaty-records-more-btn");
   const wechatyQrArea = document.getElementById("wechaty-qr-area");
   const wechatyQrImg = document.getElementById("wechaty-qr-img");
+  const wechatyOfflineQrNotifyEnabled = document.getElementById("wechaty-offline-qr-notify-enabled");
+  const wechatyOfflineQrNotifyAutoRelogin = document.getElementById("wechaty-offline-qr-notify-autorelogin");
+  const wechatyOfflineQrNotifyCooldown = document.getElementById("wechaty-offline-qr-notify-cooldown");
+  const wechatyOfflineQrNotifyStatus = document.getElementById("wechaty-offline-qr-notify-status");
   const wechatyMemeEnabled = document.getElementById("wechaty-meme-enabled");
   const wechatyMemeProvider = document.getElementById("wechaty-meme-provider");
   const wechatyMemeMax = document.getElementById("wechaty-meme-max");
@@ -3079,6 +3083,15 @@ function initTTSSettings() {
     };
   }
 
+  function collectWechatyOfflineQrNotifyConfig() {
+    const cooldown = Number(wechatyOfflineQrNotifyCooldown?.value || 15);
+    return {
+      enabled: wechatyOfflineQrNotifyEnabled?.checked !== false,
+      autoRelogin: wechatyOfflineQrNotifyAutoRelogin?.checked !== false,
+      cooldownMinutes: [5, 10, 15, 30, 60].includes(cooldown) ? cooldown : 15,
+    };
+  }
+
 
   function setWechatyStatus(text, ok = false) {
     if (!wechatyDutyStatus) return;
@@ -3580,6 +3593,7 @@ function initTTSSettings() {
           persona_preset_id: describeWechatyPersona(wechatyPersonaPrompt?.value || "").id,
           admin_mode_enabled: adminConfig.adminModeEnabled,
           admin_wechat_ids: adminConfig.adminWechatIds,
+          offline_qr_notify: collectWechatyOfflineQrNotifyConfig(),
         }),
       });
       const data = await res.json();
@@ -4475,9 +4489,41 @@ function initTTSSettings() {
     }
   }
 
+  function applyWechatyOfflineQrNotifyConfig(config = {}, status = {}) {
+    const notify = config.offlineQrNotify || {};
+    const runtime = status.offline_qr_notify || {};
+    const enabled = notify.enabled !== false;
+    const autoRelogin = notify.autoRelogin !== false;
+    const cooldown = Number(notify.cooldownMinutes || runtime.cooldown_minutes || 15);
+    if (wechatyOfflineQrNotifyEnabled) wechatyOfflineQrNotifyEnabled.checked = enabled;
+    if (wechatyOfflineQrNotifyAutoRelogin) wechatyOfflineQrNotifyAutoRelogin.checked = autoRelogin;
+    if (wechatyOfflineQrNotifyCooldown) wechatyOfflineQrNotifyCooldown.value = String([5, 10, 15, 30, 60].includes(cooldown) ? cooldown : 15);
+    if (!wechatyOfflineQrNotifyStatus) return;
+    const clawbotConnected = runtime.clawbot_connected === true;
+    const lastSent = runtime.last_sent_at ? new Date(runtime.last_sent_at).toLocaleString('zh-CN', { hour12: false }) : '';
+    const lastError = runtime.last_error || '';
+    if (!enabled) {
+      wechatyOfflineQrNotifyStatus.textContent = "已关闭";
+      wechatyOfflineQrNotifyStatus.className = "wechaty-offline-notify-state miss";
+    } else if (!clawbotConnected) {
+      wechatyOfflineQrNotifyStatus.textContent = "等待 ClawBot";
+      wechatyOfflineQrNotifyStatus.className = "wechaty-offline-notify-state miss";
+    } else if (lastError) {
+      wechatyOfflineQrNotifyStatus.textContent = `通知失败：${lastError.slice(0, 24)}`;
+      wechatyOfflineQrNotifyStatus.className = "wechaty-offline-notify-state miss";
+    } else if (lastSent) {
+      wechatyOfflineQrNotifyStatus.textContent = `已启用 · 最近发送 ${lastSent}`;
+      wechatyOfflineQrNotifyStatus.className = "wechaty-offline-notify-state ok";
+    } else {
+      wechatyOfflineQrNotifyStatus.textContent = "已启用";
+      wechatyOfflineQrNotifyStatus.className = "wechaty-offline-notify-state ok";
+    }
+  }
+
   function applyWechatyDutyConfig(config = {}, status = {}) {
     if (wechatyDutyEnabled) wechatyDutyEnabled.checked = config.enabled !== false;
     applyWechatyAdminConfig(config || {});
+    applyWechatyOfflineQrNotifyConfig(config || {}, status || {});
     const hasPersonaPrompt = Object.prototype.hasOwnProperty.call(config, "personaPrompt");
     if (hasPersonaPrompt) {
       wechatySavedPersonaPrompt = config.personaPrompt || "";
@@ -5283,6 +5329,7 @@ function initTTSSettings() {
           persona_preset_id: describeWechatyPersona(wechatyPersonaPrompt?.value || "").id,
           admin_mode_enabled: !!wechatyAdminEnabled?.checked,
           admin_wechat_ids: [...wechatyAdminIdSet],
+          offline_qr_notify: collectWechatyOfflineQrNotifyConfig(),
         }),
       });
       const data = await res.json();
@@ -6058,6 +6105,9 @@ function initTTSSettings() {
   window.addEventListener("bailongma:social_status", (e) => {
     const d = e.detail;
     if (d?.platform === "wechaty-duty-group") {
+      if (d.offline_qr_notify) {
+        applyWechatyOfflineQrNotifyConfig({ offlineQrNotify: collectWechatyOfflineQrNotifyConfig() }, { offline_qr_notify: d.offline_qr_notify });
+      }
       if (d.alert === "offline" || d.needs_relogin || d.connection_state === "offline") {
         setWechatyStatus("已离线 · 缓存群不可用，请重新扫码", false);
         if (wechatyLoginSub) wechatyLoginSub.textContent = d.hint || "微信助手已离线，无法接收群 @ 消息，请强制重新扫码。";

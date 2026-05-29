@@ -11,9 +11,12 @@ import { generateImageForWechat, isWechatImageGenerationRequest } from './image-
 import { describeWeChatImageMedia, findWeChatImageMediaForRequest, getWeChatImageVisionStatus, maybeDescribeWeChatImageMedia, resolveWeChatImageMediaFile, upsertWeChatImageMediaItem } from './wechat-image-vision.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { searchPublicImages } from './public-image-search.js'
+import { getClawbotStatus, sendClawbotSelfNotification } from './wechat-clawbot.js'
 import { paths } from '../paths.js'
 import path from 'path'
 import fs from 'fs'
+import crypto from 'crypto'
+import QRCode from 'qrcode'
 
 const FALLBACK_GROUP_NAMES = ['值班群', 'PT站看片狂魔小群']
 const WECHATY_MEMORY_NAME = path.join(paths.userDir, 'wechaty-duty-group')
@@ -25,6 +28,8 @@ const MEMBER_NAME_REFRESH_STALE_MS = 10 * 60 * 1000
 const START_WATCHDOG_MS = 60 * 1000
 const OFFLINE_DETECT_INTERVAL_MS = 30 * 1000
 const STARTING_RELOGIN_REQUIRED_MS = 90 * 1000
+const OFFLINE_QR_RELOGIN_MIN_INTERVAL_MS = 60 * 1000
+const OFFLINE_QR_DIR = path.join(paths.dataDir, 'wechaty-login-qrcode')
 const PUBLIC_IMAGE_URL_RE = /^https?:\/\/[^\s<>"'`]+\.(?:png|jpe?g|gif|webp)(?:[?#][^\s<>"'`]*)?$/iu
 const LOCAL_FILE_REFERENCE_RE = /(?:file:\/\/|\/Users\/|~\/|[A-Za-z]:\\|(?:桌面|下载|文档|相册|截图|本机|本地).{0,20}(?:图片|文件|照片|截图))/iu
 const DIRECT_MEME_REQUEST_RE = /(?:斗图|表情包|梗图|gif|动图|发.{0,4}表情|来.{0,4}表情|整.{0,4}表情|发.{0,3}图|来.{0,3}图|开心|难过|愤怒|生气|鄙视|无语|笑死|吃瓜|破防).{0,8}(?:表情|表情包|梗图|图|gif)?|(?:表情|表情包|梗图|gif|动图)$/iu
@@ -57,6 +62,12 @@ let startWatchdogTimer = null
 let offlineDetectTimer = null
 let connectionAttemptStartedAt = 0
 let lastOfflineAlertKey = ''
+let offlineQrReloginInFlight = false
+let lastOfflineQrReloginAt = 0
+let lastClawbotQrNotifyKey = ''
+let lastClawbotQrNotifyAt = 0
+let lastClawbotQrNotifyError = ''
+let lastClawbotQrNotifyResult = ''
 const memberNameRefreshAt = new Map()
 const recentWechatUserMessages = new Map()
 
@@ -75,6 +86,133 @@ async function withWechatySendTimeout(promise, ms = 15000, label = 'wechat send'
     ])
   } finally {
     if (timer) clearTimeout(timer)
+  }
+}
+
+function getOfflineQrNotifyConfig() {
+  try {
+    const cfg = getWechatyDutyGroupConfig().offlineQrNotify || {}
+    const cooldown = Number(cfg.cooldownMinutes || 15)
+    return {
+      enabled: cfg.enabled !== false,
+      cooldownMinutes: [5, 10, 15, 30, 60].includes(cooldown) ? cooldown : 15,
+      autoRelogin: cfg.autoRelogin !== false,
+    }
+  } catch {
+    return { enabled: true, cooldownMinutes: 15, autoRelogin: true }
+  }
+}
+
+function hashWechatyQr(qr = '') {
+  return crypto.createHash('sha256').update(String(qr || '')).digest('hex').slice(0, 16)
+}
+
+function getOfflineQrNotifyState() {
+  const cfg = getOfflineQrNotifyConfig()
+  const clawbot = getClawbotStatus()
+  return {
+    enabled: cfg.enabled,
+    cooldown_minutes: cfg.cooldownMinutes,
+    auto_relogin: cfg.autoRelogin,
+    clawbot_connected: clawbot.connected === true,
+    clawbot_status: clawbot.status,
+    clawbot_self_context_ready: clawbot.self_context_ready === true,
+    last_sent_at: lastClawbotQrNotifyAt ? new Date(lastClawbotQrNotifyAt).toISOString() : '',
+    last_result: lastClawbotQrNotifyResult,
+    last_error: lastClawbotQrNotifyError,
+    has_qr: !!lastQr,
+  }
+}
+
+export function buildWechatyOfflineQrNotifyCaption({ reason = '', hint = '', loginUser = '', groupNames = [], now = new Date() } = {}) {
+  const groups = (Array.isArray(groupNames) ? groupNames : [])
+    .map(v => String(v || '').trim())
+    .filter(Boolean)
+    .slice(0, 8)
+    .join('、')
+  const lines = [
+    '⚠️ 微信群助手已离线，需要重新扫码登录。',
+    loginUser ? `上次登录：${loginUser}` : '',
+    groups ? `接入群组：${groups}` : '',
+    hint ? `状态：${hint}` : '',
+    reason ? `触发原因：${reason}` : '',
+    `时间：${now.toLocaleString('zh-CN', { hour12: false })}`,
+    '请扫描随附二维码恢复微信群助手登录。',
+  ].filter(Boolean)
+  return lines.join('\n')
+}
+
+export function shouldThrottleWechatyOfflineQrNotify({ enabled = true, qr = '', lastKey = '', lastAt = 0, cooldownMinutes = 15, now = Date.now(), force = false } = {}) {
+  if (!enabled) return { throttled: true, reason: 'disabled' }
+  const key = hashWechatyQr(qr)
+  if (!qr || !key) return { throttled: true, reason: 'no_qr' }
+  const cooldownMs = Math.max(1, Number(cooldownMinutes || 15)) * 60 * 1000
+  if (!force && lastKey === key && Number(now || Date.now()) - Number(lastAt || 0) < cooldownMs) {
+    return { throttled: true, reason: 'cooldown', key }
+  }
+  return { throttled: false, key }
+}
+
+async function ensureWechatyQrImageFile(qr = '') {
+  const value = String(qr || '').trim()
+  if (!value) throw new Error('wechaty qr missing')
+  const key = hashWechatyQr(value)
+  fs.mkdirSync(OFFLINE_QR_DIR, { recursive: true })
+  const file = path.join(OFFLINE_QR_DIR, `wechaty-login-${key}.png`)
+  if (!fs.existsSync(file)) {
+    await QRCode.toFile(file, value, {
+      type: 'png',
+      width: 420,
+      margin: 2,
+      errorCorrectionLevel: 'M',
+    })
+  }
+  return { file, key }
+}
+
+async function notifyWechatyLoginQrViaClawbot(reason = '', { force = false } = {}) {
+  const cfg = getOfflineQrNotifyConfig()
+  const throttle = shouldThrottleWechatyOfflineQrNotify({
+    enabled: cfg.enabled,
+    qr: lastQr,
+    lastKey: lastClawbotQrNotifyKey,
+    lastAt: lastClawbotQrNotifyAt,
+    cooldownMinutes: cfg.cooldownMinutes,
+    force,
+  })
+  if (throttle.throttled) return { ok: false, skipped: true, reason: throttle.reason }
+
+  try {
+    const { file, key } = await ensureWechatyQrImageFile(lastQr)
+    const hint = getConnectionHint({ online: false, rooms: roomSnapshot })
+    const caption = buildWechatyOfflineQrNotifyCaption({
+      reason,
+      hint,
+      loginUser: previousLoginUser(),
+      groupNames: targetGroupNames,
+    })
+    const fallbackText = `${caption}\n\n二维码内容：${lastQr}`
+    const result = await sendClawbotSelfNotification({ text: caption, imagePath: file, fallbackText })
+    if (result?.ok) {
+      lastClawbotQrNotifyKey = key
+      lastClawbotQrNotifyAt = Date.now()
+      lastClawbotQrNotifyError = ''
+      lastClawbotQrNotifyResult = result.image ? 'image_sent' : (result.fallback ? 'text_fallback_sent' : 'text_sent')
+      console.log(`[WechatyOfflineQR] 已通过 ClawBot 自通知发送登录二维码 result=${lastClawbotQrNotifyResult}`)
+      emitWechatyStatusEvent({ offline_qr_notify: getOfflineQrNotifyState() })
+      return { ok: true, ...result }
+    }
+    lastClawbotQrNotifyError = result?.error || result?.reason || 'ClawBot notification failed'
+    lastClawbotQrNotifyResult = 'failed'
+    console.warn(`[WechatyOfflineQR] ClawBot 自通知失败：${lastClawbotQrNotifyError}`)
+    emitWechatyStatusEvent({ offline_qr_notify: getOfflineQrNotifyState() })
+    return { ok: false, ...result }
+  } catch (err) {
+    lastClawbotQrNotifyError = err?.message || String(err)
+    lastClawbotQrNotifyResult = 'failed'
+    console.warn(`[WechatyOfflineQR] 发送登录二维码失败：${lastClawbotQrNotifyError}`)
+    emitWechatyStatusEvent({ offline_qr_notify: getOfflineQrNotifyState() })
+    return { ok: false, error: lastClawbotQrNotifyError }
   }
 }
 
@@ -607,6 +745,37 @@ function notifyWechatyOffline(reason = '', { force = false } = {}) {
   emitWechatyStatusEvent({ alert: 'offline', reason, error: lastError })
 }
 
+function requestOfflineQrNotification(reason = '') {
+  const cfg = getOfflineQrNotifyConfig()
+  if (!cfg.enabled) return
+  if (lastQr) {
+    notifyWechatyLoginQrViaClawbot(reason).catch(err =>
+      console.warn(`[WechatyOfflineQR] ClawBot 二维码通知异常：${err?.message || err}`)
+    )
+    return
+  }
+  if (!cfg.autoRelogin) return
+  if (offlineQrReloginInFlight) return
+  if (Date.now() - lastOfflineQrReloginAt < OFFLINE_QR_RELOGIN_MIN_INTERVAL_MS) return
+  if (!needsWechatyRelogin()) return
+  offlineQrReloginInFlight = true
+  lastOfflineQrReloginAt = Date.now()
+  console.warn(`[WechatyOfflineQR] 微信助手离线且暂无二维码，开始自动生成重新登录二维码 reason=${reason || 'unknown'}`)
+  forceReloginWechatyDutyGroupConnector({
+    pushMessage: pushMessageRef,
+    emitEvent: emitEventRef,
+    groupNames: targetGroupNames,
+    enabled: true,
+  }).catch(err => {
+    lastClawbotQrNotifyError = err?.message || String(err)
+    lastClawbotQrNotifyResult = 'relogin_failed'
+    console.warn(`[WechatyOfflineQR] 自动生成二维码失败：${lastClawbotQrNotifyError}`)
+    emitWechatyStatusEvent({ offline_qr_notify: getOfflineQrNotifyState() })
+  }).finally(() => {
+    offlineQrReloginInFlight = false
+  })
+}
+
 function needsWechatyRelogin() {
   if (isTrulyOnline()) return false
   if (status === 'qr_ready') return false
@@ -629,6 +798,7 @@ function startOfflineDetector() {
         persistRuntime(status)
       }
       notifyWechatyOffline('health_check')
+      requestOfflineQrNotification('health_check')
     }
   }, OFFLINE_DETECT_INTERVAL_MS)
 }
@@ -744,6 +914,7 @@ export function getWechatyDutyGroupStatus() {
     rooms_stale: stale,
     needs_relogin: needsWechatyRelogin(),
     hint: getConnectionHint({ online, rooms }),
+    offline_qr_notify: getOfflineQrNotifyState(),
     last_room_refresh_at: lastRoomRefreshAt || String(runtime.lastRoomRefreshAt || ''),
     last_message_at: lastMessageAt || String(runtime.lastMessageAt || ''),
     health: {
@@ -947,6 +1118,9 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     try { qrcodeTerminal.generate(qrcode, { small: true }) } catch {}
     persistRuntime(status)
     emitEventRef?.('social_status', { platform: 'wechaty-duty-group', status, group_names: [...targetGroupNames], qr: qrcode, qr_ascii: lastQrAscii })
+    notifyWechatyLoginQrViaClawbot('qr_ready').catch(err =>
+      console.warn(`[WechatyOfflineQR] 二维码已生成但 ClawBot 通知异常：${err?.message || err}`)
+    )
   })
 
   bot.on('login', async (user) => {
@@ -955,6 +1129,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     lastLoginUser = user?.name?.() || ''
     lastQr = ''
     lastQrAscii = ''
+    lastClawbotQrNotifyError = ''
     console.log(`[Wechaty] 登录成功：${lastLoginUser}，正在查找群：${targetGroupNames.join('、')}`)
     reconnectAttempts = 0
     persistRuntime(status)

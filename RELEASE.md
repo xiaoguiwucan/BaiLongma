@@ -1,3 +1,31 @@
+## v0.4.62 - 2026-05-29
+
+### 发布主题
+微信群助手掉线二维码自动通知：群聊微信掉线后，用另一个 ClawBot 个人微信把重新登录二维码发到 ClawBot 自己。
+
+### 更新内容
+1. 新增微信群助手真实在线监控联动：离线、断开、错误、登录态恢复超时、缓存群不可用等状态会进入恢复流程。
+2. Wechaty 生成登录二维码后，程序会本地生成 PNG 二维码图片。
+3. 二维码会通过“微信 ClawBot（个人微信）”发送到 ClawBot 自己，不需要配置联系人、群、接收人。
+4. ClawBot 自通知优先发送图片；图片失败时降级发送文字和二维码内容，避免完全收不到。
+5. 默认开启重复通知冷却：同一个二维码 15 分钟内只发一次，避免掉线刷屏。
+6. 默认开启自动重新生成二维码：离线但暂无二维码时，程序会自动触发强制重新扫码流程。
+7. 微信群助手设置页新增专用卡片，可开关自动通知、自动生成二维码并调整冷却间隔。
+8. 状态接口和 UI 会显示 ClawBot 是否在线、最近发送时间和错误原因。
+
+### 部署方法
+```bash
+git clone https://github.com/xiaoguiwucan/BaiLongma.git
+cd BaiLongma
+git checkout v0.4.62
+npm install
+./start-jarvis-background.sh
+```
+
+### 验证
+- `npm run test:wechaty-offline-qr-notify`
+- `node --check src/config.js src/social/wechat-clawbot.js src/social/wechaty-duty-group.js src/api.js src/ui/brain-ui/app-shell.js src/ui/brain-ui/app.js`
+
 ## v0.4.61 - 2026-05-29
 
 ### 发布主题

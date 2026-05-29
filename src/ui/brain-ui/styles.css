@@ -5304,6 +5304,62 @@ body.person-card-mode .person-card-panel,
   flex-wrap: wrap;
   flex: 0 0 auto;
 }
+.wechaty-offline-notify-card {
+  margin: 0 0 12px;
+  padding: 13px 14px;
+  border: 1px solid rgba(114, 255, 195, 0.20);
+  border-radius: 14px;
+  background:
+    radial-gradient(circle at top right, rgba(114, 255, 195, 0.10), transparent 36%),
+    rgba(255,255,255,0.028);
+}
+.wechaty-offline-notify-card .wechaty-subsection-head {
+  margin-bottom: 10px;
+}
+.wechaty-offline-notify-state {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 26px;
+  max-width: 260px;
+  padding: 0 10px;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,0.10);
+  color: var(--ink2);
+  background: rgba(255,255,255,0.035);
+  font-size: 10px;
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wechaty-offline-notify-state.ok {
+  color: #aafbdd;
+  border-color: rgba(114, 255, 195, 0.34);
+  background: rgba(114, 255, 195, 0.10);
+}
+.wechaty-offline-notify-state.miss {
+  color: #ffd479;
+  border-color: rgba(255, 212, 121, 0.30);
+  background: rgba(255, 212, 121, 0.08);
+}
+.wechaty-offline-notify-controls {
+  display: grid;
+  grid-template-columns: minmax(180px, 260px);
+  gap: 10px;
+  margin-top: 9px;
+}
+.wechaty-offline-notify-controls label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  color: var(--ink2);
+  font-size: 11px;
+}
+.wechaty-offline-notify-controls .settings-select {
+  width: 100%;
+  min-width: 0;
+}
 
 @media (max-width: 860px) {
   .wechaty-memory-grid {

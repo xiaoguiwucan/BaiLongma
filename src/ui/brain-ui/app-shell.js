@@ -704,6 +704,34 @@ const createSettingsModal = () => `
               <img id="wechaty-qr-img" src="" alt="Wechaty 微信登录二维码">
               <div>用要接入群聊的微信扫码登录；登录成功后会自动获取群列表。二维码如果过期，请点“强制重新扫码”。</div>
             </div>
+            <div class="wechaty-offline-notify-card">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">掉线二维码自动通知</div>
+                  <p class="settings-hint compact">监控微信群助手真实在线状态；掉线并生成登录二维码后，会通过「社交媒体 → 微信 ClawBot（个人微信）」发送到 ClawBot 自己，不需要选择联系人。请确保 ClawBot 微信账号与进群回复的微信群助手账号不是同一个。</p>
+                </div>
+                <span class="wechaty-offline-notify-state" id="wechaty-offline-qr-notify-status">—</span>
+              </div>
+              <label class="wechaty-master-toggle">
+                <input id="wechaty-offline-qr-notify-enabled" type="checkbox" checked>
+                <span>掉线后自动用 ClawBot 发送登录二维码</span>
+              </label>
+              <label class="wechaty-master-toggle">
+                <input id="wechaty-offline-qr-notify-autorelogin" type="checkbox" checked>
+                <span>离线且暂无二维码时自动重新生成二维码</span>
+              </label>
+              <div class="wechaty-offline-notify-controls">
+                <label>重复通知间隔
+                  <select class="settings-select" id="wechaty-offline-qr-notify-cooldown">
+                    <option value="5">5 分钟</option>
+                    <option value="10">10 分钟</option>
+                    <option value="15">15 分钟（推荐）</option>
+                    <option value="30">30 分钟</option>
+                    <option value="60">60 分钟</option>
+                  </select>
+                </label>
+              </div>
+            </div>
             <div class="wechaty-room-tools">
               <input class="settings-input" id="wechaty-room-filter" type="search" placeholder="搜索群名…">
               <span class="wechaty-selected-count" id="wechaty-selected-count">未获取群列表</span>
@@ -1391,6 +1419,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.62</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">微信群助手掉线二维码自动通知：离线后通过 ClawBot 自己发送重新登录二维码。</p>
+                <ul class="release-note-points">
+                  <li>持续监控微信群助手真实在线状态，离线且暂无二维码时可自动重新生成二维码。</li>
+                  <li>二维码会生成 PNG，并通过“微信 ClawBot（个人微信）”发送到 ClawBot 自己，不需要选择联系人。</li>
+                  <li>新增通知开关、自动生成二维码开关、重复通知冷却和通知状态显示。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.61</span>

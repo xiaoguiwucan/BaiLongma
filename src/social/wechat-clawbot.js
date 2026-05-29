@@ -1,4 +1,5 @@
-import { WeChatClient } from 'wechat-ilink-client'
+import { WeChatClient, sendText as sendIlinkText, sendImage as sendIlinkImage } from 'wechat-ilink-client'
+import fs from 'fs'
 import { getClawbotCredentials, setClawbotCredentials, clearClawbotCredentials } from '../config.js'
 import { upsertClawbotToken, getAllClawbotTokens } from '../db.js'
 import { archiveWeChatGroupMessage, buildWeChatGroupCommandPrompt, formatGroupLine, makeWeChatGroupExternalId, shouldWakeInWeChatGroup, WECHAT_GROUP_CHANNEL } from './wechat-groups.js'
@@ -9,6 +10,103 @@ import { normalizeWeChatGroupDisplayText, recordWeChatGroupActivity } from './we
 let client = null
 let currentQrUrl = null   // set during login, cleared after scan
 let clawbotStatus = 'idle' // idle | qr_pending | connected | error
+
+function getClawbotAccountId() {
+  try {
+    const fromClient = client?.getAccountId?.()
+    if (fromClient) return String(fromClient || '').trim()
+  } catch {}
+  try {
+    return String(getClawbotCredentials()?.accountId || '').trim()
+  } catch {
+    return ''
+  }
+}
+
+function getClawbotContextTokenFor(userId = '') {
+  const id = String(userId || '').trim()
+  if (!id) return ''
+  try {
+    if (client?.contextTokens instanceof Map) return String(client.contextTokens.get(id) || '').trim()
+  } catch {}
+  return ''
+}
+
+function isMissingContextTokenError(err) {
+  return /No context_token|context_token/i.test(String(err?.message || err || ''))
+}
+
+async function sendClawbotTextAllowingSelf(userId, content, contextToken = '') {
+  const target = String(userId || '').trim()
+  const text = String(content || '')
+  const token = String(contextToken || '').trim()
+  if (!target) throw new Error('clawbot target user id missing')
+  try {
+    return await client.sendText(target, text, token || undefined)
+  } catch (err) {
+    // “发送到 ClawBot 自己”没有普通好友会话 context_token 时，尝试走 iLink 底层 sendMessage。
+    // 这样不需要用户再配置联系人；若服务端仍拒绝，调用方会拿到真实错误并可降级。
+    if (!isMissingContextTokenError(err) || !client?.api) throw err
+    return await sendIlinkText(client.api, target, text, token || '')
+  }
+}
+
+async function sendClawbotImageAllowingSelf(userId, imagePath, caption = '', contextToken = '') {
+  const target = String(userId || '').trim()
+  const file = String(imagePath || '').trim()
+  const token = String(contextToken || '').trim()
+  if (!target) throw new Error('clawbot target user id missing')
+  if (!file || !fs.existsSync(file)) throw new Error(`clawbot image file missing: ${file}`)
+  const uploaded = await client.uploadImage(file, target)
+  try {
+    return await client.sendUploadedImage(target, uploaded, caption || undefined, token || undefined)
+  } catch (err) {
+    if (!isMissingContextTokenError(err) || !client?.api) throw err
+    return await sendIlinkImage(client.api, target, uploaded, token || '', caption || undefined)
+  }
+}
+
+export function getClawbotStatus() {
+  const accountId = getClawbotAccountId()
+  const selfContextToken = getClawbotContextTokenFor(accountId)
+  return {
+    status: clawbotStatus,
+    connected: !!client && clawbotStatus === 'connected',
+    accountId,
+    self_context_ready: !!selfContextToken,
+  }
+}
+
+// 系统通知专用：发送到 ClawBot 自己，不让用户选择联系人/群。
+export async function sendClawbotSelfNotification({ text = '', imagePath = '', fallbackText = '' } = {}) {
+  if (!client || clawbotStatus !== 'connected') {
+    return { ok: false, reason: 'wechat-clawbot not connected', status: clawbotStatus }
+  }
+  const accountId = getClawbotAccountId()
+  if (!accountId) return { ok: false, reason: 'clawbot account id missing', status: clawbotStatus }
+  const contextToken = getClawbotContextTokenFor(accountId)
+  const body = String(text || '').trim()
+  const fallback = String(fallbackText || body || '').trim()
+  try {
+    if (imagePath) {
+      try {
+        const id = await sendClawbotImageAllowingSelf(accountId, imagePath, body, contextToken)
+        return { ok: true, platform: 'wechat-clawbot', self: true, image: true, id, accountId }
+      } catch (imageErr) {
+        console.warn(`[ClawBot] 自通知图片发送失败，降级文本：${imageErr?.message || imageErr}`)
+        if (!fallback) throw imageErr
+        const id = await sendClawbotTextAllowingSelf(accountId, fallback, contextToken)
+        return { ok: true, platform: 'wechat-clawbot', self: true, image: false, fallback: true, id, accountId, image_error: imageErr?.message || String(imageErr) }
+      }
+    }
+    if (!body) return { ok: false, reason: 'empty notification content' }
+    const id = await sendClawbotTextAllowingSelf(accountId, body, contextToken)
+    return { ok: true, platform: 'wechat-clawbot', self: true, image: false, id, accountId }
+  } catch (err) {
+    console.error(`[ClawBot] 自通知发送失败: ${err?.message || err}`)
+    return { ok: false, error: err?.message || String(err), accountId, self_context_ready: !!contextToken }
+  }
+}
 
 // Called by dispatch.js to send replies back to WeChat
 export async function sendClawbotMessage(userId, content) {

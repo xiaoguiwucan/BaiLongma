@@ -147,3 +147,16 @@
 3. [complete] 将检测摘要发送到用户勾选的 Wechaty 群，并支持异常/恢复变化通知、仅异常、每次通知。
 4. [complete] 设置页 LLM 菜单新增可视化配置区，优化大尺寸下拉与多选列表可用性。
 5. [in_progress] 测试、版本文档、GitHub Release、重启验证。
+
+## v0.4.62 Plan - Wechaty offline QR notification via ClawBot self
+1. [complete] 增加微信群助手掉线真实状态检测后自动生成/复用登录二维码。
+2. [complete] 通过“微信 ClawBot（个人微信）”向 ClawBot 自己发送二维码，不要求用户配置联系人/群。
+3. [complete] 设置页新增掉线二维码自动通知开关、自动重新生成二维码开关、重复通知冷却时间，并显示 ClawBot 通道状态和最近错误。
+4. [complete] 运行语法/单元/冒烟测试，修复发现的问题。
+5. [in_progress] 更新版本文档、提交 tag、推送 GitHub Release。
+
+### v0.4.62 Constraints
+- ClawBot 账号与 Wechaty 群助手账号必须保持分离。
+- 不发送任意本机文件；只发送程序根据 Wechaty login QR 生成的登录二维码 PNG。
+- 用户明确要求“发给 ClawBot 自己”，不要新增联系人/接收群配置。
+- 不重启/破坏当前微信登录态，除非离线且配置允许自动重新生成二维码。
