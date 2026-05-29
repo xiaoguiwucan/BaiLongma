@@ -413,6 +413,55 @@ const createSettingsModal = () => `
             <div class="db-overview-grid" id="db-overview-grid">
               <div class="wechaty-empty">正在加载数据库统计…</div>
             </div>
+            <div class="db-image-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">微信群图片解析库</div>
+                  <p class="settings-hint compact">所有已接入微信群收到的图片会自动入库并后台识图；这里可以实时查看解析进度、筛选图片、浏览缩略图和识图内容。</p>
+                </div>
+                <div class="db-image-actions">
+                  <button class="settings-save-btn primary" id="db-image-refresh-btn" type="button">刷新图片库</button>
+                  <button class="settings-save-btn" id="db-image-process-btn" type="button">解析待处理</button>
+                </div>
+              </div>
+              <div class="db-image-progress" id="db-image-progress">
+                <div class="wechaty-empty">正在读取图片解析状态…</div>
+              </div>
+              <div class="db-image-filters">
+                <label>群组
+                  <select class="settings-select" id="db-image-group"></select>
+                </label>
+                <label>解析状态
+                  <select class="settings-select" id="db-image-status">
+                    <option value="">全部状态</option>
+                    <option value="done">已解析</option>
+                    <option value="pending">待解析</option>
+                    <option value="running">解析中</option>
+                    <option value="error">解析失败</option>
+                    <option value="no_model">无可用模型</option>
+                  </select>
+                </label>
+                <label>关键词
+                  <input class="settings-input" id="db-image-query" placeholder="搜 newapi、截图文字、图片描述、文件名">
+                </label>
+                <label>发送人
+                  <input class="settings-input" id="db-image-sender" placeholder="搜昵称/备注/sender_id">
+                </label>
+                <label>开始时间
+                  <input class="settings-input" id="db-image-from" type="datetime-local">
+                </label>
+                <label>结束时间
+                  <input class="settings-input" id="db-image-to" type="datetime-local">
+                </label>
+              </div>
+              <div class="db-image-summary" id="db-image-summary">—</div>
+              <div class="db-image-list" id="db-image-list">
+                <div class="wechaty-empty">正在加载图片…</div>
+              </div>
+              <div class="wechaty-records-more">
+                <button class="settings-save-btn ghost" id="db-image-more-btn" type="button" style="display:none;">加载更多图片</button>
+              </div>
+            </div>
             <div class="db-member-panel" id="db-member-panel"></div>
             <div class="db-search-panel">
               <div class="wechaty-subsection-head">
@@ -1178,6 +1227,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.46</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">数据库页新增微信群图片解析库，可看进度、浏览缩略图、搜索图片并后台补解析。</p>
+                <ul class="release-note-points">
+                  <li>显示图片总数、已解析、待解析、解析中、失败/无模型和 base64 备份数量。</li>
+                  <li>支持按群组、解析状态、关键词、发送人和时间筛选图片。</li>
+                  <li>数据库页每 10 秒自动刷新，并在存在待解析图片时自动触发后台补解析。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.45</span>

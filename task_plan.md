@@ -121,3 +121,10 @@
 2. [complete] 前端群候选统一合并缓存群、已识别群和已配置群。
 3. [complete] 新群默认显示为已识别/未开启 @ 回复，不自动授权。
 4. [complete] 测试、重启、发布 GitHub Release。
+
+## v0.4.46 WeChat Image Library UI Plan
+1. [complete] 后端新增微信群图片库列表/搜索 API，支持群、时间、状态、关键词筛选并返回解析统计。
+2. [complete] 后端新增待解析图片后台任务入口，避免 UI 阻塞并支持重复点击时显示 running。
+3. [complete] 数据库设置页新增图片解析库面板：统计卡、筛选、缩略图、详情、解析进度、手动补解析。
+4. [complete] 前端自动轮询刷新解析数量，并在有待解析图片时触发后台补解析。
+5. [in_progress] 验证、版本文档、GitHub Release、重启程序。

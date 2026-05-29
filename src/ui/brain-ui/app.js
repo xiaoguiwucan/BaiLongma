@@ -2191,6 +2191,18 @@ function initTTSSettings() {
   const dbSearchInput = document.getElementById("db-search-input");
   const dbSearchBtn = document.getElementById("db-search-btn");
   const dbSearchResults = document.getElementById("db-search-results");
+  const dbImageGroup = document.getElementById("db-image-group");
+  const dbImageStatus = document.getElementById("db-image-status");
+  const dbImageQuery = document.getElementById("db-image-query");
+  const dbImageSender = document.getElementById("db-image-sender");
+  const dbImageFrom = document.getElementById("db-image-from");
+  const dbImageTo = document.getElementById("db-image-to");
+  const dbImageRefreshBtn = document.getElementById("db-image-refresh-btn");
+  const dbImageProcessBtn = document.getElementById("db-image-process-btn");
+  const dbImageProgress = document.getElementById("db-image-progress");
+  const dbImageSummary = document.getElementById("db-image-summary");
+  const dbImageList = document.getElementById("db-image-list");
+  const dbImageMoreBtn = document.getElementById("db-image-more-btn");
   const dbFeedback = document.getElementById("db-feedback");
 
   if (!settingsBtn || !overlay) return;
@@ -2199,6 +2211,10 @@ function initTTSSettings() {
   let cachedLLMProfiles = [];
   let cachedActiveLLM = null;
   let cachedLLMFailover = { enabled: true, cooldownSeconds: 180, maxAttempts: 4 };
+  let dbImageOffset = 0;
+  let dbImageHasMore = false;
+  let dbImageAutoRefreshTimer = null;
+  let dbImageLastAutoProcessAt = 0;
 
   const BUILTIN_IMAGE_MODELS = [
     { value: "gpt-image-2", label: "gpt-image-2（推荐）" },
@@ -2255,7 +2271,8 @@ function initTTSSettings() {
       overlay.querySelector(`.settings-tab[data-tab="${tab}"]`)?.classList.add("active");
       if (tab === "social" || tab === "wechat-groups") loadSocialSettings();
       if (tab === "skills") loadSkillSettings();
-      if (tab === "database") loadDatabaseSettings();
+      if (tab === "database") { loadDatabaseSettings(); startDatabaseImageAutoRefresh(); }
+      else stopDatabaseImageAutoRefresh();
       if (tab === "wechat-groups") startWechatyStatsAutoRefresh();
       if (tab === "security") loadSecuritySettings();
       if (tab === "web-search") loadWebSearchSettings();
@@ -3400,8 +3417,13 @@ function initTTSSettings() {
 
   async function loadDatabaseSettings() {
     if (dbOverviewGrid) dbOverviewGrid.innerHTML = '<div class="wechaty-empty">正在加载数据库统计…</div>';
+    if (dbImageList) dbImageList.innerHTML = '<div class="wechaty-empty">正在加载图片解析库…</div>';
     try {
-      const data = await fetch(`${API}/settings/database`).then(r => r.json());
+      await loadWechatyKnownGroups({ silent: true });
+      const [data] = await Promise.all([
+        fetch(`${API}/settings/database`).then(r => r.json()),
+        loadDbImageLibrary({ silent: true, autoProcess: true }),
+      ]);
       if (data.ok) renderDatabaseOverview(data);
       else showFeedback(dbFeedback, data.error || "数据库统计加载失败", true);
     } catch {
@@ -3443,6 +3465,170 @@ function initTTSSettings() {
     } catch (err) {
       if (dbSearchResults) dbSearchResults.innerHTML = '<div class="wechaty-empty">搜索失败</div>';
       showFeedback(dbFeedback, err?.message || "搜索失败", true);
+    }
+  }
+
+  function dbImageStatusLabel(row = {}) {
+    const status = row.vision_status || (row.description ? "done" : "pending");
+    return ({
+      done: "已解析",
+      pending: "待解析",
+      running: "解析中",
+      error: "解析失败",
+      no_model: "无模型",
+      disabled: "已停用",
+    })[status] || status || "待解析";
+  }
+
+  function dbImageStatusClass(row = {}) {
+    const status = row.vision_status || (row.description ? "done" : "pending");
+    if (row.description) return "done";
+    if (status === "running") return "running";
+    if (status === "error" || status === "no_model") return status;
+    return "pending";
+  }
+
+  function renderDbImageGroups(groups = []) {
+    if (!dbImageGroup) return;
+    const current = dbImageGroup.value || "all";
+    const rows = Array.isArray(groups) ? groups : [];
+    dbImageGroup.innerHTML = [
+      `<option value="all">全部群组</option>`,
+      ...rows.map(group => {
+        const gid = group.group_id || group.id || "";
+        const name = group.group_name || group.topic || gid || "未知群";
+        const label = `${name} · ${group.described || 0}/${group.total || 0} 已解析`;
+        return `<option value="${escapeHtml(gid || name)}" data-group-name="${escapeHtml(name)}">${escapeHtml(label)}</option>`;
+      }),
+    ].join("");
+    dbImageGroup.value = [...dbImageGroup.options].some(opt => opt.value === current) ? current : "all";
+  }
+
+  function renderDbImageProgress(counts = {}) {
+    if (!dbImageProgress) return;
+    const total = Number(counts.total || 0);
+    const described = Number(counts.described || 0);
+    const pending = Number(counts.pending || 0);
+    const running = Number(counts.running || 0);
+    const error = Number(counts.error || 0) + Number(counts.no_model || 0);
+    const percent = total ? Math.round((described / total) * 100) : 0;
+    dbImageProgress.innerHTML = [
+      ["done", described, `已解析 · ${percent}%`],
+      ["pending", pending, "待解析"],
+      ["", running, counts.worker_running ? "后台解析中" : "解析中"],
+      ["error", error, "失败/无模型"],
+      ["", Number(counts.base64 || 0), "base64 备份"],
+    ].map(([cls, value, label]) => `<div class="db-image-progress-card ${cls}"><b>${escapeHtml(String(value))}</b><span>${escapeHtml(label)}</span></div>`).join("");
+  }
+
+  function collectDbImageQuery({ offset = 0 } = {}) {
+    const selected = dbImageGroup?.selectedOptions?.[0];
+    const groupId = dbImageGroup?.value || "all";
+    return {
+      groupId,
+      groupName: groupId === "all" ? "" : (selected?.dataset?.groupName || selected?.textContent?.replace(/ · .+$/u, "") || ""),
+      status: dbImageStatus?.value || "",
+      q: dbImageQuery?.value?.trim() || "",
+      sender: dbImageSender?.value?.trim() || "",
+      from: dbImageFrom?.value || "",
+      to: dbImageTo?.value || "",
+      limit: 60,
+      offset,
+    };
+  }
+
+  function renderDbImageLibrary(data = {}, { append = false } = {}) {
+    if (!dbImageList || !dbImageSummary) return;
+    if (!data || data.ok === false) {
+      if (!append) dbImageList.innerHTML = `<div class="wechaty-empty">${escapeHtml(data?.error || "图片库读取失败")}</div>`;
+      dbImageSummary.textContent = data?.error || "图片库读取失败";
+      if (dbImageMoreBtn) dbImageMoreBtn.style.display = "none";
+      return;
+    }
+    renderDbImageGroups(data.groups || []);
+    renderDbImageProgress(data.counts || {});
+    const rows = Array.isArray(data.items) ? data.items : [];
+    const counts = data.counts || {};
+    dbImageSummary.textContent = `当前筛选 ${data.total || 0} 张 · 已显示 ${Math.min((data.offset || 0) + rows.length, data.total || 0)} 张 · 已解析 ${counts.described || 0} · 待解析 ${counts.pending || 0} · 失败/无模型 ${(counts.error || 0) + (counts.no_model || 0)} · ${counts.worker_running ? "后台解析中" : "后台空闲"} · 每 10 秒自动刷新`;
+    const html = rows.length ? rows.map(row => {
+      const src = `${API}/social/wechat-groups/records/media?path=${encodeURIComponent(row.relative_path || "")}`;
+      const statusClass = dbImageStatusClass(row);
+      const statusLabel = dbImageStatusLabel(row);
+      const tags = Array.isArray(row.labels) ? row.labels.slice(0, 6) : [];
+      const desc = row.description || row.vision_error || "待后台解析：图片文件已保存，稍后会自动生成描述。";
+      return `<article class="db-image-card">
+        <a class="db-image-thumb" href="${src}" target="_blank" rel="noreferrer">
+          <img src="${src}" alt="${escapeHtml(row.file_name || "微信群图片")}" loading="lazy">
+          <span class="db-image-status-badge ${escapeHtml(statusClass)}">${escapeHtml(statusLabel)}</span>
+        </a>
+        <div class="db-image-card-body">
+          <div class="db-image-card-meta">
+            <b title="${escapeHtml(row.sender_id || "")}">${escapeHtml(row.sender_name || "未知成员")}</b>
+            <span>${escapeHtml(row.group_name || "未知群")}</span>
+            <span>${escapeHtml(formatWechatyTime(row.created_at, true) || String(row.created_at || "").slice(0, 19))}</span>
+          </div>
+          <div class="db-image-card-desc">${escapeHtml(desc)}</div>
+          ${tags.length ? `<div class="db-image-tags">${tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}
+          <small>${escapeHtml(row.file_name || "")} · ${formatBytes(row.bytes || 0)} · ${escapeHtml(row.vision_model || "未解析")}</small>
+        </div>
+      </article>`;
+    }).join("") : `<div class="wechaty-empty">当前筛选下没有图片。只要微信助手在线并收到群图片，就会自动出现在这里。</div>`;
+    if (append && rows.length) dbImageList.insertAdjacentHTML("beforeend", html);
+    else dbImageList.innerHTML = html;
+    dbImageHasMore = !!data.has_more;
+    dbImageOffset = (data.offset || 0) + rows.length;
+    if (dbImageMoreBtn) dbImageMoreBtn.style.display = dbImageHasMore ? "" : "none";
+  }
+
+  async function loadDbImageLibrary({ append = false, silent = false, autoProcess = false } = {}) {
+    const query = collectDbImageQuery({ offset: append ? dbImageOffset : 0 });
+    if (dbImageRefreshBtn) dbImageRefreshBtn.disabled = true;
+    if (dbImageMoreBtn) dbImageMoreBtn.disabled = true;
+    try {
+      const params = new URLSearchParams({
+        group_id: query.groupId,
+        group_name: query.groupName,
+        status: query.status,
+        q: query.q,
+        sender: query.sender,
+        from: query.from,
+        to: query.to,
+        limit: String(query.limit),
+        offset: String(query.offset),
+      });
+      const data = await fetch(`${API}/social/wechat-groups/images?${params}`).then(r => r.json());
+      renderDbImageLibrary(data, { append });
+      if (autoProcess && data?.counts?.pending > 0 && Date.now() - dbImageLastAutoProcessAt > 30000) {
+        dbImageLastAutoProcessAt = Date.now();
+        triggerDbImageBackgroundParse({ silent: true }).catch?.(() => {});
+      }
+      return data;
+    } catch (err) {
+      if (!silent) showFeedback(dbFeedback, err?.message || "图片库读取失败", true);
+      renderDbImageLibrary({ ok: false, error: "图片库读取失败" }, { append });
+      return null;
+    } finally {
+      if (dbImageRefreshBtn) dbImageRefreshBtn.disabled = false;
+      if (dbImageMoreBtn) dbImageMoreBtn.disabled = false;
+    }
+  }
+
+  async function triggerDbImageBackgroundParse({ silent = false } = {}) {
+    const query = collectDbImageQuery({ offset: 0 });
+    if (dbImageProcessBtn) dbImageProcessBtn.disabled = true;
+    try {
+      const data = await fetch(`${API}/social/wechat-groups/images/describe-pending`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ group_id: query.groupId, group_name: query.groupName, limit: 5, retryErrors: true }),
+      }).then(r => r.json());
+      if (!data.ok) throw new Error(data.error || "启动解析失败");
+      if (!silent) showFeedback(dbFeedback, data.started ? "已启动后台解析，列表会自动刷新" : "后台解析已在运行，稍等刷新");
+      setTimeout(() => loadDbImageLibrary({ silent: true }), 1200);
+    } catch (err) {
+      if (!silent) showFeedback(dbFeedback, err?.message || "启动解析失败", true);
+    } finally {
+      if (dbImageProcessBtn) dbImageProcessBtn.disabled = false;
     }
   }
 
@@ -4075,6 +4261,14 @@ function initTTSSettings() {
   dbImportFile?.addEventListener("change", () => { importDatabaseBackup(dbImportFile.files?.[0]); dbImportFile.value = ""; });
   dbSearchBtn?.addEventListener("click", searchDatabaseMemory);
   dbSearchInput?.addEventListener("keydown", e => { if (e.key === "Enter") searchDatabaseMemory(); });
+  dbImageRefreshBtn?.addEventListener("click", () => loadDbImageLibrary({ append: false, autoProcess: true }));
+  dbImageProcessBtn?.addEventListener("click", () => triggerDbImageBackgroundParse({ silent: false }));
+  dbImageMoreBtn?.addEventListener("click", () => loadDbImageLibrary({ append: true }));
+  [dbImageGroup, dbImageStatus].forEach(el => el?.addEventListener("change", () => loadDbImageLibrary({ append: false, autoProcess: true })));
+  [dbImageQuery, dbImageSender, dbImageFrom, dbImageTo].forEach(el => {
+    el?.addEventListener("keydown", e => { if (e.key === "Enter") loadDbImageLibrary({ append: false, autoProcess: true }); });
+    el?.addEventListener("change", () => loadDbImageLibrary({ append: false, autoProcess: true }));
+  });
   wechatyStartBtn?.addEventListener("click", async () => {
     wechatyStartBtn.disabled = true;
     setWechatyStatus("正在连接/恢复微信…", false);
@@ -4137,6 +4331,11 @@ function initTTSSettings() {
     return !!overlay.querySelector('.settings-tab[data-tab="wechat-groups"].active');
   }
 
+  function isDatabaseTabVisible() {
+    if (!overlay || overlay.hidden) return false;
+    return !!overlay.querySelector('.settings-tab[data-tab="database"].active');
+  }
+
   function startWechatyStatsAutoRefresh() {
     if (wechatyStatsAutoRefreshTimer) return;
     wechatyStatsAutoRefreshTimer = setInterval(() => {
@@ -4151,6 +4350,19 @@ function initTTSSettings() {
   function stopWechatyStatsAutoRefresh() {
     if (wechatyStatsAutoRefreshTimer) clearInterval(wechatyStatsAutoRefreshTimer);
     wechatyStatsAutoRefreshTimer = null;
+  }
+
+  function startDatabaseImageAutoRefresh() {
+    if (dbImageAutoRefreshTimer) return;
+    dbImageAutoRefreshTimer = setInterval(() => {
+      if (!isDatabaseTabVisible()) return;
+      loadDbImageLibrary({ silent: true, autoProcess: true }).catch?.(() => {});
+    }, 10000);
+  }
+
+  function stopDatabaseImageAutoRefresh() {
+    if (dbImageAutoRefreshTimer) clearInterval(dbImageAutoRefreshTimer);
+    dbImageAutoRefreshTimer = null;
   }
 
   honchoSaveBtn?.addEventListener("click", async () => {
@@ -4762,7 +4974,7 @@ function initTTSSettings() {
       });
       if (tab === "social") loadSocialSettings();
       if (tab === "skills") loadSkillSettings();
-      if (tab === "database") loadDatabaseSettings();
+      if (tab === "database") { loadDatabaseSettings(); startDatabaseImageAutoRefresh(); }
       if (tab === "web-search") loadWebSearchSettings();
       if (tab === "update") loadUpdateSettings();
     }
@@ -4771,6 +4983,7 @@ function initTTSSettings() {
   function closeSettings() {
     overlay.hidden = true;
     stopWechatyStatsAutoRefresh();
+    stopDatabaseImageAutoRefresh();
     if (llmKeyInput) llmKeyInput.value = "";
     if (minimaxKeyInput) minimaxKeyInput.value = "";
   }

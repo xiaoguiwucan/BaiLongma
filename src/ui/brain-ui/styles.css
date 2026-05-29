@@ -5571,6 +5571,155 @@ body.person-card-mode .person-card-panel,
 .db-search-item em,
 .db-search-item small { color: var(--dim); font-size: 11px; font-style: normal; }
 .db-search-item p { margin: 0 0 6px; color: var(--ink); font-size: 12px; line-height: 1.55; white-space: pre-wrap; }
+.db-image-panel {
+  margin: 14px 0;
+  border: 1px solid rgba(87,214,255,0.12);
+  border-radius: 18px;
+  padding: 13px;
+  background:
+    radial-gradient(circle at 12% 0%, rgba(87,214,255,0.12), transparent 30%),
+    radial-gradient(circle at 88% 12%, rgba(114,255,195,0.08), transparent 34%),
+    rgba(0,9,16,0.30);
+}
+.db-image-actions {
+  display:flex;
+  align-items:center;
+  justify-content:flex-end;
+  gap:8px;
+  flex-wrap:wrap;
+}
+.db-image-progress {
+  display:grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap:8px;
+  margin:10px 0;
+}
+.db-image-progress-card {
+  border:1px solid rgba(255,255,255,0.08);
+  border-radius:14px;
+  padding:10px 11px;
+  background:rgba(255,255,255,0.035);
+}
+.db-image-progress-card b {
+  display:block;
+  color:var(--ink);
+  font-size:18px;
+  line-height:1;
+}
+.db-image-progress-card span {
+  display:block;
+  margin-top:6px;
+  color:var(--dim);
+  font-size:10px;
+  letter-spacing:.08em;
+}
+.db-image-progress-card.done { border-color:rgba(114,255,195,.22); background:rgba(114,255,195,.055); }
+.db-image-progress-card.pending { border-color:rgba(255,212,121,.22); background:rgba(255,212,121,.055); }
+.db-image-progress-card.error { border-color:rgba(255,116,116,.22); background:rgba(255,116,116,.055); }
+.db-image-filters {
+  display:grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap:10px;
+  margin:10px 0 12px;
+}
+.db-image-filters label {
+  display:grid;
+  gap:6px;
+  color:var(--dim);
+  font-size:10px;
+  letter-spacing:.06em;
+}
+.db-image-summary {
+  border:1px solid rgba(87,214,255,0.14);
+  border-radius:12px;
+  padding:8px 10px;
+  color:#bfe7ff;
+  background:rgba(87,214,255,0.045);
+  font-size:11px;
+  line-height:1.5;
+  margin-bottom:10px;
+}
+.db-image-list {
+  display:grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap:10px;
+  max-height:560px;
+  overflow:auto;
+  padding-right:3px;
+}
+.db-image-card {
+  border:1px solid rgba(255,255,255,0.075);
+  border-radius:16px;
+  overflow:hidden;
+  background:rgba(2,9,14,0.48);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.035);
+}
+.db-image-thumb {
+  position:relative;
+  display:block;
+  height:150px;
+  background:rgba(0,0,0,0.22);
+}
+.db-image-thumb img {
+  width:100%;
+  height:100%;
+  object-fit:cover;
+  display:block;
+}
+.db-image-status-badge {
+  position:absolute;
+  left:8px;
+  top:8px;
+  border:1px solid rgba(255,255,255,0.14);
+  border-radius:999px;
+  padding:3px 8px;
+  color:var(--ink);
+  background:rgba(0,0,0,0.52);
+  backdrop-filter: blur(8px);
+  font-size:10px;
+}
+.db-image-status-badge.done { color:#9fffd5; border-color:rgba(114,255,195,.35); }
+.db-image-status-badge.pending,
+.db-image-status-badge.running { color:#ffd479; border-color:rgba(255,212,121,.35); }
+.db-image-status-badge.error,
+.db-image-status-badge.no_model { color:#ff9b9b; border-color:rgba(255,116,116,.35); }
+.db-image-card-body {
+  padding:10px;
+  display:grid;
+  gap:7px;
+}
+.db-image-card-meta {
+  display:flex;
+  gap:7px;
+  align-items:center;
+  flex-wrap:wrap;
+  color:var(--dim);
+  font-size:10px;
+}
+.db-image-card-meta b { color:var(--ink); font-size:12px; max-width:150px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.db-image-card-desc {
+  color:var(--ink2);
+  font-size:11px;
+  line-height:1.55;
+  display:-webkit-box;
+  -webkit-line-clamp:5;
+  -webkit-box-orient:vertical;
+  overflow:hidden;
+  white-space:pre-wrap;
+}
+.db-image-tags {
+  display:flex;
+  gap:5px;
+  flex-wrap:wrap;
+}
+.db-image-tags span {
+  border:1px solid rgba(87,214,255,0.14);
+  border-radius:999px;
+  padding:2px 6px;
+  color:var(--cool);
+  background:rgba(87,214,255,0.055);
+  font-size:10px;
+}
 .db-table-list {
   display: grid;
   gap: 7px;
@@ -5610,6 +5759,8 @@ body.person-card-mode .person-card-panel,
   .db-member-summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .db-member-row { grid-template-columns: 1fr; }
   .db-member-row span, .db-member-row em { text-align: left; }
+  .db-image-progress { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .db-image-list { grid-template-columns: 1fr; }
 }
 .db-hero-actions { display:flex; align-items:center; gap:8px; flex-wrap:wrap; justify-content:flex-end; }
 .db-health-grid { display:grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap:10px; margin:12px 0; }

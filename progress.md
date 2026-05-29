@@ -63,3 +63,10 @@
 - 已新增微信群聊天记录库证据检索：`getWeChatGroupArchiveEvidence()` 从 `wechat_group_activity` 按当前群和关键词检索历史流水。
 - 已接入微信群 @ 回复 prompt：新增 `<wechat-group-archive-evidence>`，要求历史/称呼/谁说过类问题优先使用数据库证据。
 - 已验证测试和真实数据库：`PT站看片狂魔小群` 查询“老登是谁”能检索出 14:16、18:00、18:11 等相关记录。
+
+### 2026-05-29 v0.4.46 image library UI
+- Started implementation for WeChat image parsing visibility: list/search/status/progress UI plus background parse trigger.
+- Implemented backend image library API (`/social/wechat-groups/images`) with group/status/sender/time/keyword filters and progress counts.
+- Implemented non-blocking background describe trigger (`/social/wechat-groups/images/describe-pending`) with worker_running status.
+- Added database tab image library UI: progress cards, filters, thumbnail grid, description/tags, auto-refresh and manual parse button.
+- Verified syntax and existing WeChat tests pass.

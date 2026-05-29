@@ -8,6 +8,7 @@ import { nowTimestamp } from '../time.js'
 import { config, getSkillImageVisionCredentials } from '../config.js'
 
 let schemaReady = false
+let pendingDescribeJob = null
 
 function ensureSchema() {
   if (schemaReady) return
@@ -416,6 +417,202 @@ export async function maybeDescribeWeChatImageMedia({ mediaItem, wait = false } 
   return { ok: true, scheduled: true, id: mediaItem.id }
 }
 
+function normalizeMediaStatusFilter(status = '') {
+  const value = String(status || '').trim().toLowerCase()
+  if (['done', 'described', 'parsed'].includes(value)) return 'done'
+  if (['pending', 'todo', 'waiting'].includes(value)) return 'pending'
+  if (['running', 'processing'].includes(value)) return 'running'
+  if (['error', 'failed'].includes(value)) return 'error'
+  if (['no_model', 'disabled'].includes(value)) return value
+  if (['undescribed', 'unparsed'].includes(value)) return 'undescribed'
+  return ''
+}
+
+function normalizeDateTimeFilter(value = '') {
+  const raw = String(value || '').trim()
+  if (!raw) return ''
+  if (/^\d{4}-\d{2}-\d{2}$/.test(raw)) return `${raw}T00:00:00+08:00`
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(raw)) return `${raw}:00+08:00`
+  if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(raw)) return raw
+  const ts = Date.parse(raw)
+  if (!Number.isFinite(ts)) return ''
+  return toLocalIso(new Date(ts))
+}
+
+function rowToImageMediaItem(row = {}) {
+  return {
+    id: row.id,
+    group_id: row.group_id,
+    group_name: row.group_name,
+    sender_id: row.sender_id,
+    sender_name: row.sender_name,
+    message_type: row.message_type,
+    relative_path: row.relative_path,
+    file_name: row.file_name,
+    mime_type: row.mime_type,
+    bytes: row.bytes,
+    sha256: row.sha256,
+    has_base64: !!row.base64,
+    description: row.description || '',
+    labels: (() => { try { return JSON.parse(row.labels_json || '[]') } catch { return [] } })(),
+    vision_status: row.description ? 'done' : (row.vision_status || 'pending'),
+    vision_provider: row.vision_provider || '',
+    vision_model: row.vision_model || '',
+    vision_error: row.vision_error || '',
+    source_text: row.source_text || '',
+    described_at: row.described_at || '',
+    created_at: row.created_at || '',
+    updated_at: row.updated_at || '',
+  }
+}
+
+export function listWeChatImageMediaItems({ groupId = '', groupName = '', q = '', status = '', sender = '', from = '', to = '', limit = 60, offset = 0 } = {}) {
+  ensureSchema()
+  const db = getDB()
+  const filters = [`relative_path <> ''`]
+  const params = []
+  const gid = String(groupId || '').trim()
+  const name = String(groupName || '').trim()
+  if (gid && gid !== 'all') { filters.push(`group_id = ?`); params.push(gid) }
+  else if (name) { filters.push(`group_name = ?`); params.push(name) }
+
+  const statusFilter = normalizeMediaStatusFilter(status)
+  if (statusFilter === 'done') filters.push(`description <> ''`)
+  else if (statusFilter === 'undescribed' || statusFilter === 'pending') filters.push(`description = ''`)
+  else if (statusFilter) { filters.push(`vision_status = ?`); params.push(statusFilter) }
+
+  const keyword = normalizeText(q)
+  if (keyword) {
+    const qVariants = new Set([keyword.slice(0, 120)])
+    const compact = compactSearchText(keyword)
+    if (compact.includes('newapi') || /new\s*api/u.test(normalizeSearchText(keyword))) {
+      qVariants.add('New API')
+      qVariants.add('new api')
+      qVariants.add('newapi')
+    }
+    if (/力佬|大力/u.test(keyword) || compact.includes('dali') || compact.includes('dafi')) {
+      qVariants.add('大力')
+      qVariants.add('Dali')
+      qVariants.add('Dafi')
+    }
+    const sub = []
+    for (const term of qVariants) {
+      sub.push(`(description LIKE ? OR labels_json LIKE ? OR source_text LIKE ? OR sender_name LIKE ? OR file_name LIKE ? OR vision_error LIKE ?)`)
+      const like = `%${term}%`
+      params.push(like, like, like, like, like, like)
+    }
+    filters.push(`(${sub.join(' OR ')})`)
+  }
+  const senderQuery = normalizeText(sender)
+  if (senderQuery) {
+    filters.push(`(sender_name LIKE ? OR sender_id LIKE ?)`)
+    params.push(`%${senderQuery.slice(0, 80)}%`, `%${senderQuery.slice(0, 80)}%`)
+  }
+  const fromIso = normalizeDateTimeFilter(from)
+  const toIso = normalizeDateTimeFilter(to)
+  if (fromIso) { filters.push(`created_at >= ?`); params.push(fromIso) }
+  if (toIso) { filters.push(`created_at <= ?`); params.push(toIso) }
+
+  const where = filters.join(' AND ')
+  const total = Number(db.prepare(`SELECT COUNT(*) AS c FROM wechat_group_media_items WHERE ${where}`).get(...params)?.c || 0)
+  const cappedLimit = Math.min(Math.max(Number(limit || 60), 1), 200)
+  const safeOffset = Math.max(Number(offset || 0), 0)
+  const rows = db.prepare(`
+    SELECT *
+    FROM wechat_group_media_items
+    WHERE ${where}
+    ORDER BY created_at DESC, id DESC
+    LIMIT ? OFFSET ?
+  `).all(...params, cappedLimit, safeOffset)
+
+  const countsRows = db.prepare(`
+    SELECT
+      COUNT(*) AS total,
+      SUM(CASE WHEN description <> '' THEN 1 ELSE 0 END) AS described,
+      SUM(CASE WHEN description = '' THEN 1 ELSE 0 END) AS pending,
+      SUM(CASE WHEN vision_status = 'running' THEN 1 ELSE 0 END) AS running,
+      SUM(CASE WHEN vision_status = 'error' THEN 1 ELSE 0 END) AS error,
+      SUM(CASE WHEN vision_status = 'no_model' THEN 1 ELSE 0 END) AS no_model,
+      SUM(CASE WHEN base64 <> '' THEN 1 ELSE 0 END) AS base64
+    FROM wechat_group_media_items
+    WHERE ${gid && gid !== 'all' ? 'group_id = ?' : name ? 'group_name = ?' : '1=1'}
+  `).get(...(gid && gid !== 'all' ? [gid] : name ? [name] : [])) || {}
+
+  const groups = db.prepare(`
+    SELECT group_id, group_name, COUNT(*) AS total,
+      SUM(CASE WHEN description <> '' THEN 1 ELSE 0 END) AS described,
+      SUM(CASE WHEN description = '' THEN 1 ELSE 0 END) AS pending,
+      MAX(created_at) AS latest_at
+    FROM wechat_group_media_items
+    WHERE relative_path <> ''
+    GROUP BY group_id, group_name
+    ORDER BY latest_at DESC
+    LIMIT 200
+  `).all()
+
+  return {
+    ok: true,
+    total,
+    limit: cappedLimit,
+    offset: safeOffset,
+    has_more: safeOffset + rows.length < total,
+    counts: {
+      total: Number(countsRows.total || 0),
+      described: Number(countsRows.described || 0),
+      pending: Number(countsRows.pending || 0),
+      running: Number(countsRows.running || 0),
+      error: Number(countsRows.error || 0),
+      no_model: Number(countsRows.no_model || 0),
+      base64: Number(countsRows.base64 || 0),
+      worker_running: !!pendingDescribeJob,
+    },
+    groups,
+    items: rows.map(rowToImageMediaItem),
+  }
+}
+
+export async function processPendingWeChatImageMedia({ groupId = '', groupName = '', limit = 5, retryErrors = true } = {}) {
+  ensureSchema()
+  const db = getDB()
+  const filters = [`relative_path <> ''`, `description = ''`]
+  const params = []
+  const gid = String(groupId || '').trim()
+  const name = String(groupName || '').trim()
+  if (gid && gid !== 'all') { filters.push(`group_id = ?`); params.push(gid) }
+  else if (name) { filters.push(`group_name = ?`); params.push(name) }
+  if (!retryErrors) filters.push(`vision_status NOT IN ('error')`)
+  const rows = db.prepare(`
+    SELECT id
+    FROM wechat_group_media_items
+    WHERE ${filters.join(' AND ')}
+      AND vision_status IN ('pending','running','error','no_model','')
+    ORDER BY
+      CASE vision_status WHEN 'pending' THEN 0 WHEN '' THEN 1 WHEN 'no_model' THEN 2 WHEN 'error' THEN 3 ELSE 4 END,
+      created_at DESC,
+      id DESC
+    LIMIT ?
+  `).all(...params, Math.min(Math.max(Number(limit || 5), 1), 30))
+  let processed = 0
+  let described = 0
+  const errors = []
+  for (const row of rows) {
+    processed += 1
+    const result = await describeWeChatImageMedia({ mediaId: row.id, force: false })
+    if (result?.ok || result?.skipped) described += 1
+    else if (result?.error) errors.push({ id: row.id, error: result.error })
+  }
+  return { ok: errors.length === 0, processed, described, errors }
+}
+
+export function startWeChatImageBackgroundDescribe(options = {}) {
+  if (pendingDescribeJob) return { ok: true, running: true, started: false }
+  const opts = { ...options }
+  pendingDescribeJob = processPendingWeChatImageMedia(opts)
+    .catch(err => ({ ok: false, error: err?.message || String(err) }))
+    .finally(() => { pendingDescribeJob = null })
+  return { ok: true, running: true, started: true }
+}
+
 export async function backfillWeChatImageMediaFromActivity({ groupId = '', groupName = '', limit = 200, describe = false } = {}) {
   ensureSchema()
   const db = getDB()
@@ -651,6 +848,7 @@ export function getWeChatImageVisionStatus() {
     autoDescribe: cfg.autoDescribe !== false,
     configured: !!runtime,
     runtime: runtime ? { provider: runtime.provider, model: runtime.model, baseURL: runtime.baseURL, source: runtime.source } : null,
+    worker: { running: !!pendingDescribeJob },
     counts: {
       total: scalar('SELECT COUNT(*) FROM wechat_group_media_items'),
       described: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE description <> ''"),

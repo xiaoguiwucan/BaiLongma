@@ -26,7 +26,7 @@ import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupM
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
 import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listKnownWeChatGroups, listWeChatGroupActivityRecords, listWeChatGroupMembers, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
 import { searchMemes } from './social/meme-search.js'
-import { getWeChatImageVisionStatus } from './social/wechat-image-vision.js'
+import { getWeChatImageVisionStatus, listWeChatImageMediaItems, startWeChatImageBackgroundDescribe } from './social/wechat-image-vision.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -494,6 +494,38 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         'Cache-Control': 'private, max-age=3600',
       })
       fs.createReadStream(result.filePath).pipe(res)
+      return
+    }
+
+    // GET /social/wechat-groups/images — 微信群图片解析库：缩略图、识图状态、描述、筛选。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/images') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const result = listWeChatImageMediaItems({
+        groupId: url.searchParams.get('group_id') || url.searchParams.get('groupId') || '',
+        groupName: url.searchParams.get('group_name') || url.searchParams.get('groupName') || '',
+        q: url.searchParams.get('q') || '',
+        sender: url.searchParams.get('sender') || '',
+        status: url.searchParams.get('status') || '',
+        from: url.searchParams.get('from') || '',
+        to: url.searchParams.get('to') || '',
+        limit: Math.min(parseInt(url.searchParams.get('limit') || '60'), 200),
+        offset: Math.max(parseInt(url.searchParams.get('offset') || '0'), 0),
+      })
+      return jsonResponse(res, result.ok ? 200 : 400, result)
+    }
+
+    // POST /social/wechat-groups/images/describe-pending — 后台补解析待处理图片，立即返回不阻塞 UI。
+    if (req.method === 'POST' && url.pathname === '/social/wechat-groups/images/describe-pending') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        const result = startWeChatImageBackgroundDescribe({
+          groupId: body.group_id || body.groupId || '',
+          groupName: body.group_name || body.groupName || '',
+          limit: Math.min(parseInt(body.limit || '5'), 30),
+          retryErrors: body.retryErrors !== false,
+        })
+        jsonResponse(res, 200, result)
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
       return
     }
 
