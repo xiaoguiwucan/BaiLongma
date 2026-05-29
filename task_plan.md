@@ -128,3 +128,9 @@
 3. [complete] 数据库设置页新增图片解析库面板：统计卡、筛选、缩略图、详情、解析进度、手动补解析。
 4. [complete] 前端自动轮询刷新解析数量，并在有待解析图片时触发后台补解析。
 5. [complete] 验证、版本文档、GitHub Release、重启程序。
+
+## v0.4.47 Image Library UI/Edit/Delete Plan
+1. [complete] 后端新增图片解析库单条编辑和删除 API，删除限制在已入库微信媒体相对路径内。
+2. [complete] 前端筛选控件视觉和可用性优化：大尺寸下拉/输入、查询/重置按钮、布局不挤压。
+3. [complete] 图片卡片新增编辑解析内容/标签和删除图片交互，删除后刷新统计。
+4. [in_progress] 验证、版本文档、GitHub Release、重启程序。

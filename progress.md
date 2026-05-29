@@ -71,3 +71,10 @@
 - Added database tab image library UI: progress cards, filters, thumbnail grid, description/tags, auto-refresh and manual parse button.
 - Verified syntax and existing WeChat tests pass.
 - Browser verified database image panel loads: summary shows 22 images, 21 parsed, 1 pending, 22 cards rendered, no UI errors.
+
+### 2026-05-29 v0.4.47 image library edit/delete
+- User reported image library filters are too small/unusable and requested edit/delete image management.
+- Added safe update/delete backend APIs for image media items.
+- Redesigned image library filters as full-size controls with search/reset buttons.
+- Added per-card edit parser content/tags and delete image actions.
+- Syntax checks and existing WeChat tests passed.

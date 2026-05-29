@@ -26,7 +26,7 @@ import { createWeChatGroupManualMemory, deleteWeChatGroupMemory, getWeChatGroupM
 import { getWeChatCommandGuardRules } from './social/wechat-command-guard.js'
 import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupActivityRecords, listKnownWeChatGroups, listWeChatGroupActivityRecords, listWeChatGroupMembers, resolveWeChatGroupMediaFile } from './social/wechat-group-stats.js'
 import { searchMemes } from './social/meme-search.js'
-import { getWeChatImageVisionStatus, listWeChatImageMediaItems, startWeChatImageBackgroundDescribe } from './social/wechat-image-vision.js'
+import { deleteWeChatImageMediaItem, getWeChatImageVisionStatus, listWeChatImageMediaItems, startWeChatImageBackgroundDescribe, updateWeChatImageMediaItem } from './social/wechat-image-vision.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -525,6 +525,34 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
           retryErrors: body.retryErrors !== false,
         })
         jsonResponse(res, 200, result)
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
+    }
+
+    // POST /social/wechat-groups/images/update — 编辑已入库图片的识图描述/标签。
+    if (req.method === 'POST' && url.pathname === '/social/wechat-groups/images/update') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        const result = updateWeChatImageMediaItem({
+          id: body.id,
+          description: body.description || '',
+          labels: body.labels || body.labels_json || [],
+          visionStatus: body.vision_status || body.visionStatus || 'done',
+        })
+        jsonResponse(res, result.ok ? 200 : 400, result)
+      }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
+      return
+    }
+
+    // POST /social/wechat-groups/images/delete — 删除图片库记录，并默认删除对应本地微信图片文件。
+    if (req.method === 'POST' && url.pathname === '/social/wechat-groups/images/delete') {
+      if (!requireLocalOrToken(req, res, url)) return
+      readJsonBody(req).then(body => {
+        const result = deleteWeChatImageMediaItem({
+          id: body.id,
+          deleteFile: body.deleteFile !== false,
+        })
+        jsonResponse(res, result.ok ? 200 : 400, result)
       }).catch(err => jsonResponse(res, 400, { ok: false, error: err.message }))
       return
     }

@@ -2199,6 +2199,8 @@ function initTTSSettings() {
   const dbImageTo = document.getElementById("db-image-to");
   const dbImageRefreshBtn = document.getElementById("db-image-refresh-btn");
   const dbImageProcessBtn = document.getElementById("db-image-process-btn");
+  const dbImageSearchBtn = document.getElementById("db-image-search-btn");
+  const dbImageResetBtn = document.getElementById("db-image-reset-btn");
   const dbImageProgress = document.getElementById("db-image-progress");
   const dbImageSummary = document.getElementById("db-image-summary");
   const dbImageList = document.getElementById("db-image-list");
@@ -3570,6 +3572,22 @@ function initTTSSettings() {
           <div class="db-image-card-desc">${escapeHtml(desc)}</div>
           ${tags.length ? `<div class="db-image-tags">${tags.map(tag => `<span>${escapeHtml(tag)}</span>`).join("")}</div>` : ""}
           <small>${escapeHtml(row.file_name || "")} · ${formatBytes(row.bytes || 0)} · ${escapeHtml(row.vision_model || "未解析")}</small>
+          <div class="db-image-card-actions">
+            <button class="settings-save-btn ghost" type="button" data-action="edit-image" data-id="${escapeHtml(String(row.id || ""))}">编辑解析</button>
+            <button class="settings-save-btn danger" type="button" data-action="delete-image" data-id="${escapeHtml(String(row.id || ""))}">删除图片</button>
+          </div>
+          <div class="db-image-editor" data-editor-id="${escapeHtml(String(row.id || ""))}" hidden>
+            <label>识图描述
+              <textarea class="settings-input" data-field="description" rows="5">${escapeHtml(row.description || "")}</textarea>
+            </label>
+            <label>标签（逗号分隔）
+              <input class="settings-input" data-field="labels" value="${escapeHtml(tags.join("，"))}">
+            </label>
+            <div class="db-image-card-actions">
+              <button class="settings-save-btn primary" type="button" data-action="save-image" data-id="${escapeHtml(String(row.id || ""))}">保存修改</button>
+              <button class="settings-save-btn ghost" type="button" data-action="cancel-edit-image" data-id="${escapeHtml(String(row.id || ""))}">取消</button>
+            </div>
+          </div>
         </div>
       </article>`;
     }).join("") : `<div class="wechaty-empty">当前筛选下没有图片。只要微信助手在线并收到群图片，就会自动出现在这里。</div>`;
@@ -3629,6 +3647,54 @@ function initTTSSettings() {
       if (!silent) showFeedback(dbFeedback, err?.message || "启动解析失败", true);
     } finally {
       if (dbImageProcessBtn) dbImageProcessBtn.disabled = false;
+    }
+  }
+
+  function toggleDbImageEditor(id = "", open = true) {
+    const editor = dbImageList?.querySelector?.(`.db-image-editor[data-editor-id="${CSS.escape(String(id || ""))}"]`);
+    if (!editor) return;
+    editor.hidden = !open;
+    if (open) editor.querySelector('[data-field="description"]')?.focus?.();
+  }
+
+  async function saveDbImageEdit(id = "") {
+    const editor = dbImageList?.querySelector?.(`.db-image-editor[data-editor-id="${CSS.escape(String(id || ""))}"]`);
+    if (!editor) return;
+    const description = editor.querySelector('[data-field="description"]')?.value || "";
+    const labels = String(editor.querySelector('[data-field="labels"]')?.value || "")
+      .split(/[，,、\n\r]+/u)
+      .map(v => v.trim())
+      .filter(Boolean);
+    try {
+      const data = await fetch(`${API}/social/wechat-groups/images/update`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, description, labels, vision_status: description.trim() ? "done" : "pending" }),
+      }).then(r => r.json());
+      if (!data.ok) throw new Error(data.error || "保存失败");
+      showFeedback(dbFeedback, "图片解析内容已保存");
+      await loadDbImageLibrary({ append: false, silent: true });
+    } catch (err) {
+      showFeedback(dbFeedback, err?.message || "保存失败", true);
+    }
+  }
+
+  async function deleteDbImage(id = "") {
+    if (!id) return;
+    if (!confirm("确定删除这张图片吗？会删除图片库记录，并尝试删除本机已入库的微信图片文件。此操作不可恢复。")) return;
+    try {
+      const data = await fetch(`${API}/social/wechat-groups/images/delete`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, deleteFile: true }),
+      }).then(r => r.json());
+      if (!data.ok) throw new Error(data.error || "删除失败");
+      const suffix = data.file_deleted ? "，本地文件已删除" : (data.file_delete_error ? `，文件删除失败：${data.file_delete_error}` : "");
+      showFeedback(dbFeedback, `图片已删除${suffix}`);
+      await loadDbImageLibrary({ append: false, silent: true });
+      await loadDatabaseSettings();
+    } catch (err) {
+      showFeedback(dbFeedback, err?.message || "删除失败", true);
     }
   }
 
@@ -4263,7 +4329,27 @@ function initTTSSettings() {
   dbSearchInput?.addEventListener("keydown", e => { if (e.key === "Enter") searchDatabaseMemory(); });
   dbImageRefreshBtn?.addEventListener("click", () => loadDbImageLibrary({ append: false, autoProcess: true }));
   dbImageProcessBtn?.addEventListener("click", () => triggerDbImageBackgroundParse({ silent: false }));
+  dbImageSearchBtn?.addEventListener("click", () => loadDbImageLibrary({ append: false, autoProcess: true }));
+  dbImageResetBtn?.addEventListener("click", () => {
+    if (dbImageGroup) dbImageGroup.value = "all";
+    if (dbImageStatus) dbImageStatus.value = "";
+    if (dbImageQuery) dbImageQuery.value = "";
+    if (dbImageSender) dbImageSender.value = "";
+    if (dbImageFrom) dbImageFrom.value = "";
+    if (dbImageTo) dbImageTo.value = "";
+    loadDbImageLibrary({ append: false, autoProcess: true });
+  });
   dbImageMoreBtn?.addEventListener("click", () => loadDbImageLibrary({ append: true }));
+  dbImageList?.addEventListener("click", event => {
+    const btn = event.target?.closest?.("[data-action]");
+    if (!btn) return;
+    const id = btn.dataset.id || "";
+    const action = btn.dataset.action || "";
+    if (action === "edit-image") toggleDbImageEditor(id, true);
+    if (action === "cancel-edit-image") toggleDbImageEditor(id, false);
+    if (action === "save-image") saveDbImageEdit(id);
+    if (action === "delete-image") deleteDbImage(id);
+  });
   [dbImageGroup, dbImageStatus].forEach(el => el?.addEventListener("change", () => loadDbImageLibrary({ append: false, autoProcess: true })));
   [dbImageQuery, dbImageSender, dbImageFrom, dbImageTo].forEach(el => {
     el?.addEventListener("keydown", e => { if (e.key === "Enter") loadDbImageLibrary({ append: false, autoProcess: true }); });

@@ -835,6 +835,58 @@ export function resolveWeChatImageMediaFile(row = {}) {
   }
 }
 
+export function updateWeChatImageMediaItem({ id, description = '', labels = [], visionStatus = 'done' } = {}) {
+  ensureSchema()
+  const mediaId = Number(id || 0)
+  if (!mediaId) return { ok: false, error: 'id required' }
+  const db = getDB()
+  const row = db.prepare(`SELECT * FROM wechat_group_media_items WHERE id = ?`).get(mediaId)
+  if (!row) return { ok: false, error: 'image not found' }
+  const cleanDescription = String(description || '').trim().slice(0, 12000)
+  const cleanLabels = (Array.isArray(labels) ? labels : String(labels || '').split(/[，,、\n\r]+/u))
+    .map(v => String(v || '').trim())
+    .filter(Boolean)
+    .slice(0, 30)
+  const status = cleanDescription ? (visionStatus || 'done') : (visionStatus || row.vision_status || 'pending')
+  db.prepare(`
+    UPDATE wechat_group_media_items
+    SET description = ?, labels_json = ?, vision_status = ?, vision_error = '',
+        described_at = CASE WHEN ? <> '' THEN COALESCE(NULLIF(described_at, ''), ?) ELSE described_at END,
+        updated_at = ?
+    WHERE id = ?
+  `).run(cleanDescription, JSON.stringify(cleanLabels), status, cleanDescription, nowTimestamp(), nowTimestamp(), mediaId)
+  const next = db.prepare(`SELECT * FROM wechat_group_media_items WHERE id = ?`).get(mediaId)
+  return { ok: true, item: rowToImageMediaItem(next) }
+}
+
+export function deleteWeChatImageMediaItem({ id, deleteFile = true } = {}) {
+  ensureSchema()
+  const mediaId = Number(id || 0)
+  if (!mediaId) return { ok: false, error: 'id required' }
+  const db = getDB()
+  const row = db.prepare(`SELECT * FROM wechat_group_media_items WHERE id = ?`).get(mediaId)
+  if (!row) return { ok: false, error: 'image not found' }
+  const resolved = resolveWeChatImageMediaFile(row)
+  let fileDeleted = false
+  let fileDeleteError = ''
+  if (deleteFile && resolved.ok) {
+    try {
+      fs.unlinkSync(resolved.filePath)
+      fileDeleted = true
+    } catch (err) {
+      fileDeleteError = err?.message || String(err)
+    }
+  }
+  db.prepare(`DELETE FROM wechat_group_media_items WHERE id = ?`).run(mediaId)
+  return {
+    ok: true,
+    deleted_id: mediaId,
+    file_deleted: fileDeleted,
+    file_delete_error: fileDeleteError,
+    item: rowToImageMediaItem(row),
+  }
+}
+
 export function getWeChatImageVisionStatus() {
   ensureSchema()
   const db = getDB()

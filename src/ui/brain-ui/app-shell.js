@@ -453,6 +453,10 @@ const createSettingsModal = () => `
                 <label>结束时间
                   <input class="settings-input" id="db-image-to" type="datetime-local">
                 </label>
+                <div class="db-image-filter-actions">
+                  <button class="settings-save-btn primary" id="db-image-search-btn" type="button">查询图片</button>
+                  <button class="settings-save-btn ghost" id="db-image-reset-btn" type="button">重置筛选</button>
+                </div>
               </div>
               <div class="db-image-summary" id="db-image-summary">—</div>
               <div class="db-image-list" id="db-image-list">
@@ -1227,6 +1231,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.47</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">优化图片解析库控件可用性，并新增编辑/删除图片管理能力。</p>
+                <ul class="release-note-points">
+                  <li>群组、状态、关键词、发送人和时间筛选改为大尺寸控件，新增查询/重置按钮。</li>
+                  <li>每张图片可编辑识图描述和标签，保存后立即刷新。</li>
+                  <li>每张图片可删除数据库记录，并尝试删除本机已入库图片文件；不允许删除任意本机路径。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.46</span>
