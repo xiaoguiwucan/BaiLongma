@@ -462,7 +462,7 @@ const createSettingsModal = () => `
                   <input class="settings-input" id="skill-image-baseurl" type="text" placeholder="https://sub.pbopenai.cloud/v1">
                 </label>
                 <label>模型
-                  <input class="settings-input" id="skill-image-model" type="text" placeholder="gpt-image-2">
+                  <select class="settings-select" id="skill-image-model"></select>
                 </label>
                 <label>API Key
                   <input class="settings-input" id="skill-image-key" type="password" placeholder="留空则不覆盖已保存密钥">
@@ -526,7 +526,7 @@ const createSettingsModal = () => `
                   <input class="settings-input" id="skill-vision-baseurl" type="text" placeholder="https://sub.pbopenai.cloud/v1">
                 </label>
                 <label>备用识图模型
-                  <input class="settings-input" id="skill-vision-model" type="text" placeholder="gpt-4o-mini">
+                  <select class="settings-select" id="skill-vision-model"></select>
                 </label>
                 <label>备用 API Key
                   <input class="settings-input" id="skill-vision-key" type="password" placeholder="留空则复用生图 Key / 已保存 Key">

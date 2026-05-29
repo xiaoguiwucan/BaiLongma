@@ -5310,6 +5310,19 @@ body.person-card-mode .person-card-panel,
   color: var(--ink2);
   font-size: 12px;
 }
+.wechaty-meme-grid .settings-input,
+.wechaty-meme-grid .settings-select {
+  width: 100%;
+  min-width: 0;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 10px;
+  font-size: 13px;
+  background: rgba(5, 15, 24, 0.78);
+}
+.wechaty-meme-grid .settings-input[type="password"] {
+  letter-spacing: 0.02em;
+}
 .wechaty-meme-preview {
   min-height: 92px;
   border: 1px solid rgba(255,255,255,0.08);

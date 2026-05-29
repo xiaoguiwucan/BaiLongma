@@ -2,6 +2,20 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.41 - 2026-05-29
+
+### UI 修复
+- 修复 Skill 技能页输入框/下拉框过小的问题：生图和识图配置项现在使用正常宽度、正常高度的大表单控件。
+- 生图模型不再手填，改为下拉选择内置生图模型：`gpt-image-2`、`gpt-image-1`、`dall-e-3`，并保留当前配置值。
+- 识图备用模型不再手填，改为下拉选择：优先读取当前 LLM 和 LLM 模型池里的多模态候选模型，同时提供内置 GPT/Vision 模型。
+- Skill 设置页加载时会同步读取 LLM 模型池，因此后续添加多模态模型后会出现在识图模型下拉框中。
+
+### 验证
+- 通过 `node --check src/ui/brain-ui/app.js`。
+- 通过 `git diff --check`。
+- 通过 `npm run test:wechat-guard`。
+- 通过 `npm run test:wechat-record-all`。
+
 ## v0.4.40 - 2026-05-29
 
 ### 新增：微信群识图 Skill / 图片记忆

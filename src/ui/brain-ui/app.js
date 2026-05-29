@@ -2197,7 +2197,54 @@ function initTTSSettings() {
 
   let cachedProviders = null;
   let cachedLLMProfiles = [];
+  let cachedActiveLLM = null;
   let cachedLLMFailover = { enabled: true, cooldownSeconds: 180, maxAttempts: 4 };
+
+  const BUILTIN_IMAGE_MODELS = [
+    { value: "gpt-image-2", label: "gpt-image-2（推荐）" },
+    { value: "gpt-image-1", label: "gpt-image-1" },
+    { value: "dall-e-3", label: "dall-e-3" },
+  ];
+  const BUILTIN_VISION_MODELS = [
+    { value: "gpt-4o-mini", label: "gpt-4o-mini（快速/推荐）" },
+    { value: "gpt-4o", label: "gpt-4o" },
+    { value: "gpt-4.1-mini", label: "gpt-4.1-mini" },
+    { value: "gpt-4.1", label: "gpt-4.1" },
+    { value: "gpt-5.4", label: "gpt-5.4（当前可用）" },
+  ];
+
+  function fillSelectOptions(select, options = [], current = "") {
+    if (!select) return;
+    const seen = new Set();
+    const rows = [];
+    for (const item of options) {
+      const value = String(item?.value || item?.id || item || "").trim();
+      if (!value || seen.has(value)) continue;
+      seen.add(value);
+      rows.push({ value, label: String(item?.label || item?.name || value) });
+    }
+    const cur = String(current || "").trim();
+    if (cur && !seen.has(cur)) rows.unshift({ value: cur, label: `${cur}（当前配置）` });
+    select.innerHTML = rows.map(item => `<option value="${escapeHtml(item.value)}">${escapeHtml(item.label)}</option>`).join("");
+    if (cur) select.value = cur;
+  }
+
+  function isProbablyVisionModel(model = "") {
+    const value = String(model || "").toLowerCase();
+    if (!value) return false;
+    if (/gpt-image|dall-e|embedding|whisper|tts|deepseek|moonshot-v1|glm-4-flash/.test(value)) return false;
+    return /gpt|vision|vl|qwen.*vl|gemini|claude|pixtral|llava/.test(value);
+  }
+
+  function buildVisionModelOptions(current = "") {
+    const profileOptions = (cachedLLMProfiles || [])
+      .filter(p => p?.model && p.enabled !== false && isProbablyVisionModel(p.model))
+      .map(p => ({ value: p.model, label: `${p.model}（LLM模型池：${p.name || p.provider || "模型"}）` }));
+    const active = cachedActiveLLM?.model && isProbablyVisionModel(cachedActiveLLM.model)
+      ? [{ value: cachedActiveLLM.model, label: `${cachedActiveLLM.model}（当前LLM）` }]
+      : [];
+    return [...active, ...profileOptions, ...BUILTIN_VISION_MODELS, ...(current ? [{ value: current, label: `${current}（当前配置）` }] : [])];
+  }
 
   overlay.querySelectorAll(".settings-nav-item").forEach(btn => {
     btn.addEventListener("click", () => {
@@ -2419,6 +2466,7 @@ function initTTSSettings() {
     try {
       const data = await fetch(`${API}/settings`).then(r => r.json());
       const { llm, minimax, providers } = data;
+      cachedActiveLLM = llm || cachedActiveLLM;
       if (providers) cachedProviders = providers;
       refreshConfigSummary({ llm, minimax });
       populateProviderSelect(providers, llm.provider || "auto");
@@ -3401,7 +3449,7 @@ function initTTSSettings() {
   function applySkillImageConfig(config = {}) {
     if (skillImageEnabled) skillImageEnabled.checked = config.enabled !== false;
     if (skillImageBaseUrl) skillImageBaseUrl.value = config.baseUrl || 'https://sub.pbopenai.cloud/v1';
-    if (skillImageModel) skillImageModel.value = config.model || 'gpt-image-2';
+    fillSelectOptions(skillImageModel, BUILTIN_IMAGE_MODELS, config.model || 'gpt-image-2');
     if (skillImageLimit) skillImageLimit.value = String(config.maxPerUserPerHour || 10);
     if (skillImageTimeout) skillImageTimeout.value = String(config.apiTimeoutSeconds || 180);
     if (skillImageDefaultQuality) skillImageDefaultQuality.value = config.defaultQuality || 'low';
@@ -3418,7 +3466,7 @@ function initTTSSettings() {
     if (hasConfig && skillVisionEnabled) skillVisionEnabled.checked = config.enabled !== false;
     if (hasConfig && skillVisionPreferCurrent) skillVisionPreferCurrent.checked = config.preferCurrentMultimodal !== false;
     if (hasConfig && skillVisionBaseUrl) skillVisionBaseUrl.value = config.baseUrl || 'https://sub.pbopenai.cloud/v1';
-    if (hasConfig && skillVisionModel) skillVisionModel.value = config.model || 'gpt-4o-mini';
+    if (hasConfig) fillSelectOptions(skillVisionModel, buildVisionModelOptions(config.model || 'gpt-4o-mini'), config.model || 'gpt-4o-mini');
     if (hasConfig && skillVisionTimeout) skillVisionTimeout.value = String(config.apiTimeoutSeconds || 45);
     if (hasConfig && skillVisionKey) skillVisionKey.value = '';
     const runtime = status?.runtime || null;
@@ -3435,7 +3483,14 @@ function initTTSSettings() {
 
   async function loadSkillSettings() {
     try {
-      const data = await fetch(`${API}/settings/skills`).then(r => r.json());
+      const [data, settings] = await Promise.all([
+        fetch(`${API}/settings/skills`).then(r => r.json()),
+        fetch(`${API}/settings`).then(r => r.json()).catch(() => null),
+      ]);
+      if (settings?.llm) {
+        cachedActiveLLM = settings.llm;
+        cachedLLMProfiles = Array.isArray(settings.llm.profiles) ? settings.llm.profiles : cachedLLMProfiles;
+      }
       applySkillImageConfig(data.skills?.imageGeneration || {});
       applySkillVisionConfig(data.skills?.imageVision || {}, null);
       refreshSkillVisionStatus();
