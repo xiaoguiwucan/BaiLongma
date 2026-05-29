@@ -6,6 +6,7 @@ import { recordWeChatGroupAssistantReply } from './wechat-group-memory.js'
 
 let digestTimer = null
 let digestRunning = false
+let startupIntervalPeriodKey = ''
 
 function localDateKey(date = new Date()) {
   const y = date.getFullYear()
@@ -131,7 +132,13 @@ export async function runWeChatGroupDigestTick({ force = false } = {}) {
     const results = []
     if ((cfg.intervalEnabled || force) && Number(cfg.intervalMinutes) > 0) {
       const periodKey = intervalPeriodKey(cfg.intervalMinutes, now)
-      for (const group of groups) results.push(await maybeSend('interval', group, periodKey))
+      // 不做“启动/登录补发”：用户反馈每次微信登录/恢复连接就自动往群里发阶段总结很打扰。
+      // 因此调度器启动所在的 interval 周期只记录为等待，不自动发送；之后进入新周期才按配置发送。
+      if (!force && startupIntervalPeriodKey && periodKey === startupIntervalPeriodKey) {
+        results.push({ ok: true, skipped: true, reason: 'startup_period_no_autosend', mode: 'interval', periodKey })
+      } else {
+        for (const group of groups) results.push(await maybeSend('interval', group, periodKey))
+      }
     }
     if ((cfg.dailyStatsEnabled || force) && (force || localMinute(now) === cfg.dailyStatsTime)) {
       const periodKey = localDateKey(now)
@@ -145,16 +152,18 @@ export async function runWeChatGroupDigestTick({ force = false } = {}) {
 
 export function startWeChatGroupDigestScheduler() {
   if (digestTimer) return { ok: true, already_running: true }
+  const cfg = getWeChatGroupDigestConfig()
+  startupIntervalPeriodKey = intervalPeriodKey(cfg.intervalMinutes || 180, new Date())
   digestTimer = setInterval(() => {
     runWeChatGroupDigestTick().catch(err => console.warn(`[WechatDigest] 定时总结失败：${err?.message || err}`))
   }, 60 * 1000)
-  // 启动后延迟检查一次：避免刚启动时错过已经到达的整点窗口。
-  setTimeout(() => runWeChatGroupDigestTick().catch(() => {}), 15 * 1000)
+  // 不在启动/登录后立即检查发送。总结只由用户手动触发，或等到下一个定时周期自然触发。
   return { ok: true }
 }
 
 export function stopWeChatGroupDigestScheduler() {
   if (digestTimer) clearInterval(digestTimer)
   digestTimer = null
+  startupIntervalPeriodKey = ''
   return { ok: true }
 }
