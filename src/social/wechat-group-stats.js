@@ -180,6 +180,65 @@ function getMemberDisplayNameMap(db, gid, groupName = '') {
   return map
 }
 
+function normalizeStatsIdentityName(value = '') {
+  let text = String(value || '')
+    .replace(/[\u200b-\u200f\u202a-\u202e\u2060\ufeff]/gu, '')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  try { text = text.normalize('NFKC') } catch {}
+  return text.toLowerCase()
+}
+
+function getMemberIdentityContext(db, gid, groupName = '') {
+  ensureSchema()
+  const name = cleanStatsGroupName(groupName)
+  const where = name ? '(group_id = ? OR group_name = ?)' : 'group_id = ?'
+  const params = name ? [gid, name] : [gid]
+  const rows = db.prepare(`
+    SELECT sender_id, display_name, room_alias, contact_alias, contact_name, wechat_id, wxid, stable_key, last_seen
+    FROM wechat_group_member_names
+    WHERE ${where}
+    ORDER BY last_seen DESC
+  `).all(...params)
+  const bySender = new Map()
+  const displayByIdentity = new Map()
+  for (const row of rows) {
+    const sid = String(row.sender_id || '').trim()
+    const displayName = pickWeChatDisplayName([row.display_name, row.room_alias, row.contact_alias, row.contact_name], sid)
+    const stable = String(row.stable_key || row.wxid || row.wechat_id || '').trim()
+    const nameKey = normalizeStatsIdentityName(displayName)
+    const identityKey = stable
+      ? `stable:${stable}`
+      : (nameKey && displayName !== '未知成员' && !isWeChatInternalIdLike(displayName))
+        ? `name:${nameKey}`
+        : (sid ? `sender:${sid}` : '')
+    if (sid && !bySender.has(sid)) bySender.set(sid, { displayName, stable, identityKey, lastSeen: row.last_seen || '' })
+    if (identityKey && !displayByIdentity.has(identityKey) && displayName && displayName !== '未知成员') {
+      displayByIdentity.set(identityKey, displayName)
+    }
+  }
+  return { bySender, displayByIdentity }
+}
+
+function resolveStatsSenderIdentity(row = {}, context = { bySender: new Map(), displayByIdentity: new Map() }) {
+  const sid = String(row.sender_id || '').trim()
+  const senderKey = String(row.sender_key || sid || '').trim()
+  const names = splitNameCandidates(row.sender_names || row.sender_name || '')
+  const mapped = context.bySender.get(sid)
+  const displayName = pickWeChatDisplayName([mapped?.displayName, ...names], sid || senderKey)
+  const stable = String(mapped?.stable || '').trim()
+  const nameKey = normalizeStatsIdentityName(displayName)
+  const identityKey = stable
+    ? `stable:${stable}`
+    : (nameKey && displayName !== '未知成员' && !isWeChatInternalIdLike(displayName))
+      ? `name:${nameKey}`
+      : `sender:${senderKey || sid || 'unknown'}`
+  return {
+    identityKey,
+    displayName: context.displayByIdentity.get(identityKey) || displayName,
+  }
+}
+
 function rowWithDisplayName(row = {}, nameMap = new Map()) {
   const mapped = nameMap.get(String(row.sender_id || ''))
   const senderName = pickWeChatDisplayName([mapped, row.sender_name], row.sender_id)
@@ -746,27 +805,76 @@ function rowsByMetric(db, gid, from, to, metric, limit, groupName = '') {
     brag_count: 'SUM(CASE WHEN brag_score > 0 THEN 1 ELSE 0 END)',
   }[metric]
   if (!safeMetric) return []
-  const nameMap = getMemberDisplayNameMap(db, gid, groupName)
+  const identityContext = getMemberIdentityContext(db, gid, groupName)
   const groupFilter = groupWhereClause(gid, groupName)
+  const safeLimit = Math.min(Math.max(Number(limit || 10), 1), 30)
+  const scanLimit = Math.min(Math.max(safeLimit * 100, 500), 5000)
   const rows = db.prepare(`
     SELECT COALESCE(NULLIF(sender_id, ''), NULLIF(sender_name, ''), 'unknown') AS sender_key,
            sender_id,
            GROUP_CONCAT(DISTINCT NULLIF(sender_name, '')) AS sender_names,
-           ${safeMetric} AS value,
-           COUNT(*) AS message_count
+           COALESCE(${safeMetric}, 0) AS value,
+           COUNT(*) AS message_count,
+           MAX(timestamp) AS last_seen
     FROM wechat_group_activity
     WHERE ${groupFilter.sql} AND timestamp >= ? AND timestamp <= ?
     GROUP BY sender_key
     HAVING value > 0
     ORDER BY value DESC, message_count DESC
     LIMIT ?
-  `).all(...groupFilter.params, from, to, Math.min(Math.max(Number(limit || 10), 1), 30))
-  return rows.map(row => ({
-    ...row,
-    name: pickWeChatDisplayName([nameMap.get(String(row.sender_id || '')), ...splitNameCandidates(row.sender_names)], row.sender_id || row.sender_key),
-    value: Number(row.value || 0),
-    message_count: Number(row.message_count || 0),
-  }))
+  `).all(...groupFilter.params, from, to, scanLimit)
+  const merged = new Map()
+  for (const row of rows) {
+    const identity = resolveStatsSenderIdentity(row, identityContext)
+    const key = identity.identityKey
+    const prev = merged.get(key) || {
+      identity_key: key,
+      sender_ids: new Set(),
+      sender_names: new Set(),
+      name: identity.displayName || '未知成员',
+      value: 0,
+      message_count: 0,
+      last_seen: '',
+    }
+    if (row.sender_id) prev.sender_ids.add(String(row.sender_id))
+    for (const name of splitNameCandidates(row.sender_names)) prev.sender_names.add(name)
+    prev.value += Number(row.value || 0)
+    prev.message_count += Number(row.message_count || 0)
+    if (row.last_seen && String(row.last_seen).localeCompare(String(prev.last_seen || '')) > 0) {
+      prev.last_seen = row.last_seen
+      prev.name = identity.displayName || prev.name
+    }
+    merged.set(key, prev)
+  }
+  return [...merged.values()]
+    .sort((a, b) => Number(b.value || 0) - Number(a.value || 0)
+      || Number(b.message_count || 0) - Number(a.message_count || 0)
+      || String(b.last_seen || '').localeCompare(String(a.last_seen || '')))
+    .slice(0, safeLimit)
+    .map(row => ({
+      ...row,
+      sender_ids: [...row.sender_ids],
+      sender_names: [...row.sender_names],
+      value: Number(row.value || 0),
+      message_count: Number(row.message_count || 0),
+    }))
+}
+
+function participantCountByIdentity(db, gid, from, to, groupName = '') {
+  const identityContext = getMemberIdentityContext(db, gid, groupName)
+  const groupFilter = groupWhereClause(gid, groupName)
+  const rows = db.prepare(`
+    SELECT COALESCE(NULLIF(sender_id, ''), NULLIF(sender_name, ''), 'unknown') AS sender_key,
+           sender_id,
+           GROUP_CONCAT(DISTINCT NULLIF(sender_name, '')) AS sender_names,
+           MAX(timestamp) AS last_seen
+    FROM wechat_group_activity
+    WHERE ${groupFilter.sql} AND timestamp >= ? AND timestamp <= ?
+    GROUP BY sender_key
+  `).all(...groupFilter.params, from, to)
+  const keys = new Set()
+  for (const row of rows) keys.add(resolveStatsSenderIdentity(row, identityContext).identityKey)
+  return keys.size
 }
 
 export function getWeChatGroupStats({ groupId, groupName = '', from = '', to = '', hours = 24, range = '', limit = 10 } = {}) {
@@ -786,11 +894,11 @@ export function getWeChatGroupStats({ groupId, groupName = '', from = '', to = '
            COALESCE(SUM(link_count), 0) AS link_count,
            COALESCE(SUM(brag_score), 0) AS brag_score,
            COALESCE(SUM(CASE WHEN brag_score > 0 THEN 1 ELSE 0 END), 0) AS brag_count,
-           COUNT(DISTINCT COALESCE(NULLIF(sender_id, ''), sender_name)) AS participant_count,
            MAX(group_name) AS group_name
     FROM wechat_group_activity
     WHERE ${groupFilter.sql} AND timestamp >= ? AND timestamp <= ?
   `).get(...groupFilter.params, dates.from, dates.to) || {}
+  const participantCount = participantCountByIdentity(db, gid, dates.from, dates.to, resolvedGroupName)
   const recent = db.prepare(`
     SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, image_count, emoji_count, link_count, brag_score, timestamp
     FROM wechat_group_activity
@@ -822,7 +930,7 @@ export function getWeChatGroupStats({ groupId, groupName = '', from = '', to = '
       link_count: Number(totals.link_count || 0),
       brag_score: Number(totals.brag_score || 0),
       brag_count: Number(totals.brag_count || 0),
-      participant_count: Number(totals.participant_count || 0),
+      participant_count: participantCount,
     },
     leaderboards: {
       messages: rowsByMetric(db, gid, dates.from, dates.to, 'message_count', limit, resolvedGroupName),
@@ -953,11 +1061,14 @@ export function listWeChatGroupActivityRecords({ groupId, groupName = '', from =
            COALESCE(SUM(emoji_count), 0) AS emoji_count,
            COALESCE(SUM(link_count), 0) AS link_count,
            COALESCE(SUM(brag_score), 0) AS brag_score,
-           COUNT(DISTINCT COALESCE(NULLIF(sender_id, ''), sender_name)) AS participant_count,
+           COUNT(DISTINCT COALESCE(NULLIF(sender_id, ''), sender_name)) AS raw_participant_count,
            MAX(group_name) AS group_name
     FROM wechat_group_activity
     WHERE ${where}
   `).get(...params) || {}
+  const participantCount = query || messageType
+    ? Number(totals.raw_participant_count || 0)
+    : participantCountByIdentity(db, gid, dates.from, dates.to, resolvedGroupName)
   const latestRecord = db.prepare(`
     SELECT id, group_id, group_name, sender_id, sender_name, message_type, display_text, timestamp, created_at
     FROM wechat_group_activity
@@ -988,7 +1099,7 @@ export function listWeChatGroupActivityRecords({ groupId, groupName = '', from =
     has_more: safeOffset + rows.length < Number(totals.total || 0),
     totals: {
       message_count: Number(totals.total || 0),
-      participant_count: Number(totals.participant_count || 0),
+      participant_count: participantCount,
       image_count: Number(totals.image_count || 0),
       emoji_count: Number(totals.emoji_count || 0),
       link_count: Number(totals.link_count || 0),

@@ -1307,6 +1307,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.58</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">修复微信群排行榜同一成员占多个名次的问题，统计会按稳定身份/群昵称合并。</p>
+                <ul class="release-note-points">
+                  <li>发言、发图、表情、链接、装逼榜统一合并历史 sender_id。</li>
+                  <li>拿不到稳定 wxid 时按当前群昵称合并，避免同一人重复上榜。</li>
+                  <li>参与人数也按合并后的成员身份计算，不再被历史 ID 虚高。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.57</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>
