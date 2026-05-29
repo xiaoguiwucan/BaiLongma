@@ -2122,13 +2122,13 @@ export async function testSkillModelChannel({ skill = 'imageGeneration', channel
   if (!normalized.baseUrl || !normalized.model) return { ok: false, error: 'Base URL 和模型不能为空' }
   if (!normalized.apiKey) return { ok: false, error: 'API Key 未填写或未保存' }
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), 10000)
+  const timer = setTimeout(() => controller.abort(), kind === 'imageVision' ? 35000 : 10000)
   const started = Date.now()
   try {
     if (kind === 'imageVision') {
       // 识图渠道不能只测 /models：很多中转 /models 正常，但图片 chat.completions 会 503/空返回。
       // 这里用 1x1 PNG 做真实多模态调用，成功且返回非空才算“识图可用”。
-      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII='
+      const tinyPng = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=='
       const res = await fetch(`${normalized.baseUrl.replace(/\/$/, '')}/chat/completions`, {
         method: 'POST',
         headers: {

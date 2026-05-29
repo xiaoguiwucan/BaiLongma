@@ -2,6 +2,20 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.56 - 2026-05-29
+
+### 修复
+- 根据 5 张数据库失败图片的真实测试结果，调整识图超时策略：不再把单次识图硬限制为 25 秒，而是按设置里的 `apiTimeoutSeconds` 执行，最高 180 秒。
+- 识图渠道测试窗口从 10 秒放宽到 35 秒，避免 `gpt-5.4` 这类真实可用但响应较慢的视觉模型被误判失败。
+
+### 实测结论
+- 指定渠道 `gpt-4o-mini` 对 5 张数据库失败图片全部返回 `502 Upstream service temporarily unavailable`。
+- 同一渠道 `gpt-5.4` 对小图成功，对 242KB~310KB 大图在 22~33 秒内成功；因此后续建议把识图 Skill 默认模型切到 `gpt-5.4`，超时设置至少 45 秒。
+
+### 验证
+- 通过 `node --check src/config.js src/social/wechat-image-vision.js`。
+- 通过 `npm run test:wechat-guard`、`npm run test:social-targets`。
+
 ## v0.4.55 - 2026-05-29
 
 ### 修复

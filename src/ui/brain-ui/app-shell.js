@@ -1307,6 +1307,18 @@ const createSettingsModal = () => `
             <div class="release-notes-list">
               <article class="release-note-card">
                 <div class="release-note-head">
+                  <span class="release-note-version">v0.4.56</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">根据 5 张失败图片真实测试修复识图超时：gpt-5.4 可用但大图需要 22~33 秒。</p>
+                <ul class="release-note-points">
+                  <li>gpt-4o-mini 在指定渠道真实图片请求中 5/5 返回 502。</li>
+                  <li>gpt-5.4 对小图成功，对大图可成功但需要更长等待。</li>
+                  <li>识图调用不再硬压 25 秒，改为按设置里的超时执行。</li>
+                </ul>
+              </article>
+              <article class="release-note-card">
+                <div class="release-note-head">
                   <span class="release-note-version">v0.4.55</span>
                   <span class="release-note-date">2026-05-29</span>
                 </div>

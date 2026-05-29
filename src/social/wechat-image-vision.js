@@ -382,7 +382,9 @@ async function callVisionModel(row, runtime, cfg) {
     return fs.existsSync(filePath) ? fs.readFileSync(filePath).toString('base64') : ''
   })()
   if (!base64) throw new Error('图片超过保存上限或文件不存在，无法转 base64 给识图模型')
-  const timeoutSeconds = Math.min(Math.max(Number(cfg.apiTimeoutSeconds || 45), 5), 25)
+  // 真实测试显示部分大图在 gpt-5.4 上需要 30 秒左右才能返回；
+  // 这里不能再硬压到 25 秒，否则可用渠道会被误判超时。前台已先回复“正在识别”，允许按设置等待。
+  const timeoutSeconds = Math.min(Math.max(Number(cfg.apiTimeoutSeconds || 45), 5), 180)
   const client = new OpenAI({ apiKey: runtime.apiKey, baseURL: runtime.baseURL, timeout: timeoutSeconds * 1000 })
   const res = await client.chat.completions.create({
     model: runtime.model,
