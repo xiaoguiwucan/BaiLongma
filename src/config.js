@@ -1863,10 +1863,88 @@ const DEFAULT_SKILL_IMAGE_CONFIG = {
   apiTimeoutSeconds: 180,
 }
 
+function hashSkillString(value = '') {
+  let hash = 2166136261
+  for (const ch of String(value || '')) {
+    hash ^= ch.charCodeAt(0)
+    hash = Math.imul(hash, 16777619)
+  }
+  return (hash >>> 0).toString(36).slice(0, 8)
+}
+
+function normalizeSkillBaseUrl(value = '', fallback = '') {
+  return String(value || fallback || '').trim().replace(/\/$/, '')
+}
+
+function makeSkillChannelId(prefix = 'skill', raw = {}, index = 0) {
+  const existing = String(raw.id || raw.channelId || raw.channel_id || '').trim()
+  if (existing) return existing
+  const seed = [raw.name || raw.label || '', raw.provider || '', raw.model || '', raw.baseUrl || raw.base_url || '', index].join('|')
+  return `${prefix}_${hashSkillString(seed || `${Date.now()}:${Math.random()}`)}`
+}
+
+function normalizeSkillChannel(raw = {}, defaults = {}, { prefix = 'skill', index = 0, envKey = '', fallbackKey = '' } = {}) {
+  const id = makeSkillChannelId(prefix, raw, index)
+  const baseUrl = normalizeSkillBaseUrl(raw.baseUrl || raw.base_url, defaults.baseUrl)
+  const model = String(raw.model || defaults.model || '').trim()
+  const apiKey = String(raw.apiKey || raw.api_key || (envKey ? process.env[envKey] : '') || fallbackKey || '').trim()
+  const name = String(raw.name || raw.label || `${model || '模型'} @ ${baseUrl || '未配置'}`).trim().slice(0, 80) || `渠道 ${index + 1}`
+  return {
+    id,
+    name,
+    enabled: raw.enabled !== false,
+    provider: String(raw.provider || raw.type || 'custom').trim() || 'custom',
+    baseUrl,
+    model,
+    apiKey,
+    configured: !!apiKey,
+  }
+}
+
+function stripSkillChannelSecrets(channels = []) {
+  return (Array.isArray(channels) ? channels : []).map(channel => {
+    const { apiKey, ...rest } = channel || {}
+    return { ...rest, configured: !!apiKey || !!channel?.configured }
+  })
+}
+
+function mergeSkillChannelsWithExisting(incoming = [], existing = [], { prefix = 'skill', defaults = {}, envKey = '', fallbackKey = '' } = {}) {
+  const existingById = new Map((Array.isArray(existing) ? existing : []).map((item, index) => [String(item?.id || item?.channelId || item?.channel_id || makeSkillChannelId(prefix, item, index)), item]))
+  return (Array.isArray(incoming) ? incoming : []).map((item, index) => {
+    const id = String(item?.id || item?.channelId || item?.channel_id || '').trim()
+    const old = id ? existingById.get(id) : null
+    const raw = { ...(item || {}) }
+    if (!Object.prototype.hasOwnProperty.call(raw, 'apiKey') && !Object.prototype.hasOwnProperty.call(raw, 'api_key')) {
+      raw.apiKey = old?.apiKey || old?.api_key || ''
+    }
+    return normalizeSkillChannel(raw, defaults, { prefix, index, envKey, fallbackKey })
+  })
+}
+
+function firstUsableSkillChannel(channels = [], activeChannelId = '') {
+  const list = Array.isArray(channels) ? channels : []
+  const active = list.find(item => item.id === activeChannelId && item.enabled !== false && item.apiKey && item.baseUrl && item.model)
+  return active || list.find(item => item.enabled !== false && item.apiKey && item.baseUrl && item.model) || list.find(item => item.baseUrl && item.model) || list[0] || null
+}
+
 function normalizeSkillImageConfig(raw = {}) {
-  const baseUrl = String(raw.baseUrl || raw.base_url || DEFAULT_SKILL_IMAGE_CONFIG.baseUrl).trim().replace(/\/$/, '') || DEFAULT_SKILL_IMAGE_CONFIG.baseUrl
-  const model = String(raw.model || DEFAULT_SKILL_IMAGE_CONFIG.model).trim() || DEFAULT_SKILL_IMAGE_CONFIG.model
-  const apiKey = String(raw.apiKey || raw.api_key || process.env.BAILONGMA_IMAGE_API_KEY || '').trim()
+  const legacyBaseUrl = normalizeSkillBaseUrl(raw.baseUrl || raw.base_url, DEFAULT_SKILL_IMAGE_CONFIG.baseUrl)
+  const legacyModel = String(raw.model || DEFAULT_SKILL_IMAGE_CONFIG.model).trim() || DEFAULT_SKILL_IMAGE_CONFIG.model
+  const legacyApiKey = String(raw.apiKey || raw.api_key || process.env.BAILONGMA_IMAGE_API_KEY || '').trim()
+  const legacyChannel = normalizeSkillChannel({
+    id: raw.activeChannelId || raw.active_channel_id || 'image_default',
+    name: raw.channelName || raw.channel_name || '默认生图渠道',
+    provider: raw.provider || 'custom',
+    baseUrl: legacyBaseUrl,
+    model: legacyModel,
+    apiKey: legacyApiKey,
+    enabled: true,
+  }, DEFAULT_SKILL_IMAGE_CONFIG, { prefix: 'image', index: 0, envKey: 'BAILONGMA_IMAGE_API_KEY' })
+  const channels = (Array.isArray(raw.channels) && raw.channels.length)
+    ? raw.channels.map((item, index) => normalizeSkillChannel(item, DEFAULT_SKILL_IMAGE_CONFIG, { prefix: 'image', index, envKey: 'BAILONGMA_IMAGE_API_KEY' }))
+    : [legacyChannel]
+  const activeChannelId = String(raw.activeChannelId || raw.active_channel_id || channels.find(item => item.enabled !== false)?.id || channels[0]?.id || '').trim()
+  const active = firstUsableSkillChannel(channels, activeChannelId) || legacyChannel
   const maxPerUserPerHour = Math.min(Math.max(Number(raw.maxPerUserPerHour ?? raw.max_per_user_per_hour ?? DEFAULT_SKILL_IMAGE_CONFIG.maxPerUserPerHour) || 10, 1), 100)
   const defaultQuality = ['low', 'medium', 'high', 'auto'].includes(String(raw.defaultQuality || raw.default_quality || '').trim()) ? String(raw.defaultQuality || raw.default_quality).trim() : DEFAULT_SKILL_IMAGE_CONFIG.defaultQuality
   const apiTimeoutSeconds = Math.min(Math.max(Number(raw.apiTimeoutSeconds ?? raw.api_timeout_seconds ?? DEFAULT_SKILL_IMAGE_CONFIG.apiTimeoutSeconds) || 180, 60), 600)
@@ -1874,10 +1952,13 @@ function normalizeSkillImageConfig(raw = {}) {
   return {
     enabled: raw.enabled !== false,
     name: String(raw.name || DEFAULT_SKILL_IMAGE_CONFIG.name).trim() || DEFAULT_SKILL_IMAGE_CONFIG.name,
-    baseUrl,
-    model,
-    apiKey,
-    configured: !!apiKey,
+    activeChannelId: active?.id || activeChannelId,
+    baseUrl: active?.baseUrl || legacyBaseUrl,
+    model: active?.model || legacyModel,
+    apiKey: active?.apiKey || legacyApiKey,
+    provider: active?.provider || 'custom',
+    configured: channels.some(item => item.enabled !== false && !!item.apiKey),
+    channels,
     maxPerUserPerHour,
     defaultQuality,
     defaultSize: String(raw.defaultSize || raw.default_size || DEFAULT_SKILL_IMAGE_CONFIG.defaultSize).trim() || DEFAULT_SKILL_IMAGE_CONFIG.defaultSize,
@@ -1891,12 +1972,22 @@ export function getSkillImageConfig({ revealKey = false } = {}) {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.skills?.imageGeneration || {} } catch {}
   const cfg = normalizeSkillImageConfig(stored)
-  if (!revealKey) delete cfg.apiKey
+  if (!revealKey) {
+    delete cfg.apiKey
+    cfg.channels = stripSkillChannelSecrets(cfg.channels)
+  }
   return cfg
 }
 
 export function getSkillImageCredentials() {
   return getSkillImageConfig({ revealKey: true })
+}
+
+export function getSkillImageRuntimeCandidates() {
+  const cfg = getSkillImageCredentials()
+  return (cfg.channels || [])
+    .filter(item => item.enabled !== false && item.apiKey && item.baseUrl && item.model)
+    .sort((a, b) => (a.id === cfg.activeChannelId ? -1 : 0) + (b.id === cfg.activeChannelId ? 1 : 0))
 }
 
 export function setSkillImageConfig(updates = {}) {
@@ -1906,6 +1997,14 @@ export function setSkillImageConfig(updates = {}) {
   const merged = { ...current, ...updates }
   if (!Object.prototype.hasOwnProperty.call(updates, 'apiKey') && !Object.prototype.hasOwnProperty.call(updates, 'api_key')) {
     merged.apiKey = current.apiKey || current.api_key || ''
+  }
+  if (Array.isArray(updates.channels)) {
+    merged.channels = mergeSkillChannelsWithExisting(updates.channels, current.channels || [], {
+      prefix: 'image',
+      defaults: DEFAULT_SKILL_IMAGE_CONFIG,
+      envKey: 'BAILONGMA_IMAGE_API_KEY',
+      fallbackKey: current.apiKey || current.api_key || '',
+    })
   }
   const nextConfig = normalizeSkillImageConfig(merged)
   const skills = { ...(existing.skills || {}), imageGeneration: nextConfig }
@@ -1933,19 +2032,36 @@ const DEFAULT_SKILL_IMAGE_VISION_CONFIG = {
 
 function normalizeSkillImageVisionConfig(raw = {}) {
   const imageGeneration = getSkillImageConfig({ revealKey: true })
-  const baseUrl = String(raw.baseUrl || raw.base_url || imageGeneration.baseUrl || DEFAULT_SKILL_IMAGE_VISION_CONFIG.baseUrl).trim().replace(/\/$/, '') || DEFAULT_SKILL_IMAGE_VISION_CONFIG.baseUrl
-  const model = String(raw.model || DEFAULT_SKILL_IMAGE_VISION_CONFIG.model).trim() || DEFAULT_SKILL_IMAGE_VISION_CONFIG.model
-  const apiKey = String(raw.apiKey || raw.api_key || process.env.BAILONGMA_VISION_API_KEY || imageGeneration.apiKey || '').trim()
+  const legacyBaseUrl = normalizeSkillBaseUrl(raw.baseUrl || raw.base_url, imageGeneration.baseUrl || DEFAULT_SKILL_IMAGE_VISION_CONFIG.baseUrl)
+  const legacyModel = String(raw.model || DEFAULT_SKILL_IMAGE_VISION_CONFIG.model).trim() || DEFAULT_SKILL_IMAGE_VISION_CONFIG.model
+  const legacyApiKey = String(raw.apiKey || raw.api_key || process.env.BAILONGMA_VISION_API_KEY || imageGeneration.apiKey || '').trim()
+  const legacyChannel = normalizeSkillChannel({
+    id: raw.activeChannelId || raw.active_channel_id || 'vision_default',
+    name: raw.channelName || raw.channel_name || '默认识图渠道',
+    provider: raw.provider || 'vision',
+    baseUrl: legacyBaseUrl,
+    model: legacyModel,
+    apiKey: legacyApiKey,
+    enabled: true,
+  }, DEFAULT_SKILL_IMAGE_VISION_CONFIG, { prefix: 'vision', index: 0, envKey: 'BAILONGMA_VISION_API_KEY', fallbackKey: imageGeneration.apiKey || '' })
+  const channels = (Array.isArray(raw.channels) && raw.channels.length)
+    ? raw.channels.map((item, index) => normalizeSkillChannel(item, DEFAULT_SKILL_IMAGE_VISION_CONFIG, { prefix: 'vision', index, envKey: 'BAILONGMA_VISION_API_KEY', fallbackKey: imageGeneration.apiKey || '' }))
+    : [legacyChannel]
+  const activeChannelId = String(raw.activeChannelId || raw.active_channel_id || channels.find(item => item.enabled !== false)?.id || channels[0]?.id || '').trim()
+  const active = firstUsableSkillChannel(channels, activeChannelId) || legacyChannel
   const apiTimeoutSeconds = Math.min(Math.max(Number(raw.apiTimeoutSeconds ?? raw.api_timeout_seconds ?? DEFAULT_SKILL_IMAGE_VISION_CONFIG.apiTimeoutSeconds) || 45, 15), 180)
   const maxImageBytesMB = Math.min(Math.max(Number(raw.maxImageBytesMB ?? raw.max_image_bytes_mb ?? DEFAULT_SKILL_IMAGE_VISION_CONFIG.maxImageBytesMB) || 8, 1), 20)
   return {
     enabled: raw.enabled !== false,
     autoDescribe: raw.autoDescribe !== false && raw.auto_describe !== false,
     preferCurrentMultimodal: raw.preferCurrentMultimodal !== false && raw.prefer_current_multimodal !== false,
-    baseUrl,
-    model,
-    apiKey,
-    configured: !!apiKey,
+    activeChannelId: active?.id || activeChannelId,
+    baseUrl: active?.baseUrl || legacyBaseUrl,
+    model: active?.model || legacyModel,
+    apiKey: active?.apiKey || legacyApiKey,
+    provider: active?.provider || 'vision',
+    configured: channels.some(item => item.enabled !== false && !!item.apiKey),
+    channels,
     apiTimeoutSeconds,
     maxImageBytesMB,
   }
@@ -1955,12 +2071,22 @@ export function getSkillImageVisionConfig({ revealKey = false } = {}) {
   let stored = {}
   try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.skills?.imageVision || {} } catch {}
   const cfg = normalizeSkillImageVisionConfig(stored)
-  if (!revealKey) delete cfg.apiKey
+  if (!revealKey) {
+    delete cfg.apiKey
+    cfg.channels = stripSkillChannelSecrets(cfg.channels)
+  }
   return cfg
 }
 
 export function getSkillImageVisionCredentials() {
   return getSkillImageVisionConfig({ revealKey: true })
+}
+
+export function getSkillImageVisionRuntimeCandidates() {
+  const cfg = getSkillImageVisionCredentials()
+  return (cfg.channels || [])
+    .filter(item => item.enabled !== false && item.apiKey && item.baseUrl && item.model)
+    .sort((a, b) => (a.id === cfg.activeChannelId ? -1 : 0) + (b.id === cfg.activeChannelId ? 1 : 0))
 }
 
 export function setSkillImageVisionConfig(updates = {}) {
@@ -1971,10 +2097,54 @@ export function setSkillImageVisionConfig(updates = {}) {
   if (!Object.prototype.hasOwnProperty.call(updates, 'apiKey') && !Object.prototype.hasOwnProperty.call(updates, 'api_key')) {
     merged.apiKey = current.apiKey || current.api_key || ''
   }
+  if (Array.isArray(updates.channels)) {
+    merged.channels = mergeSkillChannelsWithExisting(updates.channels, current.channels || [], {
+      prefix: 'vision',
+      defaults: DEFAULT_SKILL_IMAGE_VISION_CONFIG,
+      envKey: 'BAILONGMA_VISION_API_KEY',
+      fallbackKey: current.apiKey || current.api_key || '',
+    })
+  }
   const nextConfig = normalizeSkillImageVisionConfig(merged)
   const skills = { ...(existing.skills || {}), imageVision: nextConfig }
   writeStoredConfig({ ...existing, skills })
   return getSkillImageVisionConfig()
+}
+
+export async function testSkillModelChannel({ skill = 'imageGeneration', channel = {} } = {}) {
+  const kind = String(skill || '').trim()
+  const defaults = kind === 'imageVision' ? DEFAULT_SKILL_IMAGE_VISION_CONFIG : DEFAULT_SKILL_IMAGE_CONFIG
+  const saved = kind === 'imageVision' ? getSkillImageVisionConfig({ revealKey: true }) : getSkillImageConfig({ revealKey: true })
+  const savedChannel = (saved.channels || []).find(item => String(item.id || '') === String(channel?.id || ''))
+  const rawChannel = { ...(savedChannel || {}), ...(channel || {}) }
+  if (!rawChannel.apiKey && savedChannel?.apiKey) rawChannel.apiKey = savedChannel.apiKey
+  const normalized = normalizeSkillChannel(rawChannel, defaults, { prefix: kind === 'imageVision' ? 'vision_test' : 'image_test', index: 0 })
+  if (!normalized.baseUrl || !normalized.model) return { ok: false, error: 'Base URL 和模型不能为空' }
+  if (!normalized.apiKey) return { ok: false, error: 'API Key 未填写或未保存' }
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), 10000)
+  const started = Date.now()
+  try {
+    const res = await fetch(`${normalized.baseUrl.replace(/\/$/, '')}/models`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${normalized.apiKey}`, Accept: 'application/json' },
+      signal: controller.signal,
+    })
+    const text = await res.text()
+    let json = null
+    try { json = JSON.parse(text) } catch {}
+    const latencyMs = Date.now() - started
+    if (!res.ok) {
+      const message = json?.error?.message || json?.message || text.slice(0, 240) || `HTTP ${res.status}`
+      return { ok: false, status: res.status, latencyMs, error: message, channel: { ...normalized, apiKey: undefined, configured: true } }
+    }
+    const models = Array.isArray(json?.data) ? json.data.map(item => item?.id || item?.model).filter(Boolean).slice(0, 20) : []
+    return { ok: true, status: res.status, latencyMs, models, channel: { ...normalized, apiKey: undefined, configured: true } }
+  } catch (err) {
+    return { ok: false, latencyMs: Date.now() - started, error: err?.name === 'AbortError' ? '连通测试超时（10 秒）' : (err?.message || String(err)), channel: { ...normalized, apiKey: undefined, configured: true } }
+  } finally {
+    clearTimeout(timer)
+  }
 }
 
 export const __internals = {

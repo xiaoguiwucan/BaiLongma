@@ -5,10 +5,11 @@ import OpenAI from 'openai'
 import { getDB } from '../db.js'
 import { paths } from '../paths.js'
 import { nowTimestamp } from '../time.js'
-import { config, getSkillImageVisionCredentials } from '../config.js'
+import { config, getSkillImageVisionCredentials, getSkillImageVisionRuntimeCandidates } from '../config.js'
 
 let schemaReady = false
 let pendingDescribeJob = null
+const mediaDescribeJobs = new Map()
 
 function ensureSchema() {
   if (schemaReady) return
@@ -285,8 +286,8 @@ function getVisionRuntimeCandidates(cfg = getSkillImageVisionCredentials()) {
   }
 
   // 显式“识图模型”是用户在图片理解菜单里专门配置的模型，优先级应高于普通 LLM 列表。
-  if (cfg.apiKey && cfg.baseUrl && cfg.model) {
-    push({ provider: 'vision', model: cfg.model, apiKey: cfg.apiKey, baseURL: cfg.baseUrl, source: 'fallback_gpt' })
+  for (const channel of getSkillImageVisionRuntimeCandidates()) {
+    push({ provider: channel.provider || 'vision', model: channel.model, apiKey: channel.apiKey, baseURL: channel.baseUrl, source: `skill:${channel.name || channel.id || channel.model}` })
   }
 
   for (const profile of config.llmProfiles || []) {
@@ -405,6 +406,18 @@ async function callVisionModel(row, runtime, cfg) {
 }
 
 export async function describeWeChatImageMedia({ mediaId, force = false } = {}) {
+  const key = Number(mediaId || 0)
+  if (key && !force && mediaDescribeJobs.has(key)) return await mediaDescribeJobs.get(key)
+  const job = describeWeChatImageMediaInternal({ mediaId, force })
+  if (key && !force) mediaDescribeJobs.set(key, job)
+  try {
+    return await job
+  } finally {
+    if (key && mediaDescribeJobs.get(key) === job) mediaDescribeJobs.delete(key)
+  }
+}
+
+async function describeWeChatImageMediaInternal({ mediaId, force = false } = {}) {
   ensureSchema()
   const db = getDB()
   const row = db.prepare(`SELECT * FROM wechat_group_media_items WHERE id = ?`).get(mediaId)

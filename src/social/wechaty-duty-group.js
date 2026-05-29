@@ -62,6 +62,20 @@ function waitWechatMediaWindow(ms = WECHAT_MEDIA_WAIT_MS) {
   return new Promise(resolve => setTimeout(resolve, Math.max(0, Number(ms || 0))))
 }
 
+async function withWechatySendTimeout(promise, ms = 15000, label = 'wechat send') {
+  let timer = null
+  try {
+    return await Promise.race([
+      promise,
+      new Promise((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`${label} timeout after ${Math.round(ms / 1000)}s`)), Math.max(1000, Number(ms || 15000)))
+      }),
+    ])
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 export function extractPublicImageUrlsFromWechatText(content = '') {
   const text = String(content || '')
   const urls = new Set()
@@ -783,7 +797,7 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     const adminBypass = opts.adminBypass === true || opts.social?.wechat_admin === true
     if (!adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
       const refusal = '为了保护机主隐私，微信群里不能发送或描述本机文件、桌面图片、截图、相册或 file:// 路径。可以发送公开网络图片链接。'
-      await sayWechatyWithMentions(room, refusal, resolvedMentionTargets)
+      await withWechatySendTimeout(sayWechatyWithMentions(room, refusal, resolvedMentionTargets), opts.timeoutMs || 15000, 'wechat text send')
       return { ok: false, blocked: true, reason: 'local_file_reference_in_wechat_outbound' }
     }
     if (adminBypass && LOCAL_FILE_REFERENCE_RE.test(body)) {
@@ -795,10 +809,10 @@ export async function sendWechatyDutyGroupMessage(roomId, content, opts = {}) {
     // 表情包/斗图场景不要把图片 URL 当文字发到群里；微信里应只看到图片/GIF。
     // 若模型额外写了自然语言说明，则先 @ 提问人发一句短文字；纯图片回复则完全不发链接文本。
     if (textBody.trim()) {
-      await sayWechatyWithMentions(room, textBody, resolvedMentionTargets)
+      await withWechatySendTimeout(sayWechatyWithMentions(room, textBody, resolvedMentionTargets), opts.timeoutMs || 15000, 'wechat text send')
     }
     const imageResults = await Promise.allSettled(imageUrls.map(async url => {
-      await room.say(FileBox.fromUrl(url))
+      await withWechatySendTimeout(room.say(FileBox.fromUrl(url)), opts.timeoutMs || 20000, 'wechat image send')
       return url
     }))
     for (let i = 0; i < imageResults.length; i++) {
@@ -1407,6 +1421,9 @@ async function tryDirectImageUnderstandingReply(room, text = '', { senderId = ''
   }
 
   console.log(`[WechatImageVision] 直接识图回复 topic="${groupName}" sender="${senderName}" media_id=${item.id} status=${item.vision_status || ''} query="${value.slice(0, 120)}"`)
+  if (!item.description) {
+    sendWechatyDutyGroupMessage(room.id, '收到，图片已入库，正在识别；如果模型渠道不通我会把具体错误发出来。', { mentionId: senderId, mentionName: senderName, timeoutMs: 8000 }).catch(() => {})
+  }
   const vision = item.description
     ? { ok: true, description: item.description, item }
     : await describeWeChatImageMedia({ mediaId: item.id })

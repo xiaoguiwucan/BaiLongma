@@ -611,8 +611,16 @@ const createSettingsModal = () => `
               </div>
               <div class="settings-row-action">
                 <button class="settings-save-btn primary" id="skill-image-save-btn" type="button">保存生图 Skill</button>
+                <button class="settings-save-btn" id="skill-image-add-channel-btn" type="button">新增生图渠道</button>
                 <span class="settings-feedback" id="skill-image-feedback"></span>
               </div>
+              <div class="wechaty-subsection-head" style="margin-top:14px;">
+                <div>
+                  <div class="wechaty-subsection-title">生图模型渠道池</div>
+                  <p class="settings-hint compact">可配置多个 OpenAI 兼容图片模型渠道；默认渠道失败时会自动切换到下一个已启用渠道。</p>
+                </div>
+              </div>
+              <div class="wechaty-member-list" id="skill-image-channel-list"></div>
               <p class="settings-hint compact">密钥只保存在本机配置，不会在页面回显，也不会提交到 GitHub。微信群生成失败或 API 调用失败时会 @ 提问人反馈原因。</p>
             </div>
 
@@ -653,9 +661,17 @@ const createSettingsModal = () => `
               </div>
               <div class="settings-row-action">
                 <button class="settings-save-btn primary" id="skill-vision-save-btn" type="button">保存识图 Skill</button>
+                <button class="settings-save-btn" id="skill-vision-add-channel-btn" type="button">新增识图渠道</button>
                 <button class="settings-save-btn" id="skill-vision-refresh-btn" type="button">刷新状态</button>
                 <span class="settings-feedback" id="skill-vision-feedback"></span>
               </div>
+              <div class="wechaty-subsection-head" style="margin-top:14px;">
+                <div>
+                  <div class="wechaty-subsection-title">识图模型渠道池</div>
+                  <p class="settings-hint compact">可配置多个多模态模型渠道；当前渠道超时/503/返回空时会自动尝试下一个渠道。</p>
+                </div>
+              </div>
+              <div class="wechaty-member-list" id="skill-vision-channel-list"></div>
               <p class="settings-hint compact" id="skill-vision-counts">图片入库：—</p>
             </div>
           </div>
@@ -1289,6 +1305,18 @@ const createSettingsModal = () => `
           <div class="settings-section">
             <div class="settings-section-label">更新说明</div>
             <div class="release-notes-list">
+              <article class="release-note-card">
+                <div class="release-note-head">
+                  <span class="release-note-version">v0.4.54</span>
+                  <span class="release-note-date">2026-05-29</span>
+                </div>
+                <p class="release-note-summary">Skill 技能新增模型渠道池，生图/识图可配置多个渠道并自动故障切换。</p>
+                <ul class="release-note-points">
+                  <li>生图和识图渠道支持新增、删除、排序、设为默认和测试连通。</li>
+                  <li>渠道失败时自动尝试下一个已启用渠道，失败原因会汇总反馈。</li>
+                  <li>识图请求会先确认图片已入库并开始识别，避免坏模型表现为完全没响应。</li>
+                </ul>
+              </article>
               <article class="release-note-card">
                 <div class="release-note-head">
                   <span class="release-note-version">v0.4.53</span>

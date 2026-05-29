@@ -2,6 +2,23 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.54 - 2026-05-29
+
+### 新增
+- Skill 技能页新增“模型渠道池”：生图 Skill 和识图 Skill 都可以配置多个 OpenAI 兼容渠道，每个渠道支持名称、Base URL、模型、API Key、启用/默认、上移/下移、删除和连通测试。
+- 后端新增 Skill 渠道连通测试接口 `POST /settings/skills/test-channel`，可用已保存密钥或新填写密钥检测 `/models` 连通状态。
+- 生图 Skill 调用时会按默认渠道和排序自动故障切换：当前渠道失败/超时/无图时尝试下一个已启用渠道，并把所有失败原因汇总反馈给群里提问人。
+- 识图 Skill 调用时会按“当前多模态 LLM -> Skill 识图渠道池 -> LLM 模型池视觉模型”的顺序尝试，渠道失败后自动切换。
+
+### 修复 / 稳定性
+- 修复图片理解失败时长时间无响应的问题：命中识图请求后会先 @ 提问人提示“图片已入库，正在识别”，避免用户以为程序没动。
+- 微信群发送文本/图片增加超时保护，微信底层发送卡住时不会无限挂起。
+- 识图同一张图片的前台请求和后台解析会复用同一个解析任务，避免同一媒体并发重复调用多个坏渠道。
+
+### 验证
+- 通过 `node --check src/config.js src/api.js src/social/image-generation-skill.js src/social/wechat-image-vision.js src/social/wechaty-duty-group.js src/ui/brain-ui/app.js src/ui/brain-ui/app-shell.js`。
+- 通过 `npm run test:wechat-guard`、`npm run test:social-targets`。
+
 ## v0.4.53 - 2026-05-29
 
 ### 修复

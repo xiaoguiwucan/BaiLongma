@@ -2171,6 +2171,8 @@ function initTTSSettings() {
   const skillImageDefaultQuality = document.getElementById("skill-image-default-quality");
   const skillImageHighQuality = document.getElementById("skill-image-high-quality");
   const skillImageSaveBtn = document.getElementById("skill-image-save-btn");
+  const skillImageAddChannelBtn = document.getElementById("skill-image-add-channel-btn");
+  const skillImageChannelList = document.getElementById("skill-image-channel-list");
   const skillImageFeedback = document.getElementById("skill-image-feedback");
   const skillVisionStatus = document.getElementById("skill-vision-status");
   const skillVisionEnabled = document.getElementById("skill-vision-enabled");
@@ -2180,6 +2182,8 @@ function initTTSSettings() {
   const skillVisionKey = document.getElementById("skill-vision-key");
   const skillVisionTimeout = document.getElementById("skill-vision-timeout");
   const skillVisionSaveBtn = document.getElementById("skill-vision-save-btn");
+  const skillVisionAddChannelBtn = document.getElementById("skill-vision-add-channel-btn");
+  const skillVisionChannelList = document.getElementById("skill-vision-channel-list");
   const skillVisionRefreshBtn = document.getElementById("skill-vision-refresh-btn");
   const skillVisionFeedback = document.getElementById("skill-vision-feedback");
   const skillVisionCounts = document.getElementById("skill-vision-counts");
@@ -2238,6 +2242,10 @@ function initTTSSettings() {
   let dbImageHasMore = false;
   let dbImageAutoRefreshTimer = null;
   let dbImageLastAutoProcessAt = 0;
+  let skillImageChannels = [];
+  let skillImageActiveChannelId = "";
+  let skillVisionChannels = [];
+  let skillVisionActiveChannelId = "";
 
   const BUILTIN_IMAGE_MODELS = [
     { value: "gpt-image-2", label: "gpt-image-2（推荐）" },
@@ -4081,6 +4089,185 @@ function initTTSSettings() {
     }
   }
 
+  function makeSkillChannelId(prefix = "skill") {
+    return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`;
+  }
+
+  function normalizeSkillChannelsForUi(config = {}, kind = "image") {
+    const defaults = kind === "vision"
+      ? { name: "默认识图渠道", baseUrl: "https://sub.pbopenai.cloud/v1", model: "gpt-4o-mini" }
+      : { name: "默认生图渠道", baseUrl: "https://sub.pbopenai.cloud/v1", model: "gpt-image-2" };
+    const rows = Array.isArray(config.channels) && config.channels.length ? config.channels : [{
+      id: config.activeChannelId || `${kind}_default`,
+      name: defaults.name,
+      enabled: true,
+      baseUrl: config.baseUrl || defaults.baseUrl,
+      model: config.model || defaults.model,
+      configured: !!config.configured,
+    }];
+    return rows.map((row, index) => ({
+      id: String(row.id || makeSkillChannelId(kind)).trim(),
+      name: String(row.name || row.label || `${defaults.name} ${index + 1}`).trim(),
+      enabled: row.enabled !== false,
+      provider: String(row.provider || "custom").trim(),
+      baseUrl: String(row.baseUrl || row.base_url || defaults.baseUrl).trim(),
+      model: String(row.model || defaults.model).trim(),
+      configured: !!row.configured,
+      apiKey: "",
+    }));
+  }
+
+  function getSkillChannelState(kind = "image") {
+    return kind === "vision"
+      ? { channels: skillVisionChannels, activeId: skillVisionActiveChannelId, list: skillVisionChannelList, feedback: skillVisionFeedback, models: BUILTIN_VISION_MODELS }
+      : { channels: skillImageChannels, activeId: skillImageActiveChannelId, list: skillImageChannelList, feedback: skillImageFeedback, models: BUILTIN_IMAGE_MODELS };
+  }
+
+  function setSkillChannelState(kind = "image", channels = [], activeId = "") {
+    if (kind === "vision") {
+      skillVisionChannels = channels;
+      skillVisionActiveChannelId = activeId || channels.find(ch => ch.enabled !== false)?.id || channels[0]?.id || "";
+    } else {
+      skillImageChannels = channels;
+      skillImageActiveChannelId = activeId || channels.find(ch => ch.enabled !== false)?.id || channels[0]?.id || "";
+    }
+  }
+
+  function renderSkillChannels(kind = "image") {
+    const state = getSkillChannelState(kind);
+    const list = state.list;
+    if (!list) return;
+    const channels = state.channels;
+    if (!channels.length) {
+      list.innerHTML = `<div class="wechaty-empty">还没有渠道，点击“新增${kind === "vision" ? "识图" : "生图"}渠道”。</div>`;
+      return;
+    }
+    const modelOptions = (kind === "vision" ? buildVisionModelOptions("") : BUILTIN_IMAGE_MODELS)
+      .map(item => ({ value: item.value || item.id || item, label: item.label || item.name || item.value || item }));
+    list.innerHTML = channels.map((ch, index) => {
+      const options = (() => {
+        const seen = new Set();
+        const rows = [];
+        if (ch.model && !modelOptions.some(item => item.value === ch.model)) rows.push({ value: ch.model, label: `${ch.model}（当前）` });
+        for (const item of modelOptions) {
+          if (!item.value || seen.has(item.value)) continue;
+          seen.add(item.value);
+          rows.push(item);
+        }
+        return rows.map(item => `<option value="${escapeHtml(item.value)}" ${item.value === ch.model ? "selected" : ""}>${escapeHtml(item.label)}</option>`).join("");
+      })();
+      return `
+        <div class="wechaty-member-card skill-channel-card" data-kind="${escapeHtml(kind)}" data-index="${index}" style="display:block;padding:12px;">
+          <div class="wechaty-member-row" style="align-items:center;gap:10px;flex-wrap:wrap;">
+            <label class="wechaty-master-toggle" style="margin:0;"><input type="checkbox" data-field="enabled" ${ch.enabled !== false ? "checked" : ""}><span>启用</span></label>
+            <label class="wechaty-master-toggle" style="margin:0;"><input type="radio" name="skill-${escapeHtml(kind)}-active-channel" data-action="active" ${ch.id === state.activeId ? "checked" : ""}><span>默认</span></label>
+            <span class="settings-platform-status ${ch.configured ? "ok" : ""}">${ch.configured ? "● 已保存密钥" : "○ 未保存密钥"}</span>
+            <button class="settings-save-btn" type="button" data-action="up" style="width:auto;padding:0 10px;">上移</button>
+            <button class="settings-save-btn" type="button" data-action="down" style="width:auto;padding:0 10px;">下移</button>
+            <button class="settings-save-btn" type="button" data-action="test" style="width:auto;padding:0 10px;">测试连通</button>
+            <button class="settings-save-btn danger" type="button" data-action="remove" style="width:auto;padding:0 10px;">删除</button>
+          </div>
+          <div class="wechaty-meme-grid" style="margin-top:10px;">
+            <label>渠道名称<input class="settings-input" data-field="name" type="text" value="${escapeHtml(ch.name || "")}" placeholder="例如：嘟嘟GPT / 官方 / 备用1"></label>
+            <label>Base URL<input class="settings-input" data-field="baseUrl" type="text" value="${escapeHtml(ch.baseUrl || "")}" placeholder="https://.../v1"></label>
+            <label>模型<select class="settings-select" data-field="model">${options}</select></label>
+            <label>API Key<input class="settings-input" data-field="apiKey" type="password" value="" placeholder="留空保留已保存密钥"></label>
+          </div>
+        </div>
+      `;
+    }).join("");
+  }
+
+  function addSkillChannel(kind = "image") {
+    const defaults = kind === "vision"
+      ? { name: "新识图渠道", baseUrl: skillVisionBaseUrl?.value || "https://sub.pbopenai.cloud/v1", model: skillVisionModel?.value || "gpt-4o-mini" }
+      : { name: "新生图渠道", baseUrl: skillImageBaseUrl?.value || "https://sub.pbopenai.cloud/v1", model: skillImageModel?.value || "gpt-image-2" };
+    const state = getSkillChannelState(kind);
+    const channels = [...state.channels, { id: makeSkillChannelId(kind), enabled: true, provider: "custom", configured: false, apiKey: "", ...defaults }];
+    setSkillChannelState(kind, channels, state.activeId || channels[0]?.id || "");
+    renderSkillChannels(kind);
+  }
+
+  function syncSkillChannelInputs(kind = "image") {
+    const state = getSkillChannelState(kind);
+    state.list?.querySelectorAll(".skill-channel-card").forEach(card => {
+      const index = Number(card.dataset.index || -1);
+      const ch = state.channels[index];
+      if (!ch) return;
+      card.querySelectorAll("[data-field]").forEach(input => {
+        const field = input.dataset.field;
+        if (field === "enabled") ch.enabled = input.checked;
+        else ch[field] = input.value;
+      });
+      if (card.querySelector("[data-action='active']")?.checked) {
+        if (kind === "vision") skillVisionActiveChannelId = ch.id;
+        else skillImageActiveChannelId = ch.id;
+      }
+    });
+  }
+
+  async function testSkillChannel(kind = "image", index = 0) {
+    syncSkillChannelInputs(kind);
+    const state = getSkillChannelState(kind);
+    const channel = state.channels[index];
+    if (!channel) return;
+    try {
+      showFeedback(state.feedback, "正在测试渠道连通...");
+      const data = await fetch(`${API}/settings/skills/test-channel`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ skill: kind === "vision" ? "imageVision" : "imageGeneration", channel }),
+      }).then(r => r.json());
+      if (data.ok) showFeedback(state.feedback, `${channel.name || channel.model} 连通正常，${data.latencyMs || 0}ms`);
+      else showFeedback(state.feedback, `${channel.name || channel.model} 不通：${data.error || "未知错误"}`, true);
+    } catch (err) {
+      showFeedback(state.feedback, err?.message || "测试失败", true);
+    }
+  }
+
+  function handleSkillChannelListClick(kind = "image", event) {
+    const card = event.target?.closest?.(".skill-channel-card");
+    const action = event.target?.dataset?.action;
+    if (!card || !action) return;
+    syncSkillChannelInputs(kind);
+    const state = getSkillChannelState(kind);
+    const index = Number(card.dataset.index || -1);
+    const channels = [...state.channels];
+    if (action === "active" && channels[index]) {
+      setSkillChannelState(kind, channels, channels[index].id);
+    } else if (action === "remove") {
+      channels.splice(index, 1);
+      setSkillChannelState(kind, channels, state.activeId === state.channels[index]?.id ? "" : state.activeId);
+    } else if (action === "up" && index > 0) {
+      [channels[index - 1], channels[index]] = [channels[index], channels[index - 1]];
+      setSkillChannelState(kind, channels, state.activeId);
+    } else if (action === "down" && index >= 0 && index < channels.length - 1) {
+      [channels[index + 1], channels[index]] = [channels[index], channels[index + 1]];
+      setSkillChannelState(kind, channels, state.activeId);
+    } else if (action === "test") {
+      testSkillChannel(kind, index);
+      return;
+    }
+    renderSkillChannels(kind);
+  }
+
+  function buildSkillChannelsPayload(kind = "image") {
+    syncSkillChannelInputs(kind);
+    const state = getSkillChannelState(kind);
+    return {
+      activeChannelId: state.activeId,
+      channels: state.channels.map(ch => ({
+        id: ch.id,
+        name: ch.name,
+        enabled: ch.enabled !== false,
+        provider: ch.provider || "custom",
+        baseUrl: ch.baseUrl,
+        model: ch.model,
+        ...(String(ch.apiKey || "").trim() ? { apiKey: String(ch.apiKey || "").trim() } : {}),
+      })),
+    };
+  }
+
   function applySkillImageConfig(config = {}) {
     if (skillImageEnabled) skillImageEnabled.checked = config.enabled !== false;
     if (skillImageBaseUrl) skillImageBaseUrl.value = config.baseUrl || 'https://sub.pbopenai.cloud/v1';
@@ -4091,9 +4278,12 @@ function initTTSSettings() {
     if (skillImageHighQuality) skillImageHighQuality.value = config.highQuality || 'high';
     if (skillImageKey) skillImageKey.value = '';
     if (skillImageStatus) {
-      skillImageStatus.textContent = config.configured ? '● 已配置' : '○ 未配置密钥';
+      const channelCount = (config.channels || []).filter(ch => ch.enabled !== false && ch.configured).length;
+      skillImageStatus.textContent = config.configured ? `● 已配置 ${channelCount || 1} 个渠道` : '○ 未配置密钥';
       skillImageStatus.classList.toggle('ok', !!config.configured);
     }
+    setSkillChannelState("image", normalizeSkillChannelsForUi(config, "image"), config.activeChannelId || "");
+    renderSkillChannels("image");
   }
 
   function applySkillVisionConfig(config = {}, status = null) {
@@ -4107,12 +4297,17 @@ function initTTSSettings() {
     const runtime = status?.runtime || null;
     const configured = !!runtime || !!config.configured;
     if (skillVisionStatus) {
-      skillVisionStatus.textContent = configured ? `● 可用 ${runtime?.model || config.model || ''}` : '○ 未配置识图模型';
+      const channelCount = (config.channels || []).filter(ch => ch.enabled !== false && ch.configured).length;
+      skillVisionStatus.textContent = configured ? `● 可用 ${runtime?.model || config.model || ''}${channelCount ? ` / ${channelCount} 渠道` : ''}` : '○ 未配置识图模型';
       skillVisionStatus.classList.toggle('ok', configured);
     }
     if (skillVisionCounts) {
       const counts = status?.counts || {};
       skillVisionCounts.textContent = `图片入库：${counts.total || 0}，已描述：${counts.described || 0}，待处理：${counts.pending || 0}，base64：${counts.base64 || 0}`;
+    }
+    if (hasConfig) {
+      setSkillChannelState("vision", normalizeSkillChannelsForUi(config, "vision"), config.activeChannelId || "");
+      renderSkillChannels("vision");
     }
   }
 
@@ -4144,10 +4339,13 @@ function initTTSSettings() {
   }
 
   async function saveSkillImageConfig() {
+    const channelPayload = buildSkillChannelsPayload("image");
     const payload = {
       enabled: skillImageEnabled?.checked !== false,
       baseUrl: skillImageBaseUrl?.value?.trim() || 'https://sub.pbopenai.cloud/v1',
       model: skillImageModel?.value?.trim() || 'gpt-image-2',
+      activeChannelId: channelPayload.activeChannelId,
+      channels: channelPayload.channels,
       maxPerUserPerHour: Number(skillImageLimit?.value || 10),
       apiTimeoutSeconds: Number(skillImageTimeout?.value || 180),
       defaultQuality: skillImageDefaultQuality?.value || 'low',
@@ -4171,12 +4369,15 @@ function initTTSSettings() {
   }
 
   async function saveSkillVisionConfig() {
+    const channelPayload = buildSkillChannelsPayload("vision");
     const payload = {
       enabled: skillVisionEnabled?.checked !== false,
       autoDescribe: true,
       preferCurrentMultimodal: skillVisionPreferCurrent?.checked !== false,
       baseUrl: skillVisionBaseUrl?.value?.trim() || 'https://sub.pbopenai.cloud/v1',
       model: skillVisionModel?.value?.trim() || 'gpt-4o-mini',
+      activeChannelId: channelPayload.activeChannelId,
+      channels: channelPayload.channels,
       apiTimeoutSeconds: Number(skillVisionTimeout?.value || 45),
     };
     const key = skillVisionKey?.value?.trim();
@@ -4700,7 +4901,21 @@ function initTTSSettings() {
   wechatyTestMemeBtn?.addEventListener("click", testWechatyMemeSearch);
   wechatySaveMemeBtn?.addEventListener("click", saveWechatyMemeConfig);
   skillImageSaveBtn?.addEventListener("click", saveSkillImageConfig);
+  skillImageAddChannelBtn?.addEventListener("click", () => addSkillChannel("image"));
+  skillImageChannelList?.addEventListener("input", () => syncSkillChannelInputs("image"));
+  skillImageChannelList?.addEventListener("change", event => {
+    syncSkillChannelInputs("image");
+    if (event.target?.dataset?.action === "active") renderSkillChannels("image");
+  });
+  skillImageChannelList?.addEventListener("click", event => handleSkillChannelListClick("image", event));
   skillVisionSaveBtn?.addEventListener("click", saveSkillVisionConfig);
+  skillVisionAddChannelBtn?.addEventListener("click", () => addSkillChannel("vision"));
+  skillVisionChannelList?.addEventListener("input", () => syncSkillChannelInputs("vision"));
+  skillVisionChannelList?.addEventListener("change", event => {
+    syncSkillChannelInputs("vision");
+    if (event.target?.dataset?.action === "active") renderSkillChannels("vision");
+  });
+  skillVisionChannelList?.addEventListener("click", event => handleSkillChannelListClick("vision", event));
   skillVisionRefreshBtn?.addEventListener("click", refreshSkillVisionStatus);
   dbRefreshBtn?.addEventListener("click", loadDatabaseSettings);
   dbVectorBackfillBtn?.addEventListener("click", () => runDatabaseAction(dbVectorBackfillBtn, "/settings/database/backfill-vectors", "向量补齐完成"));

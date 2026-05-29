@@ -1,4 +1,28 @@
 
+## v0.4.54 - 2026-05-29
+
+### 发布主题
+Skill 模型渠道池：生图/识图可配置多渠道并自动故障切换。
+
+### 更新内容
+1. Skill 技能设置页新增生图渠道池和识图渠道池。
+2. 每个渠道可配置名称、Base URL、模型、API Key、启用状态和默认状态。
+3. 支持新增、删除、排序、测试连通。
+4. 生图失败时自动切换到下一个已启用渠道。
+5. 识图失败时自动切换 Skill 渠道池，再尝试其它可视觉 LLM Profile。
+6. 图片理解请求会先确认收到并开始识别，避免模型慢/渠道坏时表现为“没响应”。
+
+### 注意事项
+- API Key 只保存在本机配置，不会在页面回显，也不会提交到 GitHub。
+- 连通测试调用 OpenAI 兼容 `/models` 接口；少数中转不支持 `/models` 时，测试可能失败，但真实生图/识图仍可能可用。
+
+### 验证
+```bash
+node --check src/config.js src/api.js src/social/image-generation-skill.js src/social/wechat-image-vision.js src/social/wechaty-duty-group.js src/ui/brain-ui/app.js src/ui/brain-ui/app-shell.js
+npm run test:wechat-guard
+npm run test:social-targets
+```
+
 ## v0.4.53 - 2026-05-29
 
 ### 发布主题

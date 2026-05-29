@@ -1,7 +1,7 @@
 import fs from 'fs'
 import path from 'path'
 import crypto from 'crypto'
-import { getSkillImageCredentials } from '../config.js'
+import { getSkillImageCredentials, getSkillImageRuntimeCandidates } from '../config.js'
 import { paths } from '../paths.js'
 
 const LIMIT_FILE = path.join(paths.dataDir, 'skill-image-generation-limits.json')
@@ -121,7 +121,8 @@ async function saveGeneratedImage(result, { senderId = '', groupId = '' } = {}) 
 export async function generateImageForWechat({ text = '', groupId = '', groupName = '', senderId = '', senderName = '' } = {}) {
   const config = getSkillImageCredentials()
   if (config.enabled === false) return { ok: false, skipped: true, error: '生图 Skill 未启用' }
-  if (!config.apiKey) return { ok: false, error: '生图 API Key 未配置，请到设置 > Skill 技能 > 生图 中配置。' }
+  const channels = getSkillImageRuntimeCandidates()
+  if (!channels.length) return { ok: false, error: '生图模型渠道未配置，请到设置 > Skill 技能 > 生图渠道池 中至少启用一个可用渠道。' }
   const prompt = extractPrompt(text) || String(text || '').replace(/^[@＠][^\s]+/u, '').trim()
   if (!prompt) return { ok: false, error: '请告诉我要生成什么图片。' }
   const limit = checkRateLimit({ groupId, senderId, max: config.maxPerUserPerHour })
@@ -129,12 +130,24 @@ export async function generateImageForWechat({ text = '', groupId = '', groupNam
   const high = HIGH_QUALITY_RE.test(text)
   const quality = high ? config.highQuality : config.defaultQuality
   const size = high ? config.highSize : config.defaultSize
-  let result = await callImageApi({ prompt, quality, size, config })
-  if (!result.ok && (size !== config.defaultSize || quality !== config.defaultQuality)) {
-    const retry = await callImageApi({ prompt, quality: config.defaultQuality, size: config.defaultSize, config })
-    if (retry.ok) result = { ...retry, fallbackFrom: result.request, fallbackError: result.error }
+  const errors = []
+  let result = null
+  let usedChannel = null
+  for (const channel of channels) {
+    const runtime = { ...config, ...channel, apiTimeoutSeconds: config.apiTimeoutSeconds }
+    let attempt = await callImageApi({ prompt, quality, size, config: runtime })
+    if (!attempt.ok && (size !== config.defaultSize || quality !== config.defaultQuality)) {
+      const retry = await callImageApi({ prompt, quality: config.defaultQuality, size: config.defaultSize, config: runtime })
+      if (retry.ok) attempt = { ...retry, fallbackFrom: attempt.request, fallbackError: attempt.error }
+    }
+    if (attempt.ok) {
+      result = attempt
+      usedChannel = channel
+      break
+    }
+    errors.push(`${channel.name || channel.model}: ${attempt.error || '未知错误'}`)
   }
-  if (!result.ok) return { ok: false, error: `生图失败：${result.error || '未知错误'}` }
+  if (!result?.ok) return { ok: false, error: `生图失败：${errors.join('；').slice(0, 600) || '所有渠道均不可用'}` }
   const saved = await saveGeneratedImage(result, { senderId, groupId })
   return {
     ok: true,
@@ -148,6 +161,7 @@ export async function generateImageForWechat({ text = '', groupId = '', groupNam
     imageUrl: saved.imageUrl || result.imageUrl || '',
     quality: result.request?.quality || quality,
     size: result.request?.size || size,
+    channel: usedChannel ? { id: usedChannel.id, name: usedChannel.name, model: usedChannel.model, baseUrl: usedChannel.baseUrl } : null,
     remaining: limit.remaining,
   }
 }
