@@ -918,8 +918,20 @@ const createSettingsModal = () => `
                 <label><input id="wechaty-rank-emoji" type="checkbox" checked> 表情榜</label>
                 <label><input id="wechaty-rank-link" type="checkbox" checked> 链接榜</label>
                 <label><input id="wechaty-rank-brag" type="checkbox" checked> 装逼榜</label>
+                <label class="wechaty-report-template-field">战报模板
+                  <select class="settings-select" id="wechaty-report-template">
+                    <option value="guochao-red-gold">国潮红金封神榜</option>
+                    <option value="editorial-newspaper">报纸头版群聊时报</option>
+                    <option value="ancient-scroll">古风卷轴值班战报</option>
+                    <option value="ink-wash">水墨山水雅集榜</option>
+                  </select>
+                </label>
                 <button class="settings-save-btn" id="wechaty-save-digest-btn" type="button">保存总结设置</button>
                 <span class="settings-feedback" id="wechaty-digest-feedback"></span>
+              </div>
+              <div class="wechaty-report-preview-wrap">
+                <div class="wechaty-report-preview-head"><b>HTML/CSS 战报模板预览</b><span>切换模板后会实时预览；保存后作为默认模板。</span></div>
+                <iframe id="wechaty-report-preview" class="wechaty-report-preview" title="群聊战报模板预览" loading="lazy"></iframe>
               </div>
               <div class="wechaty-stats-cards" id="wechaty-stats-cards">
                 <div class="wechaty-empty">选择左侧群并刷新统计后显示今日数据。</div>

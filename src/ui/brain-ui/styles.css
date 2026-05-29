@@ -5029,6 +5029,45 @@ body.person-card-mode .person-card-panel,
   font-size: 11px;
   line-height: 1.45;
 }
+
+.wechaty-report-template-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--ink2);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.wechaty-report-template-field .settings-select {
+  flex: 0 0 170px;
+  width: 170px;
+}
+.wechaty-report-preview-wrap {
+  border: 1px solid rgba(87,214,255,0.16);
+  border-radius: 16px;
+  padding: 10px;
+  margin: 10px 0;
+  background: linear-gradient(135deg, rgba(87,214,255,0.07), rgba(0,0,0,0.16));
+}
+.wechaty-report-preview-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.wechaty-report-preview-head b { color: var(--ink); font-size: 12px; }
+.wechaty-report-preview-head span { color: var(--ink3); font-size: 11px; }
+.wechaty-report-preview {
+  display: block;
+  width: 100%;
+  height: min(72vw, 760px);
+  min-height: 420px;
+  border: 0;
+  border-radius: 12px;
+  background: #f2ecdf;
+}
+
 .wechaty-stats-cards {
   display: grid;
   grid-template-columns: repeat(6, minmax(0, 1fr));

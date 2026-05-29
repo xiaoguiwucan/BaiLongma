@@ -28,6 +28,7 @@ import { buildWeChatGroupActivityExport, getWeChatGroupStats, importWeChatGroupA
 import { searchMemes } from './social/meme-search.js'
 import { deleteWeChatImageMediaItem, getWeChatImageVisionStatus, listWeChatImageMediaItems, startWeChatImageBackgroundDescribe, updateWeChatImageMediaItem } from './social/wechat-image-vision.js'
 import { sendWeChatGroupDigestNow } from './social/wechat-group-digest.js'
+import { WECHAT_GROUP_REPORT_TEMPLATES, normalizeWeChatGroupReportTemplate, renderWeChatGroupStatsPosterHtml } from './social/wechat-group-report-template.js'
 import { getLLMConnectivityMonitorStatus, runLLMConnectivityMonitorCheck, startLLMConnectivityMonitorScheduler } from './llm-connectivity-monitor.js'
 import { createCloudASRSession } from './voice/cloud-asr.js'
 import { getHotspots, setHotspotPanelState, getHotspotPanelState } from './hotspots.js'
@@ -452,6 +453,35 @@ export function startAPI(port = 3721, { getStateSnapshot = null, onActivated = n
         summary: buildWeChatGroupSummary(messages),
         messages,
       })
+    }
+
+    // GET /social/wechat-groups/report/templates — 群战报 HTML/CSS 模板列表。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/report/templates') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      return jsonResponse(res, 200, { ok: true, templates: WECHAT_GROUP_REPORT_TEMPLATES, current: getWeChatGroupDigestConfig().reportTemplate })
+    }
+
+    // GET /social/wechat-groups/report/html?group_id=xxx&template=guochao-red-gold
+    // 生成当前群统计的 HTML/CSS 战报预览；前端 iframe 用它做模板切换预览。
+    if (req.method === 'GET' && url.pathname === '/social/wechat-groups/report/html') {
+      if (!hasAllowedAccess(req, url)) return jsonResponse(res, 403, { ok: false, error: 'forbidden' })
+      const rawGroupId = url.searchParams.get('group_id') || url.searchParams.get('groupId') || ''
+      if (!rawGroupId) return jsonResponse(res, 400, { ok: false, error: 'group_id required' })
+      const stats = getWeChatGroupStats({
+        groupId: rawGroupId,
+        groupName: url.searchParams.get('group_name') || url.searchParams.get('groupName') || '',
+        from: url.searchParams.get('from') || '',
+        to: url.searchParams.get('to') || '',
+        hours: Math.min(parseInt(url.searchParams.get('hours') || '24'), 24 * 90),
+        range: url.searchParams.get('range') || 'today',
+        limit: Math.min(parseInt(url.searchParams.get('limit') || '10'), 30),
+      })
+      if (!stats.ok) return jsonResponse(res, 400, stats)
+      const template = normalizeWeChatGroupReportTemplate(url.searchParams.get('template') || getWeChatGroupDigestConfig().reportTemplate)
+      const html = renderWeChatGroupStatsPosterHtml(stats, { templateId: template })
+      res.writeHead(200, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store' })
+      res.end(html)
+      return
     }
 
     // GET /social/wechat-groups/stats?group_id=xxx&range=today

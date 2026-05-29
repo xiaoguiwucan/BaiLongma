@@ -1401,6 +1401,7 @@ export const DEFAULT_WECHAT_GROUP_DIGEST_CONFIG = {
   emojiLeaderboard: true,
   linkLeaderboard: true,
   bragLeaderboard: true,
+  reportTemplate: 'guochao-red-gold',
 }
 
 function normalizeDigestTime(value = '') {
@@ -1413,6 +1414,14 @@ function normalizeIntervalMinutes(value) {
   const allowed = new Set([30, 60, 180, 360, 720, 1440])
   const n = Number(value)
   return allowed.has(n) ? n : DEFAULT_WECHAT_GROUP_DIGEST_CONFIG.intervalMinutes
+}
+
+
+function normalizeReportTemplate(value = '') {
+  const id = String(value || '').trim()
+  return ['guochao-red-gold', 'editorial-newspaper', 'ancient-scroll', 'ink-wash'].includes(id)
+    ? id
+    : DEFAULT_WECHAT_GROUP_DIGEST_CONFIG.reportTemplate
 }
 
 function normalizeDigestGroups(value = []) {
@@ -1437,6 +1446,7 @@ export function getWeChatGroupDigestConfig() {
     emojiLeaderboard: stored.emojiLeaderboard !== false && stored.emoji_leaderboard !== false,
     linkLeaderboard: stored.linkLeaderboard !== false && stored.link_leaderboard !== false,
     bragLeaderboard: stored.bragLeaderboard !== false && stored.brag_leaderboard !== false,
+    reportTemplate: normalizeReportTemplate(stored.reportTemplate || stored.report_template || stored.template),
   }
 }
 
@@ -1468,6 +1478,9 @@ export function setWeChatGroupDigestConfig(updates = {}) {
   }
   if (Object.prototype.hasOwnProperty.call(updates, 'selectedGroups') || Object.prototype.hasOwnProperty.call(updates, 'selected_groups') || Object.prototype.hasOwnProperty.call(updates, 'groups')) {
     next.selectedGroups = normalizeDigestGroups(updates.selectedGroups ?? updates.selected_groups ?? updates.groups)
+  }
+  if (Object.prototype.hasOwnProperty.call(updates, 'reportTemplate') || Object.prototype.hasOwnProperty.call(updates, 'report_template') || Object.prototype.hasOwnProperty.call(updates, 'template')) {
+    next.reportTemplate = normalizeReportTemplate(updates.reportTemplate || updates.report_template || updates.template)
   }
   const social = { ...(existing.social || {}), wechatGroupDigest: next }
   writeStoredConfig({ ...existing, social })

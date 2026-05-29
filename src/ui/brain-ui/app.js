@@ -2127,6 +2127,8 @@ function initTTSSettings() {
   const wechatyRankEmoji = document.getElementById("wechaty-rank-emoji");
   const wechatyRankLink = document.getElementById("wechaty-rank-link");
   const wechatyRankBrag = document.getElementById("wechaty-rank-brag");
+  const wechatyReportTemplate = document.getElementById("wechaty-report-template");
+  const wechatyReportPreview = document.getElementById("wechaty-report-preview");
   const wechatySaveDigestBtn = document.getElementById("wechaty-save-digest-btn");
   const wechatyRefreshStatsBtn = document.getElementById("wechaty-refresh-stats-btn");
   const wechatyStatsViewMode = document.getElementById("wechaty-stats-view-mode");
@@ -2974,6 +2976,7 @@ function initTTSSettings() {
   let wechatyAdminMemberCache = [];
   let wechatyDigestConfigCache = {};
   let wechatyDigestSelectedGroups = new Set();
+  let wechatyReportPreviewUrl = '';
   let wechatyRecordsOffset = 0;
   let wechatyRecordsHasMore = false;
   let wechatyRecordsLastQuery = null;
@@ -3218,7 +3221,9 @@ function initTTSSettings() {
     if (wechatyRankEmoji) wechatyRankEmoji.checked = config.emojiLeaderboard !== false;
     if (wechatyRankLink) wechatyRankLink.checked = config.linkLeaderboard !== false;
     if (wechatyRankBrag) wechatyRankBrag.checked = config.bragLeaderboard !== false;
+    if (wechatyReportTemplate) wechatyReportTemplate.value = config.reportTemplate || config.report_template || 'guochao-red-gold';
     renderWechatyDigestGroups();
+    refreshWechatyReportPreview();
   }
 
   function collectWechatyDigestConfig() {
@@ -3234,6 +3239,7 @@ function initTTSSettings() {
       emojiLeaderboard: !!wechatyRankEmoji?.checked,
       linkLeaderboard: !!wechatyRankLink?.checked,
       bragLeaderboard: !!wechatyRankBrag?.checked,
+      reportTemplate: wechatyReportTemplate?.value || 'guochao-red-gold',
     };
   }
 
@@ -3278,6 +3284,33 @@ function initTTSSettings() {
       </label>`;
     }).join("");
     updateWechatyDigestGroupCount();
+  }
+
+  function refreshWechatyReportPreview() {
+    if (!wechatyReportPreview) return;
+    const viewMode = wechatyStatsViewMode?.value || "single";
+    if (viewMode === "all") {
+      wechatyReportPreview.removeAttribute('src');
+      wechatyReportPreview.srcdoc = '<!doctype html><html><body style="margin:0;display:grid;place-items:center;height:100vh;background:#111827;color:#d1d5db;font-family:sans-serif;text-align:center;padding:24px">多群总览暂不生成单张战报，请切回“查看当前群”预览模板。</body></html>';
+      return;
+    }
+    if (!wechatyActiveMemoryGroupId) {
+      wechatyReportPreview.removeAttribute('src');
+      wechatyReportPreview.srcdoc = '<!doctype html><html><body style="margin:0;display:grid;place-items:center;height:100vh;background:#111827;color:#d1d5db;font-family:sans-serif;text-align:center;padding:24px">请选择一个群后刷新统计，即可预览四套 HTML/CSS 战报模板。</body></html>';
+      return;
+    }
+    const params = new URLSearchParams({
+      group_id: wechatyActiveMemoryGroupId,
+      group_name: wechatyActiveMemoryGroupName || '',
+      range: 'today',
+      limit: '10',
+      template: wechatyReportTemplate?.value || wechatyDigestConfigCache.reportTemplate || 'guochao-red-gold',
+    });
+    const next = `${API}/social/wechat-groups/report/html?${params}`;
+    if (wechatyReportPreviewUrl === next && wechatyReportPreview.getAttribute('src') === next) return;
+    wechatyReportPreviewUrl = next;
+    wechatyReportPreview.removeAttribute('srcdoc');
+    wechatyReportPreview.src = next;
   }
 
   function renderRank(title, rows = [], unit = "次", { showGroup = false } = {}) {
@@ -3348,6 +3381,7 @@ function initTTSSettings() {
         ${rows}
       </section>`;
     }
+    refreshWechatyReportPreview();
   }
 
 
@@ -4957,6 +4991,7 @@ function initTTSSettings() {
     updateWechatyDigestGroupCount();
   });
   wechatyStatsViewMode?.addEventListener("change", () => loadWechatyActiveStats({ silent: true, refreshRecords: false }));
+  wechatyReportTemplate?.addEventListener("change", refreshWechatyReportPreview);
   wechatyRoomFilter?.addEventListener("input", renderWechatyRooms);
   wechatyTestMemeBtn?.addEventListener("click", testWechatyMemeSearch);
   wechatySaveMemeBtn?.addEventListener("click", saveWechatyMemeConfig);
