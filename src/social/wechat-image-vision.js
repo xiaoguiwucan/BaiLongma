@@ -1,0 +1,281 @@
+import fs from 'fs'
+import path from 'path'
+import crypto from 'crypto'
+import OpenAI from 'openai'
+import { getDB } from '../db.js'
+import { paths } from '../paths.js'
+import { nowTimestamp } from '../time.js'
+import { config, getSkillImageVisionCredentials } from '../config.js'
+
+let schemaReady = false
+
+function ensureSchema() {
+  if (schemaReady) return
+  const db = getDB()
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS wechat_group_media_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      group_id TEXT NOT NULL,
+      group_name TEXT NOT NULL DEFAULT '',
+      sender_id TEXT NOT NULL DEFAULT '',
+      sender_name TEXT NOT NULL DEFAULT '',
+      message_type TEXT NOT NULL DEFAULT '',
+      relative_path TEXT NOT NULL DEFAULT '',
+      file_name TEXT NOT NULL DEFAULT '',
+      mime_type TEXT NOT NULL DEFAULT '',
+      bytes INTEGER NOT NULL DEFAULT 0,
+      sha256 TEXT NOT NULL,
+      base64 TEXT NOT NULL DEFAULT '',
+      description TEXT NOT NULL DEFAULT '',
+      labels_json TEXT NOT NULL DEFAULT '[]',
+      vision_status TEXT NOT NULL DEFAULT 'pending',
+      vision_provider TEXT NOT NULL DEFAULT '',
+      vision_model TEXT NOT NULL DEFAULT '',
+      vision_error TEXT NOT NULL DEFAULT '',
+      source_text TEXT NOT NULL DEFAULT '',
+      described_at TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(group_id, sha256)
+    );
+    CREATE INDEX IF NOT EXISTS idx_wg_media_group_time ON wechat_group_media_items(group_id, created_at);
+    CREATE INDEX IF NOT EXISTS idx_wg_media_status ON wechat_group_media_items(vision_status, updated_at);
+  `)
+  schemaReady = true
+}
+
+function normalizeText(value = '') {
+  return String(value || '').replace(/\s+/g, ' ').trim()
+}
+
+function inferMimeType(filePath = '', fallback = '') {
+  const value = String(fallback || '').toLowerCase()
+  if (value.startsWith('image/')) return value
+  switch (path.extname(String(filePath || '').toLowerCase())) {
+    case '.jpg':
+    case '.jpeg': return 'image/jpeg'
+    case '.gif': return 'image/gif'
+    case '.webp': return 'image/webp'
+    case '.bmp': return 'image/bmp'
+    case '.png':
+    default: return 'image/png'
+  }
+}
+
+function isImageMime(mime = '') {
+  return /^image\/(?:png|jpe?g|webp|gif|bmp)$/iu.test(String(mime || ''))
+}
+
+export function isVisionCapableModel(model = '') {
+  const value = String(model || '').toLowerCase()
+  if (!value) return false
+  if (/gpt-image|dall-e|embedding|whisper|tts|deepseek|m2\.7|moonshot-v1|glm-4-flash/u.test(value)) return false
+  return /gpt-4o|gpt-4\.1|gpt-5|o3|o4|vision|vl|qwen.*vl|gemini|claude-3|pixtral|llava/u.test(value)
+}
+
+function resolveVisionRuntime(cfg = getSkillImageVisionCredentials()) {
+  if (cfg.preferCurrentMultimodal && isVisionCapableModel(config.model) && config.apiKey && config.baseURL) {
+    return { provider: config.provider || 'current', model: config.model, apiKey: config.apiKey, baseURL: config.baseURL, source: 'current' }
+  }
+  const profile = (config.llmProfiles || []).find(item => item?.enabled !== false && item?.apiKey && item?.baseURL && isVisionCapableModel(item.model))
+  if (profile) {
+    return { provider: profile.provider || 'profile', model: profile.model, apiKey: profile.apiKey, baseURL: profile.baseURL, source: 'llm_profile' }
+  }
+  if (cfg.apiKey && cfg.baseUrl && cfg.model) {
+    return { provider: 'vision', model: cfg.model, apiKey: cfg.apiKey, baseURL: cfg.baseUrl, source: 'fallback_gpt' }
+  }
+  return null
+}
+
+function extractLabels(description = '') {
+  const text = normalizeText(description)
+  const match = text.match(/(?:关键标签|标签)[:：]\s*([\s\S]*?)(?:如果图中|文字摘录|$)/u)
+  if (!match) return []
+  return match[1].replace(/[。；;]+$/u, '').split(/[，,、/ ]+/u).map(v => v.trim()).filter(Boolean).slice(0, 16)
+}
+
+function safeRelativePath(rel = '') {
+  const value = String(rel || '').trim().replace(/\\/g, '/')
+  if (!value || value.includes('\0') || value.startsWith('/') || value.split('/').includes('..')) return ''
+  return value
+}
+
+export function upsertWeChatImageMediaItem({ groupId = '', groupName = '', senderId = '', senderName = '', mediaInfo = {}, sourceText = '', messageType = '' } = {}) {
+  ensureSchema()
+  const filePath = String(mediaInfo.filePath || '').trim()
+  const relativePath = safeRelativePath(mediaInfo.relativePath || '')
+  if (!filePath || !relativePath || !fs.existsSync(filePath)) return { ok: false, skipped: true, reason: 'missing_file' }
+  const stat = fs.statSync(filePath)
+  if (!stat.isFile()) return { ok: false, skipped: true, reason: 'not_file' }
+  const mimeType = inferMimeType(filePath, mediaInfo.contentType || mediaInfo.type || '')
+  if (!isImageMime(mimeType)) return { ok: false, skipped: true, reason: 'not_image', mimeType }
+  const buffer = fs.readFileSync(filePath)
+  const sha256 = crypto.createHash('sha256').update(buffer).digest('hex')
+  const cfg = getSkillImageVisionCredentials()
+  const maxBytes = Math.max(Number(cfg.maxImageBytesMB || 8), 1) * 1024 * 1024
+  const base64 = buffer.length <= maxBytes ? buffer.toString('base64') : ''
+  const now = nowTimestamp()
+  const db = getDB()
+  db.prepare(`
+    INSERT INTO wechat_group_media_items (
+      group_id, group_name, sender_id, sender_name, message_type, relative_path, file_name, mime_type, bytes, sha256, base64, source_text, created_at, updated_at
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    ON CONFLICT(group_id, sha256) DO UPDATE SET
+      group_name = CASE WHEN excluded.group_name <> '' THEN excluded.group_name ELSE wechat_group_media_items.group_name END,
+      sender_id = CASE WHEN excluded.sender_id <> '' THEN excluded.sender_id ELSE wechat_group_media_items.sender_id END,
+      sender_name = CASE WHEN excluded.sender_name <> '' THEN excluded.sender_name ELSE wechat_group_media_items.sender_name END,
+      message_type = CASE WHEN excluded.message_type <> '' THEN excluded.message_type ELSE wechat_group_media_items.message_type END,
+      relative_path = CASE WHEN excluded.relative_path <> '' THEN excluded.relative_path ELSE wechat_group_media_items.relative_path END,
+      file_name = CASE WHEN excluded.file_name <> '' THEN excluded.file_name ELSE wechat_group_media_items.file_name END,
+      mime_type = CASE WHEN excluded.mime_type <> '' THEN excluded.mime_type ELSE wechat_group_media_items.mime_type END,
+      bytes = CASE WHEN excluded.bytes > 0 THEN excluded.bytes ELSE wechat_group_media_items.bytes END,
+      base64 = CASE WHEN excluded.base64 <> '' THEN excluded.base64 ELSE wechat_group_media_items.base64 END,
+      source_text = CASE WHEN excluded.source_text <> '' THEN excluded.source_text ELSE wechat_group_media_items.source_text END,
+      updated_at = excluded.updated_at
+  `).run(
+    String(groupId || ''),
+    String(groupName || ''),
+    String(senderId || ''),
+    String(senderName || ''),
+    String(messageType || ''),
+    relativePath,
+    path.basename(filePath),
+    mimeType,
+    buffer.length,
+    sha256,
+    base64,
+    String(sourceText || '').slice(0, 2000),
+    now,
+    now,
+  )
+  const row = db.prepare(`SELECT * FROM wechat_group_media_items WHERE group_id = ? AND sha256 = ?`).get(String(groupId || ''), sha256)
+  return { ok: true, id: row?.id, item: row, storedBase64: !!base64, bytes: buffer.length, mimeType }
+}
+
+async function callVisionModel(row, runtime, cfg) {
+  const base64 = row.base64 || (() => {
+    const filePath = path.join(paths.userDir, row.relative_path || '')
+    return fs.existsSync(filePath) ? fs.readFileSync(filePath).toString('base64') : ''
+  })()
+  if (!base64) throw new Error('图片超过保存上限或文件不存在，无法转 base64 给识图模型')
+  const client = new OpenAI({ apiKey: runtime.apiKey, baseURL: runtime.baseURL, timeout: Number(cfg.apiTimeoutSeconds || 45) * 1000 })
+  const res = await client.chat.completions.create({
+    model: runtime.model,
+    temperature: 0.1,
+    max_tokens: 420,
+    messages: [
+      {
+        role: 'system',
+        content: '你是微信群图片识别器。只描述图片可见内容，不要编造来源、人物身份或隐私。输出中文，适合后续让普通文本模型理解这张图。',
+      },
+      {
+        role: 'user',
+        content: [
+          { type: 'text', text: '请识别这张微信群图片，输出三段：内容描述、关键标签、如果图中有文字请摘录。保持简洁但信息完整。' },
+          { type: 'image_url', image_url: { url: `data:${row.mime_type || 'image/png'};base64,${base64}` } },
+        ],
+      },
+    ],
+  })
+  return normalizeText(res?.choices?.[0]?.message?.content || '')
+}
+
+export async function describeWeChatImageMedia({ mediaId, force = false } = {}) {
+  ensureSchema()
+  const db = getDB()
+  const row = db.prepare(`SELECT * FROM wechat_group_media_items WHERE id = ?`).get(mediaId)
+  if (!row) return { ok: false, error: 'media not found' }
+  if (row.description && !force) return { ok: true, skipped: true, description: row.description, item: row }
+  const cfg = getSkillImageVisionCredentials()
+  if (cfg.enabled === false || cfg.autoDescribe === false) {
+    db.prepare(`UPDATE wechat_group_media_items SET vision_status='disabled', updated_at=? WHERE id=?`).run(nowTimestamp(), mediaId)
+    return { ok: false, skipped: true, error: '识图功能未启用' }
+  }
+  const runtime = resolveVisionRuntime(cfg)
+  if (!runtime) {
+    db.prepare(`UPDATE wechat_group_media_items SET vision_status='no_model', vision_error=?, updated_at=? WHERE id=?`).run('未配置可用的多模态/GPT识图模型', nowTimestamp(), mediaId)
+    return { ok: false, error: '未配置可用的多模态/GPT识图模型' }
+  }
+  try {
+    db.prepare(`UPDATE wechat_group_media_items SET vision_status='running', vision_provider=?, vision_model=?, updated_at=? WHERE id=?`).run(runtime.provider, runtime.model, nowTimestamp(), mediaId)
+    const description = await callVisionModel(row, runtime, cfg)
+    if (!description) throw new Error('识图模型返回空内容')
+    const labels = extractLabels(description)
+    db.prepare(`
+      UPDATE wechat_group_media_items
+      SET description=?, labels_json=?, vision_status='done', vision_provider=?, vision_model=?, vision_error='', described_at=?, updated_at=?
+      WHERE id=?
+    `).run(description, JSON.stringify(labels), runtime.provider, runtime.model, nowTimestamp(), nowTimestamp(), mediaId)
+    return { ok: true, id: mediaId, description, labels, provider: runtime.provider, model: runtime.model }
+  } catch (err) {
+    const message = err?.message || String(err)
+    db.prepare(`UPDATE wechat_group_media_items SET vision_status='error', vision_error=?, updated_at=? WHERE id=?`).run(message.slice(0, 1000), nowTimestamp(), mediaId)
+    return { ok: false, error: message }
+  }
+}
+
+export async function maybeDescribeWeChatImageMedia({ mediaItem, wait = false } = {}) {
+  if (!mediaItem?.id) return { ok: false, skipped: true, reason: 'missing_media' }
+  const task = describeWeChatImageMedia({ mediaId: mediaItem.id })
+  if (wait) return await task
+  task.catch(err => console.warn(`[WechatImageVision] 图片识别失败：${err?.message || err}`))
+  return { ok: true, scheduled: true, id: mediaItem.id }
+}
+
+export function getWeChatImageMemoryContext({ groupId = '', limit = 12, query = '' } = {}) {
+  ensureSchema()
+  const gid = String(groupId || '').trim()
+  if (!gid) return ''
+  const q = normalizeText(query)
+  const db = getDB()
+  let rows = []
+  if (q) {
+    rows = db.prepare(`
+      SELECT * FROM wechat_group_media_items
+      WHERE group_id = ? AND description <> '' AND (description LIKE ? OR source_text LIKE ? OR sender_name LIKE ?)
+      ORDER BY described_at DESC, id DESC
+      LIMIT ?
+    `).all(gid, `%${q.slice(0, 80)}%`, `%${q.slice(0, 80)}%`, `%${q.slice(0, 80)}%`, Math.min(Math.max(Number(limit || 12), 1), 30))
+  }
+  if (!rows.length) {
+    rows = db.prepare(`
+      SELECT * FROM wechat_group_media_items
+      WHERE group_id = ? AND description <> ''
+      ORDER BY described_at DESC, id DESC
+      LIMIT ?
+    `).all(gid, Math.min(Math.max(Number(limit || 12), 1), 30))
+  }
+  if (!rows.length) return '<wechat-image-memory>当前群暂无已识别图片。</wechat-image-memory>'
+  const lines = rows.map(row => {
+    const ts = String(row.described_at || row.created_at || '').slice(0, 16)
+    return `- ${ts} ${row.sender_name || row.sender_id || '群成员'} 发图：${row.description}`
+  })
+  return `<wechat-image-memory source="local-image-vision">\n${lines.join('\n')}\n</wechat-image-memory>`
+}
+
+export function getWeChatImageVisionStatus() {
+  ensureSchema()
+  const db = getDB()
+  const cfg = getSkillImageVisionCredentials()
+  const runtime = resolveVisionRuntime(cfg)
+  const scalar = sql => {
+    try { return Number(Object.values(db.prepare(sql).get() || {})[0] || 0) } catch { return 0 }
+  }
+  return {
+    enabled: cfg.enabled !== false,
+    autoDescribe: cfg.autoDescribe !== false,
+    configured: !!runtime,
+    runtime: runtime ? { provider: runtime.provider, model: runtime.model, baseURL: runtime.baseURL, source: runtime.source } : null,
+    counts: {
+      total: scalar('SELECT COUNT(*) FROM wechat_group_media_items'),
+      described: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE description <> ''"),
+      pending: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE vision_status IN ('pending','running','error','no_model') AND description = ''"),
+      base64: scalar("SELECT COUNT(*) FROM wechat_group_media_items WHERE base64 <> ''"),
+    },
+  }
+}
+
+export async function testWeChatImageVision({ imagePath = '' } = {}) {
+  const filePath = imagePath || path.join(paths.dataDir, 'generated-images')
+  return getWeChatImageVisionStatus()
+}

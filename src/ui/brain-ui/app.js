@@ -2155,6 +2155,17 @@ function initTTSSettings() {
   const skillImageHighQuality = document.getElementById("skill-image-high-quality");
   const skillImageSaveBtn = document.getElementById("skill-image-save-btn");
   const skillImageFeedback = document.getElementById("skill-image-feedback");
+  const skillVisionStatus = document.getElementById("skill-vision-status");
+  const skillVisionEnabled = document.getElementById("skill-vision-enabled");
+  const skillVisionPreferCurrent = document.getElementById("skill-vision-prefer-current");
+  const skillVisionBaseUrl = document.getElementById("skill-vision-baseurl");
+  const skillVisionModel = document.getElementById("skill-vision-model");
+  const skillVisionKey = document.getElementById("skill-vision-key");
+  const skillVisionTimeout = document.getElementById("skill-vision-timeout");
+  const skillVisionSaveBtn = document.getElementById("skill-vision-save-btn");
+  const skillVisionRefreshBtn = document.getElementById("skill-vision-refresh-btn");
+  const skillVisionFeedback = document.getElementById("skill-vision-feedback");
+  const skillVisionCounts = document.getElementById("skill-vision-counts");
   const honchoEnabled = document.getElementById("honcho-enabled");
   const honchoEnvironment = document.getElementById("honcho-environment");
   const honchoBaseUrl = document.getElementById("honcho-baseurl");
@@ -3402,12 +3413,43 @@ function initTTSSettings() {
     }
   }
 
+  function applySkillVisionConfig(config = {}, status = null) {
+    const hasConfig = Object.keys(config || {}).length > 0;
+    if (hasConfig && skillVisionEnabled) skillVisionEnabled.checked = config.enabled !== false;
+    if (hasConfig && skillVisionPreferCurrent) skillVisionPreferCurrent.checked = config.preferCurrentMultimodal !== false;
+    if (hasConfig && skillVisionBaseUrl) skillVisionBaseUrl.value = config.baseUrl || 'https://sub.pbopenai.cloud/v1';
+    if (hasConfig && skillVisionModel) skillVisionModel.value = config.model || 'gpt-4o-mini';
+    if (hasConfig && skillVisionTimeout) skillVisionTimeout.value = String(config.apiTimeoutSeconds || 45);
+    if (hasConfig && skillVisionKey) skillVisionKey.value = '';
+    const runtime = status?.runtime || null;
+    const configured = !!runtime || !!config.configured;
+    if (skillVisionStatus) {
+      skillVisionStatus.textContent = configured ? `● 可用 ${runtime?.model || config.model || ''}` : '○ 未配置识图模型';
+      skillVisionStatus.classList.toggle('ok', configured);
+    }
+    if (skillVisionCounts) {
+      const counts = status?.counts || {};
+      skillVisionCounts.textContent = `图片入库：${counts.total || 0}，已描述：${counts.described || 0}，待处理：${counts.pending || 0}，base64：${counts.base64 || 0}`;
+    }
+  }
+
   async function loadSkillSettings() {
     try {
       const data = await fetch(`${API}/settings/skills`).then(r => r.json());
       applySkillImageConfig(data.skills?.imageGeneration || {});
+      applySkillVisionConfig(data.skills?.imageVision || {}, null);
+      refreshSkillVisionStatus();
     } catch {
       showFeedback(skillImageFeedback, 'Skill 设置加载失败', true);
+    }
+  }
+
+  async function refreshSkillVisionStatus() {
+    try {
+      const data = await fetch(`${API}/settings/skills/image-vision/status`).then(r => r.json());
+      if (data.ok) applySkillVisionConfig({}, data.status || {});
+    } catch {
+      showFeedback(skillVisionFeedback, '识图状态刷新失败', true);
     }
   }
 
@@ -3435,6 +3477,32 @@ function initTTSSettings() {
       } else showFeedback(skillImageFeedback, data.error || '保存失败', true);
     } catch {
       showFeedback(skillImageFeedback, '保存请求失败', true);
+    }
+  }
+
+  async function saveSkillVisionConfig() {
+    const payload = {
+      enabled: skillVisionEnabled?.checked !== false,
+      autoDescribe: true,
+      preferCurrentMultimodal: skillVisionPreferCurrent?.checked !== false,
+      baseUrl: skillVisionBaseUrl?.value?.trim() || 'https://sub.pbopenai.cloud/v1',
+      model: skillVisionModel?.value?.trim() || 'gpt-4o-mini',
+      apiTimeoutSeconds: Number(skillVisionTimeout?.value || 45),
+    };
+    const key = skillVisionKey?.value?.trim();
+    if (key) payload.apiKey = key;
+    try {
+      const data = await fetch(`${API}/settings/skills/image-vision`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).then(r => r.json());
+      if (data.ok) {
+        applySkillVisionConfig(data.imageVision || payload, data.status || null);
+        showFeedback(skillVisionFeedback, '识图 Skill 已保存，立即生效');
+      } else showFeedback(skillVisionFeedback, data.error || '保存失败', true);
+    } catch {
+      showFeedback(skillVisionFeedback, '保存请求失败', true);
     }
   }
 
@@ -3942,6 +4010,8 @@ function initTTSSettings() {
   wechatyTestMemeBtn?.addEventListener("click", testWechatyMemeSearch);
   wechatySaveMemeBtn?.addEventListener("click", saveWechatyMemeConfig);
   skillImageSaveBtn?.addEventListener("click", saveSkillImageConfig);
+  skillVisionSaveBtn?.addEventListener("click", saveSkillVisionConfig);
+  skillVisionRefreshBtn?.addEventListener("click", refreshSkillVisionStatus);
   dbRefreshBtn?.addEventListener("click", loadDatabaseSettings);
   dbVectorBackfillBtn?.addEventListener("click", () => runDatabaseAction(dbVectorBackfillBtn, "/settings/database/backfill-vectors", "向量补齐完成"));
   dbMemoryExtractBtn?.addEventListener("click", () => runDatabaseAction(dbMemoryExtractBtn, "/settings/database/extract-wechat-memories", "成员记忆提取完成"));

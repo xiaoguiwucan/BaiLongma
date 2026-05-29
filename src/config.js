@@ -1846,7 +1846,65 @@ export function setSkillImageConfig(updates = {}) {
 export function getSkillsConfig() {
   return {
     imageGeneration: getSkillImageConfig(),
+    imageVision: getSkillImageVisionConfig(),
   }
+}
+
+const DEFAULT_SKILL_IMAGE_VISION_CONFIG = {
+  enabled: true,
+  autoDescribe: true,
+  preferCurrentMultimodal: true,
+  baseUrl: 'https://sub.pbopenai.cloud/v1',
+  model: 'gpt-4o-mini',
+  apiKey: '',
+  apiTimeoutSeconds: 45,
+  maxImageBytesMB: 8,
+}
+
+function normalizeSkillImageVisionConfig(raw = {}) {
+  const imageGeneration = getSkillImageConfig({ revealKey: true })
+  const baseUrl = String(raw.baseUrl || raw.base_url || imageGeneration.baseUrl || DEFAULT_SKILL_IMAGE_VISION_CONFIG.baseUrl).trim().replace(/\/$/, '') || DEFAULT_SKILL_IMAGE_VISION_CONFIG.baseUrl
+  const model = String(raw.model || DEFAULT_SKILL_IMAGE_VISION_CONFIG.model).trim() || DEFAULT_SKILL_IMAGE_VISION_CONFIG.model
+  const apiKey = String(raw.apiKey || raw.api_key || process.env.BAILONGMA_VISION_API_KEY || imageGeneration.apiKey || '').trim()
+  const apiTimeoutSeconds = Math.min(Math.max(Number(raw.apiTimeoutSeconds ?? raw.api_timeout_seconds ?? DEFAULT_SKILL_IMAGE_VISION_CONFIG.apiTimeoutSeconds) || 45, 15), 180)
+  const maxImageBytesMB = Math.min(Math.max(Number(raw.maxImageBytesMB ?? raw.max_image_bytes_mb ?? DEFAULT_SKILL_IMAGE_VISION_CONFIG.maxImageBytesMB) || 8, 1), 20)
+  return {
+    enabled: raw.enabled !== false,
+    autoDescribe: raw.autoDescribe !== false && raw.auto_describe !== false,
+    preferCurrentMultimodal: raw.preferCurrentMultimodal !== false && raw.prefer_current_multimodal !== false,
+    baseUrl,
+    model,
+    apiKey,
+    configured: !!apiKey,
+    apiTimeoutSeconds,
+    maxImageBytesMB,
+  }
+}
+
+export function getSkillImageVisionConfig({ revealKey = false } = {}) {
+  let stored = {}
+  try { stored = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8'))?.skills?.imageVision || {} } catch {}
+  const cfg = normalizeSkillImageVisionConfig(stored)
+  if (!revealKey) delete cfg.apiKey
+  return cfg
+}
+
+export function getSkillImageVisionCredentials() {
+  return getSkillImageVisionConfig({ revealKey: true })
+}
+
+export function setSkillImageVisionConfig(updates = {}) {
+  let existing = {}
+  try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
+  const current = existing.skills?.imageVision || {}
+  const merged = { ...current, ...updates }
+  if (!Object.prototype.hasOwnProperty.call(updates, 'apiKey') && !Object.prototype.hasOwnProperty.call(updates, 'api_key')) {
+    merged.apiKey = current.apiKey || current.api_key || ''
+  }
+  const nextConfig = normalizeSkillImageVisionConfig(merged)
+  const skills = { ...(existing.skills || {}), imageVision: nextConfig }
+  writeStoredConfig({ ...existing, skills })
+  return getSkillImageVisionConfig()
 }
 
 export const __internals = {

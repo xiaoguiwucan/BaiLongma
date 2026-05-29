@@ -2,6 +2,33 @@
 
 所有重要版本都需要在这里写清楚：版本号、日期、改动内容、部署/备份注意事项。以后每次升级版本，必须同步更新 `package.json`、`package-lock.json`、`README.md`、`BACKUP-YYYY-MM-DD.md` 和 Brain UI 设置页里的更新说明。
 
+## v0.4.40 - 2026-05-29
+
+### 新增：微信群识图 Skill / 图片记忆
+- 新增“识图 Skill”：微信群收到图片后会保存本地文件、base64、图片元数据，并调用多模态/GPT 模型生成中文内容描述和标签。
+- 新增 `wechat_group_media_items` 数据表，字段包含群、发送人、图片路径、mime、大小、sha256、base64、识图描述、标签、识图模型和状态。
+- 当前 LLM 如果是多模态/GPT 模型，会优先使用当前模型识图；如果当前模型不是多模态，会自动使用备用 GPT 识图模型。
+- 识图结果会进入当前微信群的图片记忆上下文；后续即使切换到 DeepSeek 等非多模态模型，也能通过图片描述理解历史图片含义。
+- 群聊数据库混合搜索增加图片描述搜索。
+- 数据库备份导出包含 `wechat_group_media_items`，图片 base64 和描述可随备份恢复。
+
+### 设置页
+- Skill 技能页新增“识图 Skill”配置：启用开关、优先当前多模态模型、备用 GPT Base URL、备用模型、备用 Key、识图超时、状态刷新。
+- 状态显示真实图片入库数、已描述数、待处理数、base64 保存数。
+
+### 行为说明
+- 被 @ 的图片消息会优先等待识图结果再进入大模型回复，保证当场能理解图片。
+- 普通群图片会后台识图，不打扰群聊；识图结果会进入后续记忆上下文。
+- 不直接把本机文件发给群友；图片理解只用于本地知识库和回复上下文。
+
+### 验证
+- 实测本地测试图片成功入库 base64 并识别：蓝色圆形、白色背景、极简图形。
+- 实测识图耗时约 13 秒，使用当前多模态模型 `gpt-5.4`。
+- 通过 `node --check`：config、wechat-image-vision、wechaty-duty-group、wechat-groups、api、database-overview、brain-ui app。
+- 通过 `npm run test:wechat-guard`。
+- 通过 `npm run test:wechat-record-all`。
+- 通过 `git diff --check`。
+
 ## v0.4.39 - 2026-05-29
 
 ### 优化

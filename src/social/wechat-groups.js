@@ -3,6 +3,7 @@ import { getDB, insertConversation, normalizeConversationPartyId, upsertEntity }
 import { getWechatyDutyGroupConfig } from '../config.js'
 import { getWeChatGroupMemoryContext } from './wechat-group-memory.js'
 import { getWeChatGroupArchiveEvidence, listWeChatGroupMembers } from './wechat-group-stats.js'
+import { getWeChatImageMemoryContext } from './wechat-image-vision.js'
 
 export const WECHAT_GROUP_CHANNEL = 'WECHAT_CLAWBOT_GROUP'
 
@@ -161,6 +162,7 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
   const transcript = messages.map(row => `${row.timestamp?.slice(5, 16) || ''} ${row.content}`).join('\n')
   const quickSummary = buildWeChatGroupSummary(messages)
   const memoryContext = await getWeChatGroupMemoryContext({ groupId, senderId, senderName, query: text, limit: 18 })
+  const imageMemoryContext = getWeChatImageMemoryContext({ groupId, query: text, limit: 12 })
   const archiveEvidence = getWeChatGroupArchiveEvidence({ groupId, groupName, query: text, limit: 48, recentLimit: 16, days: 90 })
   const dutyConfig = getWechatyDutyGroupConfig()
   const personaPrompt = String(dutyConfig.personaPrompt || '').trim()
@@ -232,6 +234,8 @@ export async function buildWeChatGroupCommandPrompt({ groupId, groupName = '', s
     '如果用户问“谁说过什么 / 某个词是什么意思 / 之前记录 / 老登是谁 / 谁是大哥 / 群里有没有提到某事”，必须优先使用下面的 <wechat-group-archive-evidence>，它来自当前微信群本机 SQLite 全量聊天记录库。不要只靠最近上下文或泛泛常识回答；证据里没有就说“当前聊天记录库没查到”。',
     '',
     memoryContext || '<group-long-term-memory>（暂无当前群长期记忆）</group-long-term-memory>',
+    '',
+    imageMemoryContext,
     '',
     '<wechat-group-archive-evidence>',
     archiveEvidence?.text

@@ -504,6 +504,49 @@ const createSettingsModal = () => `
               </div>
               <p class="settings-hint compact">密钥只保存在本机配置，不会在页面回显，也不会提交到 GitHub。微信群生成失败或 API 调用失败时会 @ 提问人反馈原因。</p>
             </div>
+
+            <div class="wechaty-meme-panel">
+              <div class="wechaty-subsection-head">
+                <div>
+                  <div class="wechaty-subsection-title">识图 Skill</div>
+                  <p class="settings-hint">微信群收到图片后保存文件与 base64，并用多模态/GPT 模型生成中文描述和标签。以后即使当前聊天模型不是多模态，也会把图片描述作为知识库上下文注入。</p>
+                </div>
+                <span class="settings-platform-status" id="skill-vision-status">○ 未检测</span>
+              </div>
+              <label class="wechaty-master-toggle">
+                <input id="skill-vision-enabled" type="checkbox" checked>
+                <span>启用微信群识图与图片记忆</span>
+              </label>
+              <label class="wechaty-master-toggle">
+                <input id="skill-vision-prefer-current" type="checkbox" checked>
+                <span>当前 LLM 是多模态模型时优先直接使用当前模型</span>
+              </label>
+              <div class="wechaty-meme-grid">
+                <label>备用 GPT Base URL
+                  <input class="settings-input" id="skill-vision-baseurl" type="text" placeholder="https://sub.pbopenai.cloud/v1">
+                </label>
+                <label>备用识图模型
+                  <input class="settings-input" id="skill-vision-model" type="text" placeholder="gpt-4o-mini">
+                </label>
+                <label>备用 API Key
+                  <input class="settings-input" id="skill-vision-key" type="password" placeholder="留空则复用生图 Key / 已保存 Key">
+                </label>
+                <label>识图超时
+                  <select class="settings-select" id="skill-vision-timeout">
+                    <option value="30">30 秒</option>
+                    <option value="45">45 秒（推荐）</option>
+                    <option value="60">60 秒</option>
+                    <option value="90">90 秒</option>
+                  </select>
+                </label>
+              </div>
+              <div class="settings-row-action">
+                <button class="settings-save-btn primary" id="skill-vision-save-btn" type="button">保存识图 Skill</button>
+                <button class="settings-save-btn" id="skill-vision-refresh-btn" type="button">刷新状态</button>
+                <span class="settings-feedback" id="skill-vision-feedback"></span>
+              </div>
+              <p class="settings-hint compact" id="skill-vision-counts">图片入库：—</p>
+            </div>
           </div>
         </div>
 

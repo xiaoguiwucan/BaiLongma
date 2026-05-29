@@ -8,6 +8,7 @@ import { recordWeChatGroupMessage, recordWeChatGroupAssistantReply, recordWeChat
 import { isWeChatInternalIdLike, listWeChatGroupMembers, normalizeWechatMessageType, normalizeWeChatGroupDisplayText, recordWeChatGroupActivity, upsertWeChatGroupMemberName } from './wechat-group-stats.js'
 import { searchMemes } from './meme-search.js'
 import { generateImageForWechat, isWechatImageGenerationRequest } from './image-generation-skill.js'
+import { describeWeChatImageMedia, maybeDescribeWeChatImageMedia, upsertWeChatImageMediaItem } from './wechat-image-vision.js'
 import { checkWeChatGroupCommandSafety } from './wechat-command-guard.js'
 import { paths } from '../paths.js'
 import path from 'path'
@@ -772,13 +773,38 @@ async function handleMessage(message) {
         console.warn(`[WechatyStats] 更新成员昵称失败：${err?.message || err}`)
       }
     }
-    let mediaInfo = null
-    try { mediaInfo = await persistWechatMessageMedia(message, { groupId, groupName: topic, senderId }) } catch (err) { console.warn(`[WechatyStats] 保存群媒体失败：${err?.message || err}`) }
-    const statsRawText = mediaInfo?.stored ? `${rawText || normalizeWeChatGroupDisplayText(rawText, messageType)}
-[媒体文件] ${mediaInfo.relativePath}`.trim() : rawText
     let mentionedSelf = false
     try { mentionedSelf = !!(await message.mentionSelf?.()) } catch {}
     if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(rawText)
+    let mediaInfo = null
+    let imageVisionText = ''
+    try {
+      mediaInfo = await persistWechatMessageMedia(message, { groupId, groupName: topic, senderId })
+      if (mediaInfo?.stored) {
+        const mediaRecord = upsertWeChatImageMediaItem({
+          groupId,
+          groupName: topic,
+          senderId: senderId || senderName,
+          senderName,
+          mediaInfo,
+          sourceText: rawText,
+          messageType,
+        })
+        if (mediaRecord?.ok && mediaRecord.item?.id) {
+          mediaInfo.mediaId = mediaRecord.item.id
+          if (mentionedSelf) {
+            const vision = await describeWeChatImageMedia({ mediaId: mediaRecord.item.id })
+            if (vision?.description) imageVisionText = `[图片识别] ${vision.description}`
+            else if (vision?.error) imageVisionText = `[图片识别失败] ${vision.error}`
+          } else {
+            maybeDescribeWeChatImageMedia({ mediaItem: mediaRecord.item, wait: false }).catch(() => {})
+          }
+        }
+      }
+    } catch (err) { console.warn(`[WechatyStats] 保存/识别群媒体失败：${err?.message || err}`) }
+    const statsRawText = mediaInfo?.stored ? `${rawText || normalizeWeChatGroupDisplayText(rawText, messageType)}
+[媒体文件] ${mediaInfo.relativePath}
+${imageVisionText}`.trim() : rawText
     let activity = null
     try {
       activity = recordWeChatGroupActivity({
@@ -798,7 +824,9 @@ async function handleMessage(message) {
     } catch (err) {
       console.warn(`[WechatyStats] 写入群统计失败：${err?.message || err}`)
     }
-    const text = activity?.displayText || normalizeWeChatGroupDisplayText(rawText, messageType)
+    const text = imageVisionText
+      ? `${activity?.displayText || normalizeWeChatGroupDisplayText(rawText, messageType)}\n${imageVisionText}`.trim()
+      : (activity?.displayText || normalizeWeChatGroupDisplayText(rawText, messageType))
     if (!text) return
 
     if (!mentionedSelf) mentionedSelf = textMentionsLoginUser(rawText || text)

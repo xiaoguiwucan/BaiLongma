@@ -203,6 +203,15 @@ export function searchDatabaseData({ q = '', groupId = '', groupName = '', limit
     WHERE status='active' AND content LIKE ? ${groupSql}
     ORDER BY salience DESC, updated_at DESC LIMIT ?
   `).all(like, ...params, Math.ceil(size / 2))
+  let keywordMedia = []
+  try {
+    keywordMedia = db.prepare(`
+      SELECT 'wechat_image_description' AS source_type, id, group_id, group_name, sender_id AS member_id, sender_name AS member_name, description AS content, described_at AS created_at, 1.0 AS score
+      FROM wechat_group_media_items
+      WHERE description <> '' AND description LIKE ? ${groupSql}
+      ORDER BY described_at DESC, id DESC LIMIT ?
+    `).all(like, ...params, Math.ceil(size / 2))
+  } catch {}
   const qbuf = localHashEmbeddingBuffer(query)
   const vectorMessages = db.prepare(`
     SELECT 'wechat_group_message' AS source_type, * FROM wechat_group_messages
@@ -219,7 +228,7 @@ export function searchDatabaseData({ q = '', groupId = '', groupName = '', limit
     .map(row => ({ ...safeRow(row), score: cosineSimilarityBuffer(qbuf, row.embedding), created_at: row.updated_at || row.created_at }))
     .filter(row => row.score > 0.12)
   const merged = new Map()
-  for (const row of [...keywordMessages, ...keywordItems, ...vectorMessages, ...vectorItems]) {
+  for (const row of [...keywordMessages, ...keywordItems, ...keywordMedia, ...vectorMessages, ...vectorItems]) {
     const key = `${row.source_type}:${row.id}`
     const old = merged.get(key)
     if (!old || Number(row.score || 0) > Number(old.score || 0)) merged.set(key, safeRow(row))
@@ -250,6 +259,7 @@ const EXPORT_TABLES = [
   'wechat_group_messages',
   'wechat_group_memory_items',
   'wechat_group_member_names',
+  'wechat_group_media_items',
   'memories',
 ]
 
@@ -340,7 +350,7 @@ export async function getDatabaseOverview() {
     { key: 'group_memory', name: '微信群知识库/记忆', rows: getScalar(db, 'SELECT COUNT(*) FROM wechat_group_memory_items') + getScalar(db, 'SELECT COUNT(*) FROM wechat_group_messages'), tables: ['wechat_group_memory_items', 'wechat_group_messages'], bytes: tables.filter(t => ['wechat_group_memory_items', 'wechat_group_messages'].includes(t.name)).reduce((s, t) => s + t.bytes, 0) },
     { key: 'core_memory', name: '核心长期记忆', rows: getScalar(db, 'SELECT COUNT(*) FROM memories WHERE visibility=1'), tables: ['memories', 'memories_fts'], bytes: tables.filter(t => t.name.startsWith('memories')).reduce((s, t) => s + t.bytes, 0) },
     { key: 'members', name: '微信群成员/昵称', rows: memberIdentityStats.effectiveNicknames, rawRows: memberIdentityStats.rawRows, subtitle: `${memberIdentityStats.effectiveNicknames} 个昵称 / ${memberIdentityStats.rawRows} 条历史身份记录`, tables: ['wechat_group_member_names'], bytes: tables.filter(t => t.name === 'wechat_group_member_names').reduce((s, t) => s + t.bytes, 0) },
-    { key: 'media', name: '图片/媒体文件', rows: 0, tables: [], bytes: totals.generatedImagesBytes + totals.wechatMediaBytes },
+    { key: 'media', name: '图片/媒体文件', rows: getScalar(db, 'SELECT COUNT(*) FROM wechat_group_media_items'), tables: ['wechat_group_media_items'], bytes: totals.generatedImagesBytes + totals.wechatMediaBytes + tables.filter(t => t.name === 'wechat_group_media_items').reduce((s, t) => s + t.bytes, 0) },
   ]
   const embeddingConfig = getEmbeddingConfig()
   const honchoConfig = getHonchoConfig()
