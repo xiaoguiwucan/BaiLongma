@@ -37,7 +37,7 @@ function resolveChromiumExecutable() {
 export async function renderWeChatGroupStatsPosterPng(stats = {}, { templateId = 'guochao-red-gold', outDir = '' } = {}) {
   if (!stats?.ok) return { ok: false, error: 'stats unavailable' }
   const template = normalizeWeChatGroupReportTemplate(templateId)
-  const dir = outDir || path.join(paths.dataDir, 'wechat-report-posters')
+  const dir = path.resolve(outDir || path.join(paths.dataDir, 'wechat-report-posters'))
   await fs.mkdir(dir, { recursive: true })
   const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 23)
   const base = `${safeFilePart(stats.group_name || stats.group_id)}-${template}-${stamp}`
