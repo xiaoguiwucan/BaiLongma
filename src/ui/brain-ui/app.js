@@ -3227,6 +3227,7 @@ function initTTSSettings() {
   }
 
   function collectWechatyDigestConfig() {
+    syncWechatyDigestSelectedGroupsFromDom();
     return {
       enabled: !!wechatyDigestEnabled?.checked,
       selectedGroups: [...wechatyDigestSelectedGroups],
@@ -3257,6 +3258,7 @@ function initTTSSettings() {
   }
 
   function updateWechatyDigestGroupCount() {
+    syncWechatyDigestSelectedGroupsFromDom();
     if (!wechatyDigestGroupCount) return;
     const selected = getWechatyDigestCandidateGroups().filter(group => isWechatyDigestGroupSelected(group));
     wechatyDigestGroupCount.textContent = selected.length
@@ -3284,6 +3286,16 @@ function initTTSSettings() {
       </label>`;
     }).join("");
     updateWechatyDigestGroupCount();
+  }
+
+  function syncWechatyDigestSelectedGroupsFromDom() {
+    if (!wechatyDigestGroupList) return;
+    const checkboxes = [...wechatyDigestGroupList.querySelectorAll(".wechaty-digest-group-checkbox")];
+    if (!checkboxes.length) return;
+    wechatyDigestSelectedGroups = new Set(checkboxes
+      .filter(cb => cb.checked)
+      .map(cb => String(cb.dataset.groupId || cb.value || "").trim())
+      .filter(Boolean));
   }
 
   function refreshWechatyReportPreview() {
@@ -5230,26 +5242,34 @@ function initTTSSettings() {
   });
 
   wechatySendDigestBtn?.addEventListener("click", async () => {
-    if (!wechatyActiveMemoryGroupId) {
-      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "请先选择一个群", true);
+    syncWechatyDigestSelectedGroupsFromDom();
+    const selectedDigestGroups = getWechatySelectedDigestGroups();
+    const targetGroup = selectedDigestGroups.length === 1
+      ? selectedDigestGroups[0]
+      : getWechatyMemoryCandidateGroups().find(group => memoryGroupRequestId(group) === wechatyActiveMemoryGroupId || group.topic === wechatyActiveMemoryGroupName);
+    const targetGroupId = targetGroup ? memoryGroupRequestId(targetGroup) : wechatyActiveMemoryGroupId;
+    const targetGroupName = targetGroup?.topic || wechatyActiveMemoryGroupName || "";
+    if (!targetGroupId) {
+      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "请先选择一个群，或在统计/定时总结里只勾选一个群", true);
       return;
     }
-    if (!confirm(`确定现在向「${wechatyActiveMemoryGroupName || wechatyActiveMemoryGroupId}」发送一条群聊总结吗？`)) return;
+    if (selectedDigestGroups.length > 1 && !confirm(`当前勾选了 ${selectedDigestGroups.length} 个统计群；此按钮一次只发送一个群。确定改为向当前查看的「${targetGroupName || targetGroupId}」发送吗？`)) return;
+    if (!confirm(`确定现在向「${targetGroupName || targetGroupId}」发送一张 HTML/CSS 群聊战报图片吗？`)) return;
     wechatySendDigestBtn.disabled = true;
     try {
-      const room = (wechatyRoomsCache || []).find(item => item.topic === wechatyActiveMemoryGroupName);
+      const room = (wechatyRoomsCache || []).find(item => item.topic === targetGroupName);
       const res = await fetch(`${API}/social/wechat-groups/digest/send`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          group_id: wechatyActiveMemoryGroupId,
-          group_name: wechatyActiveMemoryGroupName,
+          group_id: targetGroupId,
+          group_name: targetGroupName,
           room_id: room?.id || "",
           mode: "interval",
         }),
       });
       const data = await res.json();
-      if (data.ok) showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.sent_as === "image" ? "已发送本群图片战报" : "已发送本群文字总结");
+      if (data.ok) showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.sent_as === "image" ? `已向「${targetGroupName || targetGroupId}」发送图片战报` : `已向「${targetGroupName || targetGroupId}」发送文字总结（图片失败：${data.poster?.error || data.sendResult?.reason || "未知原因"}）`, data.sent_as !== "image");
       else showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.error || data.sendResult?.reason || "发送失败", true);
     } catch {
       showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "发送总结请求失败", true);
