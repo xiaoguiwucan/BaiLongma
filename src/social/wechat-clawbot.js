@@ -23,22 +23,32 @@ function getClawbotAccountId() {
   }
 }
 
-function getClawbotNotifyTargetId() {
-  try {
-    const c = getClawbotCredentials() || {}
-    const configured = String(c.notifyUserId || c.notify_user_id || c.userId || c.user_id || '').trim()
-    if (configured) return configured
-  } catch {}
+function getClawbotNotifyTargetIds() {
+  const ids = []
+  const push = (value = '') => {
+    const id = String(value || '').trim()
+    if (id && !ids.includes(id)) ids.push(id)
+  }
   const accountId = getClawbotAccountId()
   try {
-    const rows = getAllClawbotTokens()
-    const row = rows.find(item => {
-      const id = String(item?.from_user_id || '').trim()
-      return id && id !== accountId
-    })
-    if (row?.from_user_id) return String(row.from_user_id).trim()
+    const c = getClawbotCredentials() || {}
+    push(c.notifyUserId || c.notify_user_id || c.userId || c.user_id || '')
   } catch {}
-  return accountId
+  try {
+    const rows = getAllClawbotTokens()
+      .slice()
+      .sort((a, b) => Date.parse(b?.updated_at || '') - Date.parse(a?.updated_at || ''))
+    for (const row of rows) {
+      const id = String(row?.from_user_id || '').trim()
+      if (id && id !== accountId) push(id)
+    }
+  } catch {}
+  push(accountId)
+  return ids
+}
+
+function getClawbotNotifyTargetId() {
+  return getClawbotNotifyTargetIds()[0] || ''
 }
 
 function getClawbotContextTokenFor(userId = '') {
@@ -100,30 +110,36 @@ export async function sendClawbotSelfNotification({ text = '', imagePath = '', f
   if (!client || clawbotStatus !== 'connected') {
     return { ok: false, reason: 'wechat-clawbot not connected', status: clawbotStatus }
   }
-  const targetId = getClawbotNotifyTargetId()
-  if (!targetId) return { ok: false, reason: 'clawbot notify target missing', status: clawbotStatus }
-  const contextToken = getClawbotContextTokenFor(targetId)
+  const targetIds = getClawbotNotifyTargetIds()
+  if (!targetIds.length) return { ok: false, reason: 'clawbot notify target missing', status: clawbotStatus }
   const body = String(text || '').trim()
   const fallback = String(fallbackText || body || '').trim()
-  try {
-    if (imagePath) {
-      try {
-        const id = await sendClawbotImageAllowingSelf(targetId, imagePath, body, contextToken)
-        return { ok: true, platform: 'wechat-clawbot', self: true, image: true, id, targetId }
-      } catch (imageErr) {
-        console.warn(`[ClawBot] 自通知图片发送失败，降级文本：${imageErr?.message || imageErr}`)
-        if (!fallback) throw imageErr
-        const id = await sendClawbotTextAllowingSelf(targetId, fallback, contextToken)
-        return { ok: true, platform: 'wechat-clawbot', self: true, image: false, fallback: true, id, targetId, image_error: imageErr?.message || String(imageErr) }
+  let lastErr = null
+  for (const targetId of targetIds) {
+    const contextToken = getClawbotContextTokenFor(targetId)
+    try {
+      if (imagePath) {
+        try {
+          const id = await sendClawbotImageAllowingSelf(targetId, imagePath, body, contextToken)
+          return { ok: true, platform: 'wechat-clawbot', self: true, image: true, id, targetId }
+        } catch (imageErr) {
+          console.warn(`[ClawBot] 自通知图片发送失败 target=${targetId}，降级文本/下个目标：${imageErr?.message || imageErr}`)
+          lastErr = imageErr
+          if (!fallback) throw imageErr
+          const id = await sendClawbotTextAllowingSelf(targetId, fallback, contextToken)
+          return { ok: true, platform: 'wechat-clawbot', self: true, image: false, fallback: true, id, targetId, image_error: imageErr?.message || String(imageErr) }
+        }
       }
+      if (!body) return { ok: false, reason: 'empty notification content' }
+      const id = await sendClawbotTextAllowingSelf(targetId, body, contextToken)
+      return { ok: true, platform: 'wechat-clawbot', self: true, image: false, id, targetId }
+    } catch (err) {
+      lastErr = err
+      console.warn(`[ClawBot] 自通知目标失败 target=${targetId}: ${err?.message || err}`)
     }
-    if (!body) return { ok: false, reason: 'empty notification content' }
-    const id = await sendClawbotTextAllowingSelf(targetId, body, contextToken)
-    return { ok: true, platform: 'wechat-clawbot', self: true, image: false, id, targetId }
-  } catch (err) {
-    console.error(`[ClawBot] 自通知发送失败: ${err?.message || err}`)
-    return { ok: false, error: err?.message || String(err), targetId, self_context_ready: !!contextToken }
   }
+  console.error(`[ClawBot] 自通知发送失败: ${lastErr?.message || lastErr || 'all targets failed'}`)
+  return { ok: false, error: lastErr?.message || String(lastErr || 'all targets failed'), targetId: targetIds[0], triedTargetIds: targetIds }
 }
 
 // Called by dispatch.js to send replies back to WeChat

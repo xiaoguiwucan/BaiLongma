@@ -51,6 +51,7 @@ const targetRooms = new Map()
 let pushMessageRef = null
 let emitEventRef = null
 let lastLoginUser = ''
+let lastLoginAt = 0
 let roomSnapshot = []
 let lastRoomRefreshAt = ''
 let lastMessageAt = ''
@@ -851,7 +852,12 @@ function isWechat4uTransientError(message = '') {
   const value = String(message || '').trim()
   return /^-?1\s*==\s*0$/i.test(value)
     || /^400\s*!=\s*400$/i.test(value)
+    || /socket hang up|network socket disconnected|TLS connection|ECONNRESET|ETIMEDOUT|ESOCKETTIMEDOUT/i.test(value)
     || /batchGetContact|contactRawPayload|unknownContactId/i.test(value)
+}
+
+function isRecentlyLoggedIn(ms = 45000) {
+  return !!lastLoginAt && Date.now() - lastLoginAt <= ms
 }
 
 function escapeRegExp(value = '') {
@@ -902,8 +908,8 @@ export function getWechatyDutyGroupStatus() {
     room_id: online ? targetRoomId : '',
     room_ids: online ? currentRoomIds : {},
     cached_room_ids: roomIds,
-    qr: lastQr,
-    qr_ascii: lastQrAscii,
+    qr: online ? '' : lastQr,
+    qr_ascii: online ? '' : lastQrAscii,
     error: lastError,
     online,
     login_user: isLoginActive() ? previousLoginUser() : '',
@@ -1038,9 +1044,16 @@ export async function listWechatyDutyGroupRooms() {
     if (items.length) {
       roomSnapshot = markSelectedRooms(items)
       lastRoomRefreshAt = new Date().toISOString()
+      lastError = ''
       roomSnapshot.sort((a, b) => Number(b.selected) - Number(a.selected) || a.topic.localeCompare(b.topic, 'zh-Hans-CN'))
       persistRuntime(status)
       return { ok: true, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: roomSnapshot, rooms_stale: false, online: isTrulyOnline(), login_user: previousLoginUser(), last_login_user: previousLoginUser(), last_room_refresh_at: lastRoomRefreshAt, fresh: true, hint: getConnectionHint({ online: isTrulyOnline(), rooms: roomSnapshot }) }
+    }
+
+    if (targetRooms.size && isMessageHealthy()) {
+      const activeRooms = markSelectedRooms([...targetRooms.entries()].map(([topic, room]) => ({ id: room?.id || '', topic, selected: true })))
+      lastError = ''
+      return { ok: true, status, enabled: wechatyGroupReplyEnabled, group_names: [...targetGroupNames], rooms: activeRooms, rooms_stale: false, online: isTrulyOnline(), login_user: previousLoginUser(), last_login_user: previousLoginUser(), last_room_refresh_at: lastRoomRefreshAt, fresh: false, message_healthy: true, hint: getConnectionHint({ online: true, rooms: activeRooms }) }
     }
 
     // 关键：这里不能再 ok:true。旧 roomSnapshot 只能当“历史缓存”展示，不能叫“刷新成功”。
@@ -1142,6 +1155,7 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     clearStartWatchdog()
     status = 'logged_in'
     lastLoginUser = user?.name?.() || ''
+    lastLoginAt = Date.now()
     lastQr = ''
     lastQrAscii = ''
     lastClawbotQrNotifyError = ''
@@ -1176,9 +1190,16 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
     if (isWechat4uTransientError(lastError)) {
       if (hasResolvedRooms() && (isFreshRoomRefresh() || isMessageHealthy())) {
         status = targetRoomId ? 'connected' : 'logged_in'
-        console.warn(`[Wechaty] 忽略 wechat4u 暂态错误，保持当前连接：${lastError}`)
+        console.warn(`[Wechaty] 忽略 wechat4u 暂态/网络抖动错误，保持当前连接：${lastError}`)
         persistRuntime(status)
         emitWechatyStatusEvent({ room_id: targetRoomId, warning: lastError })
+        return
+      }
+      if ((status === 'logged_in' || status === 'connected') && isRecentlyLoggedIn()) {
+        status = 'rooms_pending'
+        console.warn(`[Wechaty] 登录后群列表尚未稳定，暂不重启，等待消息/群列表恢复：${lastError}`)
+        persistRuntime(status)
+        emitWechatyStatusEvent({ warning: lastError })
         return
       }
       if (hasResolvedRooms()) {
@@ -1188,8 +1209,8 @@ export async function startWechatyDutyGroupConnector({ pushMessage, emitEvent, g
         emitWechatyStatusEvent({ warning: lastError })
         return
       }
-      if (status === 'qr_ready' || status === 'starting') {
-        console.warn(`[Wechaty] 等待登录期间忽略 wechat4u 暂态错误：${lastError}`)
+      if (status === 'qr_ready' || status === 'starting' || status === 'rooms_pending') {
+        console.warn(`[Wechaty] 等待登录/群列表期间忽略 wechat4u 暂态错误：${lastError}`)
         persistRuntime(status)
         emitWechatyStatusEvent({ warning: lastError })
         return
@@ -1336,9 +1357,16 @@ async function handleMessage(message) {
     const topic = await safeTopic(room)
     const assistantEnabledForGroup = isAllowedGroupTopic(topic)
 
-    if (assistantEnabledForGroup) targetRooms.set(topic, room)
+    if (assistantEnabledForGroup) {
+      targetRooms.set(topic, room)
+      if (lastQr) {
+        lastQr = ''
+        lastQrAscii = ''
+      }
+      if (/未获取到真实群列表|只显示上次缓存|需要重新扫码/u.test(lastError)) lastError = ''
+    }
     scheduleRoomMemberNameRefresh(room, topic)
-    if (assistantEnabledForGroup && !targetRoomId) {
+    if (assistantEnabledForGroup && (!targetRoomId || status !== 'connected')) {
       targetRoomId = room.id
       targetRoom = room
       status = 'connected'
