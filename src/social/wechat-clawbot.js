@@ -23,6 +23,24 @@ function getClawbotAccountId() {
   }
 }
 
+function getClawbotNotifyTargetId() {
+  try {
+    const c = getClawbotCredentials() || {}
+    const configured = String(c.notifyUserId || c.notify_user_id || c.userId || c.user_id || '').trim()
+    if (configured) return configured
+  } catch {}
+  const accountId = getClawbotAccountId()
+  try {
+    const rows = getAllClawbotTokens()
+    const row = rows.find(item => {
+      const id = String(item?.from_user_id || '').trim()
+      return id && id !== accountId
+    })
+    if (row?.from_user_id) return String(row.from_user_id).trim()
+  } catch {}
+  return accountId
+}
+
 function getClawbotContextTokenFor(userId = '') {
   const id = String(userId || '').trim()
   if (!id) return ''
@@ -82,29 +100,29 @@ export async function sendClawbotSelfNotification({ text = '', imagePath = '', f
   if (!client || clawbotStatus !== 'connected') {
     return { ok: false, reason: 'wechat-clawbot not connected', status: clawbotStatus }
   }
-  const accountId = getClawbotAccountId()
-  if (!accountId) return { ok: false, reason: 'clawbot account id missing', status: clawbotStatus }
-  const contextToken = getClawbotContextTokenFor(accountId)
+  const targetId = getClawbotNotifyTargetId()
+  if (!targetId) return { ok: false, reason: 'clawbot notify target missing', status: clawbotStatus }
+  const contextToken = getClawbotContextTokenFor(targetId)
   const body = String(text || '').trim()
   const fallback = String(fallbackText || body || '').trim()
   try {
     if (imagePath) {
       try {
-        const id = await sendClawbotImageAllowingSelf(accountId, imagePath, body, contextToken)
-        return { ok: true, platform: 'wechat-clawbot', self: true, image: true, id, accountId }
+        const id = await sendClawbotImageAllowingSelf(targetId, imagePath, body, contextToken)
+        return { ok: true, platform: 'wechat-clawbot', self: true, image: true, id, targetId }
       } catch (imageErr) {
         console.warn(`[ClawBot] 自通知图片发送失败，降级文本：${imageErr?.message || imageErr}`)
         if (!fallback) throw imageErr
-        const id = await sendClawbotTextAllowingSelf(accountId, fallback, contextToken)
-        return { ok: true, platform: 'wechat-clawbot', self: true, image: false, fallback: true, id, accountId, image_error: imageErr?.message || String(imageErr) }
+        const id = await sendClawbotTextAllowingSelf(targetId, fallback, contextToken)
+        return { ok: true, platform: 'wechat-clawbot', self: true, image: false, fallback: true, id, targetId, image_error: imageErr?.message || String(imageErr) }
       }
     }
     if (!body) return { ok: false, reason: 'empty notification content' }
-    const id = await sendClawbotTextAllowingSelf(accountId, body, contextToken)
-    return { ok: true, platform: 'wechat-clawbot', self: true, image: false, id, accountId }
+    const id = await sendClawbotTextAllowingSelf(targetId, body, contextToken)
+    return { ok: true, platform: 'wechat-clawbot', self: true, image: false, id, targetId }
   } catch (err) {
     console.error(`[ClawBot] 自通知发送失败: ${err?.message || err}`)
-    return { ok: false, error: err?.message || String(err), accountId, self_context_ready: !!contextToken }
+    return { ok: false, error: err?.message || String(err), targetId, self_context_ready: !!contextToken }
   }
 }
 
@@ -340,6 +358,8 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
         accountId: result.accountId,
         botToken: result.botToken,
         baseUrl: result.baseUrl,
+        userId: result.userId,
+        notifyUserId: result.userId,
       })
       console.log(`[ClawBot] 扫码登录成功，已保存凭证`)
       emitEvent?.('social_status', { platform: 'wechat-clawbot', status: 'connected', accountId: result.accountId })

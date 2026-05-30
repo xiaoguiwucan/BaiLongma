@@ -743,6 +743,7 @@ function notifyWechatyOffline(reason = '', { force = false } = {}) {
     })
   } catch {}
   emitWechatyStatusEvent({ alert: 'offline', reason, error: lastError })
+  requestOfflineQrNotification(reason || 'offline')
 }
 
 function requestOfflineQrNotification(reason = '') {
@@ -760,6 +761,8 @@ function requestOfflineQrNotification(reason = '') {
   if (!needsWechatyRelogin()) return
   offlineQrReloginInFlight = true
   lastOfflineQrReloginAt = Date.now()
+  clearReconnectTimer()
+  suppressReconnect(90000)
   console.warn(`[WechatyOfflineQR] 微信助手离线且暂无二维码，开始自动生成重新登录二维码 reason=${reason || 'unknown'}`)
   forceReloginWechatyDutyGroupConnector({
     pushMessage: pushMessageRef,
@@ -835,15 +838,12 @@ function armStartWatchdog(currentBot) {
     startWatchdogTimer = null
     if (bot !== currentBot) return
     if (isTrulyOnline() || status !== 'starting') return
-    console.warn(`[Wechaty] 启动 ${Math.round(START_WATCHDOG_MS / 1000)} 秒仍未拿到二维码/登录事件，自动重启 Wechaty 连接，避免卡在 starting 导致群消息不入库。`)
-    try {
-      await stopWechatyGroupOnly()
-      await startWechatyDutyGroupConnector({ pushMessage: pushMessageRef, emitEvent: emitEventRef, groupNames: targetGroupNames, enabled: true })
-    } catch (err) {
-      lastError = err?.message || String(err)
-      persistRuntime('error')
-      scheduleReconnect('start_watchdog_failed')
-    }
+    lastError = '微信登录态恢复超时，需要重新扫码。'
+    status = 'relogin_required'
+    persistRuntime(status)
+    console.warn(`[Wechaty] 启动 ${Math.round(START_WATCHDOG_MS / 1000)} 秒仍未拿到二维码/登录事件，改为强制重新扫码并触发 ClawBot 二维码通知。`)
+    emitWechatyStatusEvent({ status, error: lastError })
+    notifyWechatyOffline('start_watchdog', { force: true })
   }, START_WATCHDOG_MS)
 }
 

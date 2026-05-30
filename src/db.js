@@ -439,7 +439,7 @@ export function upsertClawbotToken(fromUserId, contextToken) {
 
 export function getAllClawbotTokens() {
   return getDB().prepare(
-    `SELECT from_user_id, context_token FROM wechat_clawbot_tokens`
+    `SELECT from_user_id, context_token, updated_at FROM wechat_clawbot_tokens ORDER BY updated_at DESC`
   ).all()
 }
 

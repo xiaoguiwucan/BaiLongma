@@ -1497,10 +1497,21 @@ export function getClawbotCredentials() {
   } catch { return null }
 }
 
-export function setClawbotCredentials({ accountId, botToken, baseUrl }) {
+export function setClawbotCredentials({ accountId, botToken, baseUrl, userId, notifyUserId }) {
   let existing = {}
   try { existing = JSON.parse(fs.readFileSync(paths.configFile, 'utf-8')) } catch {}
-  writeStoredConfig({ ...existing, clawbot: { accountId, botToken, baseUrl } })
+  const current = existing.clawbot && typeof existing.clawbot === 'object' ? existing.clawbot : {}
+  writeStoredConfig({
+    ...existing,
+    clawbot: {
+      ...current,
+      accountId,
+      botToken,
+      baseUrl,
+      ...(userId ? { userId } : {}),
+      ...(notifyUserId ? { notifyUserId } : {}),
+    },
+  })
 }
 
 export function clearClawbotCredentials() {
