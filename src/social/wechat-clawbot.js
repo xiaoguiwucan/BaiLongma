@@ -190,6 +190,20 @@ export function startClawbotConnector({ pushMessage, emitEvent } = {}) {
             }
           }
         }
+        if (params?.endpoint === 'ilink/bot/getuploadurl') {
+          let body = null
+          try { body = JSON.parse(rawText) } catch {}
+          if (body && typeof body === 'object' && !body.upload_param && body.upload_full_url) {
+            try {
+              const parsed = new URL(String(body.upload_full_url))
+              const uploadParam = parsed.searchParams.get('encrypted_query_param')
+              if (uploadParam) {
+                body.upload_param = uploadParam
+                return JSON.stringify(body)
+              }
+            } catch {}
+          }
+        }
         return rawText
       }
       console.log('[ClawBot] sendMessage 响应校验已启用')
