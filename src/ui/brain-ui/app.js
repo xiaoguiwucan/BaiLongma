@@ -3300,29 +3300,37 @@ function initTTSSettings() {
 
   function refreshWechatyReportPreview() {
     if (!wechatyReportPreview) return;
-    const viewMode = wechatyStatsViewMode?.value || "single";
-    if (viewMode === "all") {
-      wechatyReportPreview.removeAttribute('src');
-      wechatyReportPreview.srcdoc = '<!doctype html><html><body style="margin:0;display:grid;place-items:center;height:100vh;background:#111827;color:#d1d5db;font-family:sans-serif;text-align:center;padding:24px">多群总览暂不生成单张战报，请切回“查看当前群”预览模板。</body></html>';
+    syncWechatyDigestSelectedGroupsFromDom();
+    const selectedGroups = getWechatySelectedDigestGroups();
+    const fallbackGroup = getWechatyMemoryCandidateGroups().find(group => memoryGroupRequestId(group) === wechatyActiveMemoryGroupId || group.topic === wechatyActiveMemoryGroupName);
+    const groups = selectedGroups.length ? selectedGroups : (fallbackGroup ? [fallbackGroup] : []);
+    if (!groups.length) {
+      wechatyReportPreview.innerHTML = '<div class="wechaty-empty">请在“选择参与统计/定时总结的群组”里勾选群，或手动选择一个群后刷新统计。</div>';
       return;
     }
-    if (!wechatyActiveMemoryGroupId) {
-      wechatyReportPreview.removeAttribute('src');
-      wechatyReportPreview.srcdoc = '<!doctype html><html><body style="margin:0;display:grid;place-items:center;height:100vh;background:#111827;color:#d1d5db;font-family:sans-serif;text-align:center;padding:24px">请选择一个群后刷新统计，即可预览四套 HTML/CSS 战报模板。</body></html>';
-      return;
-    }
-    const params = new URLSearchParams({
-      group_id: wechatyActiveMemoryGroupId,
-      group_name: wechatyActiveMemoryGroupName || '',
-      range: 'today',
-      limit: '10',
-      template: wechatyReportTemplate?.value || wechatyDigestConfigCache.reportTemplate || 'guochao-red-gold',
-    });
-    const next = `${API}/social/wechat-groups/report/html?${params}`;
-    if (wechatyReportPreviewUrl === next && wechatyReportPreview.getAttribute('src') === next) return;
+    const template = wechatyReportTemplate?.value || wechatyDigestConfigCache.reportTemplate || 'guochao-red-gold';
+    const next = groups.map(group => `${memoryGroupRequestId(group)}|${group.topic || ''}|${template}`).join('||');
+    if (wechatyReportPreviewUrl === next && wechatyReportPreview.dataset.renderKey === next) return;
     wechatyReportPreviewUrl = next;
-    wechatyReportPreview.removeAttribute('srcdoc');
-    wechatyReportPreview.src = next;
+    wechatyReportPreview.dataset.renderKey = next;
+    wechatyReportPreview.innerHTML = groups.map(group => {
+      const groupId = memoryGroupRequestId(group);
+      const groupName = group.topic || '';
+      const params = new URLSearchParams({
+        group_id: groupId,
+        group_name: groupName,
+        range: 'today',
+        limit: '10',
+        template,
+      });
+      return `<article class="wechaty-report-preview-card" data-group-id="${escapeHtml(groupId)}" data-group-name="${escapeHtml(groupName)}" title="点击切换到该群记录库">
+        <div class="wechaty-report-preview-card-head">
+          <b>${escapeHtml(groupName || groupId)}</b>
+          <span>独立战报 · ${escapeHtml(template)}</span>
+        </div>
+        <iframe class="wechaty-report-preview-frame" title="${escapeHtml(groupName || groupId)} 战报预览" loading="lazy" src="${API}/social/wechat-groups/report/html?${params}"></iframe>
+      </article>`;
+    }).join('');
   }
 
   function renderRank(title, rows = [], unit = "次", { showGroup = false } = {}) {
@@ -5001,6 +5009,22 @@ function initTTSSettings() {
       wechatyDigestSelectedGroups.delete(requestId);
     }
     updateWechatyDigestGroupCount();
+    refreshWechatyReportPreview();
+  });
+  wechatyReportPreview?.addEventListener("click", (event) => {
+    const card = event.target?.closest?.(".wechaty-report-preview-card");
+    if (!card) return;
+    const groupId = card.dataset.groupId || "";
+    const groupName = card.dataset.groupName || "";
+    if (!groupId) return;
+    wechatyActiveMemoryGroupId = groupId;
+    wechatyActiveMemoryGroupName = groupName;
+    if (wechatyRecordsGroup) {
+      wechatyRecordsGroup.value = groupId;
+    }
+    renderWechatyMemoryGroups();
+    loadWechatyActiveStats({ silent: true });
+    loadWechatyRecords({ append: false });
   });
   wechatyStatsViewMode?.addEventListener("change", () => loadWechatyActiveStats({ silent: true, refreshRecords: false }));
   wechatyReportTemplate?.addEventListener("change", refreshWechatyReportPreview);
@@ -5244,33 +5268,44 @@ function initTTSSettings() {
   wechatySendDigestBtn?.addEventListener("click", async () => {
     syncWechatyDigestSelectedGroupsFromDom();
     const selectedDigestGroups = getWechatySelectedDigestGroups();
-    const targetGroup = selectedDigestGroups.length === 1
-      ? selectedDigestGroups[0]
-      : getWechatyMemoryCandidateGroups().find(group => memoryGroupRequestId(group) === wechatyActiveMemoryGroupId || group.topic === wechatyActiveMemoryGroupName);
-    const targetGroupId = targetGroup ? memoryGroupRequestId(targetGroup) : wechatyActiveMemoryGroupId;
-    const targetGroupName = targetGroup?.topic || wechatyActiveMemoryGroupName || "";
-    if (!targetGroupId) {
-      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "请先选择一个群，或在统计/定时总结里只勾选一个群", true);
+    const activeGroup = getWechatyMemoryCandidateGroups().find(group => memoryGroupRequestId(group) === wechatyActiveMemoryGroupId || group.topic === wechatyActiveMemoryGroupName);
+    const targetGroups = selectedDigestGroups.length ? selectedDigestGroups : (activeGroup ? [activeGroup] : []);
+    if (!targetGroups.length) {
+      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "请先在统计/定时总结里勾选群，或手动选择一个群", true);
       return;
     }
-    if (selectedDigestGroups.length > 1 && !confirm(`当前勾选了 ${selectedDigestGroups.length} 个统计群；此按钮一次只发送一个群。确定改为向当前查看的「${targetGroupName || targetGroupId}」发送吗？`)) return;
-    if (!confirm(`确定现在向「${targetGroupName || targetGroupId}」发送一张 HTML/CSS 群聊战报图片吗？`)) return;
+    const names = targetGroups.map(group => group.topic || memoryGroupRequestId(group));
+    if (!confirm(`确定现在分别向 ${targetGroups.length} 个群发送各自的 HTML/CSS 群聊战报图片吗？\n${names.join("、")}`)) return;
     wechatySendDigestBtn.disabled = true;
     try {
-      const room = (wechatyRoomsCache || []).find(item => item.topic === targetGroupName);
-      const res = await fetch(`${API}/social/wechat-groups/digest/send`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          group_id: targetGroupId,
-          group_name: targetGroupName,
-          room_id: room?.id || "",
-          mode: "interval",
-        }),
-      });
-      const data = await res.json();
-      if (data.ok) showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.sent_as === "image" ? `已向「${targetGroupName || targetGroupId}」发送图片战报` : `已向「${targetGroupName || targetGroupId}」发送文字总结（图片失败：${data.poster?.error || data.sendResult?.reason || "未知原因"}）`, data.sent_as !== "image");
-      else showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, data.error || data.sendResult?.reason || "发送失败", true);
+      const results = [];
+      for (const group of targetGroups) {
+        const targetGroupId = memoryGroupRequestId(group);
+        const targetGroupName = group.topic || "";
+        const room = (wechatyRoomsCache || []).find(item => item.topic === targetGroupName);
+        const res = await fetch(`${API}/social/wechat-groups/digest/send`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            group_id: targetGroupId,
+            group_name: targetGroupName,
+            room_id: room?.id || "",
+            mode: "interval",
+          }),
+        });
+        const data = await res.json();
+        results.push({ groupName: targetGroupName || targetGroupId, data });
+      }
+      const ok = results.filter(item => item.data?.ok);
+      const imageOk = ok.filter(item => item.data?.sent_as === "image");
+      const failed = results.filter(item => !item.data?.ok);
+      const fallback = ok.filter(item => item.data?.sent_as !== "image");
+      const details = [
+        imageOk.length ? `图片战报 ${imageOk.length} 个` : '',
+        fallback.length ? `文字回退 ${fallback.length} 个` : '',
+        failed.length ? `失败 ${failed.length} 个：${failed.map(item => item.groupName).join('、')}` : '',
+      ].filter(Boolean).join('；');
+      showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, details || "发送完成", failed.length > 0 || fallback.length > 0);
     } catch {
       showFeedback(wechatyDigestFeedback || wechatyDutyFeedback, "发送总结请求失败", true);
     } finally {

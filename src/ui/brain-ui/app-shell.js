@@ -930,8 +930,8 @@ const createSettingsModal = () => `
                 <span class="settings-feedback" id="wechaty-digest-feedback"></span>
               </div>
               <div class="wechaty-report-preview-wrap">
-                <div class="wechaty-report-preview-head"><b>HTML/CSS 战报模板预览</b><span>切换模板后会实时预览；保存后作为默认模板。</span></div>
-                <iframe id="wechaty-report-preview" class="wechaty-report-preview" title="群聊战报模板预览" loading="lazy"></iframe>
+                <div class="wechaty-report-preview-head"><b>HTML/CSS 战报模板预览</b><span>跟随上方已勾选统计群分别预览；点击卡片可切到该群记录库。</span></div>
+                <div id="wechaty-report-preview" class="wechaty-report-preview-list"></div>
               </div>
               <div class="wechaty-stats-cards" id="wechaty-stats-cards">
                 <div class="wechaty-empty">选择左侧群并刷新统计后显示今日数据。</div>

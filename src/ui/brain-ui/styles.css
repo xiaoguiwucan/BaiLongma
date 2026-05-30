@@ -5058,7 +5058,43 @@ body.person-card-mode .person-card-panel,
 }
 .wechaty-report-preview-head b { color: var(--ink); font-size: 12px; }
 .wechaty-report-preview-head span { color: var(--ink3); font-size: 11px; }
-.wechaty-report-preview {
+.wechaty-report-preview-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 10px;
+}
+.wechaty-report-preview-card {
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 14px;
+  padding: 8px;
+  background: rgba(0,0,0,0.14);
+  cursor: pointer;
+}
+.wechaty-report-preview-card:hover {
+  border-color: rgba(87,214,255,0.32);
+  background: rgba(87,214,255,0.07);
+}
+.wechaty-report-preview-card-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 7px;
+}
+.wechaty-report-preview-card-head b {
+  min-width: 0;
+  color: var(--ink);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.wechaty-report-preview-card-head span {
+  flex: 0 0 auto;
+  color: var(--dim);
+  font-size: 10px;
+}
+.wechaty-report-preview-frame {
   display: block;
   width: 100%;
   aspect-ratio: 1080 / 1350;
@@ -5067,6 +5103,7 @@ body.person-card-mode .person-card-panel,
   border: 0;
   border-radius: 12px;
   background: #f2ecdf;
+  pointer-events: none;
 }
 
 .wechaty-stats-cards {
